@@ -30,7 +30,10 @@ from podcast_processor.experiments.fixtures import (
 from podcast_processor.experiments.gemini_confirm import (
     GEMINI_API_KEY_ENV,
     GEMINI_LIVE_ENV,
+    GROQ_API_KEY_ENV,
+    GROQ_LIVE_ENV,
     GeminiConfirmClient,
+    groq_live_calls_enabled,
     live_calls_enabled,
 )
 from podcast_processor.experiments.removal_verifier import (
@@ -92,7 +95,10 @@ def test_classic_host_reads_localized_with_padding() -> None:
 def test_gemini_mock_does_not_need_api_key(monkeypatch, tmp_path: Path) -> None:
     monkeypatch.delenv(GEMINI_API_KEY_ENV, raising=False)
     monkeypatch.delenv(GEMINI_LIVE_ENV, raising=False)
+    monkeypatch.delenv(GROQ_API_KEY_ENV, raising=False)
+    monkeypatch.delenv(GROQ_LIVE_ENV, raising=False)
     assert live_calls_enabled() is False
+    assert groq_live_calls_enabled() is False
 
     episode = episode_from_json(json.loads(MINI_FIXTURE.read_text(encoding="utf-8")))
     windows = BowScout(RECOMMENDED_CONFIG).scout(episode.segments)
@@ -168,6 +174,12 @@ def test_live_flag_alone_is_not_enough(monkeypatch) -> None:
     monkeypatch.delenv(GEMINI_API_KEY_ENV, raising=False)
     monkeypatch.setenv(GEMINI_LIVE_ENV, "true")
     assert live_calls_enabled() is False
+
+
+def test_groq_live_flag_alone_is_not_enough(monkeypatch) -> None:
+    monkeypatch.delenv(GROQ_API_KEY_ENV, raising=False)
+    monkeypatch.setenv(GROQ_LIVE_ENV, "true")
+    assert groq_live_calls_enabled() is False
 
 
 def test_adclassifier_chunk_plan_matches_no_ad_walk() -> None:

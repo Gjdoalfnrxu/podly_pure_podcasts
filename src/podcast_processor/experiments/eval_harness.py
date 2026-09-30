@@ -33,6 +33,8 @@ from podcast_processor.experiments.fixtures import (
 )
 from podcast_processor.experiments.gemini_confirm import (
     GeminiConfirmClient,
+    any_live_confirm_enabled,
+    groq_live_calls_enabled,
     live_calls_enabled,
 )
 from podcast_processor.experiments.metrics import (
@@ -143,11 +145,17 @@ def evaluate_episode(
     config: ScoutConfig,
     cache_dir: Path | None = None,
     confirm_mock_mode: str = "oracle",
+    detector: Any | None = None,
+    window_postprocess: Any | None = None,
+    confirm_model: str | None = None,
 ) -> dict[str, Any]:
-    scout = BowScout(config=config)
+    scout = BowScout(config=config, detector=detector)
     windows = scout.scout(episode.segments)
-    live = live_calls_enabled()
+    if window_postprocess is not None:
+        windows = window_postprocess(episode, windows, config)
+    live = any_live_confirm_enabled()
     client = GeminiConfirmClient(
+        model=confirm_model,
         mock_mode=confirm_mock_mode,  # type: ignore[arg-type]
         cache_dir=cache_dir,
         labeled_ads=episode.labeled_ads,
@@ -264,19 +272,28 @@ def evaluate_all(
     config: ScoutConfig | None = None,
     sweep: list[ScoutConfig] | None = None,
     cache_dir: Path | None = None,
+    detector: Any | None = None,
+    window_postprocess: Any | None = None,
+    confirm_model: str | None = None,
+    confirm_mock_mode: str = "oracle",
 ) -> dict[str, Any]:
     recommended = config or RECOMMENDED_CONFIG
-    configs = sweep or DEFAULT_SWEEP
+    # `sweep=[]` skips the extra configs; only `None` means the default sweep.
+    configs = DEFAULT_SWEEP if sweep is None else sweep
     episodes = all_fixtures()
+    eval_kwargs: dict[str, Any] = {
+        "cache_dir": cache_dir,
+        "detector": detector,
+        "window_postprocess": window_postprocess,
+        "confirm_model": confirm_model,
+        "confirm_mock_mode": confirm_mock_mode,
+    }
     recommended_rows = [
-        evaluate_episode(episode, recommended, cache_dir=cache_dir)
-        for episode in episodes
+        evaluate_episode(episode, recommended, **eval_kwargs) for episode in episodes
     ]
     sweep_rows: list[dict[str, Any]] = []
     for cfg in configs:
-        rows = [
-            evaluate_episode(episode, cfg, cache_dir=cache_dir) for episode in episodes
-        ]
+        rows = [evaluate_episode(episode, cfg, **eval_kwargs) for episode in episodes]
         sweep_rows.append(
             {
                 "config": _config_dict(cfg),
@@ -302,10 +319,14 @@ def evaluate_all(
         )
     manifest = corpus_manifest_path()
     corpus_hash = sha256_file(manifest) if manifest.exists() else None
-    live = live_calls_enabled()
+    live_gemini = live_calls_enabled()
+    live_groq = groq_live_calls_enabled()
+    live = live_gemini or live_groq
     payload: dict[str, Any] = {
         "generated_at": datetime.now(UTC).isoformat(),
-        "live_gemini": live,
+        "live_gemini": live_gemini,
+        "live_groq": live_groq,
+        "live_llm": live,
         "corpus_version": CORPUS_VERSION,
         "corpus_sha256": corpus_hash,
         "enable_bow_scout_gemini_confirm_default": (
@@ -749,6 +770,8 @@ def _ready_checklist() -> list[str]:
         "[ ] Live Gemini confirm on real transcripts ($0.50/day, cache-first).",
         "[ ] Decision on cue-sparse fallback before wiring into PodcastProcessor.",
         "[ ] Alembic not required (no model changes).",
+        "[x] Daily hypothesis→experiment→gate loop: "
+        "`scripts/experiments/run_daily_loop.py` (offline by default).",
     ]
 
 

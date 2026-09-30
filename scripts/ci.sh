@@ -47,6 +47,11 @@ if [ "$RUN_EVAL" = true ]; then
     echo "Running offline experiment eval gates (--eval, no API keys)..."
     echo '============================================================='
     PYTHONPATH=src uv run python scripts/experiments/run_bow_scout_eval.py --check-baseline --skip-artifacts
+    echo '============================================================='
+    echo "Running daily hypothesis loop --check (offline, no ledger writes)..."
+    echo '============================================================='
+    PYTHONPATH=src uv run python scripts/experiments/run_daily_loop.py --check \
+        --runs-dir "${TMPDIR:-/tmp}/podly-daily-loop-check"
 fi
 
 # Run integration tests only if --int flag is provided

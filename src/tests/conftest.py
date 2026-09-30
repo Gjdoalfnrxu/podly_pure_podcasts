@@ -42,6 +42,13 @@ sys.modules["whisper"] = whisper_mock
 sys.modules["torch"] = torch_mock
 
 
+@pytest.fixture(autouse=True)
+def _no_live_experiment_llm(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Live confirm requires an explicit flag; never inherit one from the env."""
+    monkeypatch.delenv("PODLY_GEMINI_CONFIRM_LIVE", raising=False)
+    monkeypatch.delenv("PODLY_GROQ_CONFIRM_LIVE", raising=False)
+
+
 @pytest.fixture
 def app() -> Generator[Flask, None, None]:
     """Create a Flask app for testing."""

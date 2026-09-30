@@ -25,7 +25,7 @@ includes the gates):
 # Full lint + unit tests, including eval gates (no API keys)
 ./scripts/ci.sh
 
-# Same gates plus a printable harness log
+# Same gates plus a printable harness log + daily-loop --check
 ./scripts/ci.sh --eval
 
 # Harness only
@@ -49,6 +49,9 @@ PYTHONPATH=src uv run python scripts/experiments/run_bow_scout_eval.py
 | Baseline metrics snapshot | `docs/experiments/bow_scout_gemini_confirm/baseline/v1/snapshot.json` |
 | Gate tolerances | `docs/experiments/bow_scout_gemini_confirm/baseline/v1/gates.json` |
 | Human-readable table | `docs/experiments/bow_scout_gemini_confirm/RESULTS.md` |
+| Hypothesis ledger | `docs/experiments/hypotheses/hypotheses.json` |
+| Ranking function | `docs/experiments/SCORING.md` |
+| Daily run artifacts | `docs/experiments/runs/YYYY-MM-DD/` |
 
 Eval loads the corpus JSON (not the Python builders). Hash mismatches fail
 tests on purpose.
@@ -94,6 +97,95 @@ PYTHONPATH=src uv run python scripts/experiments/run_bow_scout_eval.py \
 
 Do **not** loosen `gates.json` tolerances to hide a regression.
 
+## Daily loop contract (agents)
+
+Absolute priorities: **confidence** (no regressions) → **detection**
+(F1/recall) → **cost** (token reduction). Ranking math:
+`docs/experiments/SCORING.md`.
+
+### Pick H
+
+1. Load `docs/experiments/hypotheses/hypotheses.json`.
+2. Take `status=open` rows, sort by `metric_primary` in
+   `(confidence, detection, cost)` then `id`.
+3. Seeded open ids: `H001` (tight `code <word>` FP), `H002` (cue-sparse
+   recovery without full walk), `H003` (pad/threshold sweep under gates),
+   `H004` (secret-safe The Daily / Soft Skills-style golden ingest).
+
+### Run
+
+```bash
+# Offline, no API keys. Updates last_result pointers in the ledger.
+PYTHONPATH=src uv run python scripts/experiments/run_daily_loop.py
+
+# One hypothesis
+PYTHONPATH=src uv run python scripts/experiments/run_daily_loop.py --hypothesis H001
+
+# CI / --eval: validate + gates, do not rewrite hypotheses.json
+PYTHONPATH=src uv run python scripts/experiments/run_daily_loop.py --check
+
+# Optional live Groq/Gemini (spends money). Hard cap default $0.50/day.
+export PODLY_DAILY_BUDGET=0.50
+export PODLY_EXPERIMENT_CACHE_DIR=docs/experiments/runs/.cache
+export GEMINI_API_KEY=...          # and/or GROQ_API_KEY
+export PODLY_GEMINI_CONFIRM_LIVE=true   # and/or PODLY_GROQ_CONFIRM_LIVE=true
+PYTHONPATH=src uv run python scripts/experiments/run_daily_loop.py --live
+```
+
+Default path is **oracle-mock confirm** vs corpus v1 / frozen snapshot.
+Live calls require both a key and a live flag, remaining budget, and the
+content-hash disk cache (repeats are $0). If the cap would be exceeded,
+the loop skips live and records the skip in `spend.json`.
+
+Dated artifacts: `docs/experiments/runs/YYYY-MM-DD/` (`summary.json`,
+per-hypothesis JSON, `spend.json`). Cache and golden staging are
+gitignored.
+
+### Gate, then fold
+
+1. `compare_to_snapshot` must pass on the frozen recommended config
+   before any hypothesis experiment runs. If it fails, stop and fix the
+   regression. Do not loosen ε.
+2. Score candidates with `scorer.rank_candidates`: reject gate failures;
+   among survivors maximize confirm F1, then recall, then hit rate; then
+   maximize token reduction.
+3. **Fold** only a survivor that improved the hypothesis primary metric:
+   update experiment-package code (`RECOMMENDED_CONFIG` or a candidate
+   detector used by the eval), keep `enable_bow_scout_gemini_confirm=False`,
+   keep `Feed.ad_detection_strategy=llm`, re-run `./scripts/ci.sh --eval`.
+4. Mark the hypothesis `accepted` (fold-eligible) or `rejected` /
+   `measured` via the runner. Production `AdClassifier.classify` stays
+   on the hot path.
+
+### When baselines may update
+
+Allowed **only** as an explicit, documented step — never from the daily
+loop automatically:
+
+```bash
+PYTHONPATH=src uv run python scripts/experiments/run_bow_scout_eval.py \
+  --write-corpus --update-baseline --check-baseline
+```
+
+`--write-corpus` regenerates `corpus/v1/*.json` and `MANIFEST.json` from
+`builder_fixtures()`. `--update-baseline` rewrites `snapshot.json` and
+`gates.json`. Commit corpus + snapshot + RESULTS together.
+
+All of these must be true:
+
+- The candidate already passed frozen ε (a raise of quality/cost, not a hide).
+- `gates.json` tolerances are unchanged (never widened).
+- Corpus JSON + `MANIFEST.json` + `snapshot.json` + RESULTS notes are
+  committed together.
+- Production CueDetector constructor, `CORE_ANALYZE_KEYS`, and the
+  scout feature flag are still the required defaults above.
+- Real-transcript goldens went through `docs/experiments/golden/README.md`
+  (secret scan, no keys in git).
+
+If recall/F1/tokens would miss the old snapshot, **do not** update the
+snapshot to match a worse run.
+
+
 ## Paths the harness compares
 
 1. **Production-like (mocked)** — full AdClassifier chunk plan for tokens;
@@ -114,3 +206,6 @@ Duration stubs use `output_ms ≈ source_ms − Σ ad_ms + 2 × fade_ms × n_cut
 2. Run `--write-corpus --update-baseline`.
 3. Explain the new row in RESULTS / this file.
 4. Keep labels honest: known ad intervals only.
+5. Real Whisper goldens: `docs/experiments/golden/README.md` (secret-safe
+   ingest). Hypothesis `H004`.
+

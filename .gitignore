@@ -55,6 +55,10 @@ config/config.yml
 .DS_Store
 src/instance/data/*
 
+# Experiment live cache / golden staging (may contain operator transcripts)
+docs/experiments/runs/.cache/
+docs/experiments/golden/staging/
+
 # Frontend build logs
 frontend-build.log
 

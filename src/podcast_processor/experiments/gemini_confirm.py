@@ -31,6 +31,10 @@ GEMINI_API_KEY_ENV = "GEMINI_API_KEY"
 GEMINI_MODEL_ENV = "GEMINI_CONFIRM_MODEL"
 GEMINI_LIVE_ENV = "PODLY_GEMINI_CONFIRM_LIVE"
 DEFAULT_GEMINI_MODEL = "gemini/gemini-2.5-flash"
+GROQ_API_KEY_ENV = "GROQ_API_KEY"
+GROQ_MODEL_ENV = "GROQ_CONFIRM_MODEL"
+GROQ_LIVE_ENV = "PODLY_GROQ_CONFIRM_LIVE"
+DEFAULT_GROQ_CONFIRM_MODEL = "groq/openai/gpt-oss-120b"
 
 MockMode = Literal["echo", "oracle", "none", "cue_only"]
 
@@ -50,14 +54,37 @@ def default_gemini_model() -> str:
     return os.environ.get(GEMINI_MODEL_ENV, DEFAULT_GEMINI_MODEL)
 
 
+def _flag_enabled(name: str) -> bool:
+    return os.environ.get(name, "").strip().lower() in {"1", "true", "yes"}
+
+
 def live_calls_enabled() -> bool:
+    """Gemini live confirm. Requires GEMINI_API_KEY and PODLY_GEMINI_CONFIRM_LIVE."""
     has_key = bool(os.environ.get(GEMINI_API_KEY_ENV, "").strip())
-    live_flag = os.environ.get(GEMINI_LIVE_ENV, "").strip().lower() in {
-        "1",
-        "true",
-        "yes",
-    }
-    return has_key and live_flag
+    return has_key and _flag_enabled(GEMINI_LIVE_ENV)
+
+
+def groq_live_calls_enabled() -> bool:
+    """Groq live confirm. Requires GROQ_API_KEY and PODLY_GROQ_CONFIRM_LIVE."""
+    has_key = bool(os.environ.get(GROQ_API_KEY_ENV, "").strip())
+    return has_key and _flag_enabled(GROQ_LIVE_ENV)
+
+
+def any_live_confirm_enabled() -> bool:
+    return live_calls_enabled() or groq_live_calls_enabled()
+
+
+def default_groq_confirm_model() -> str:
+    return os.environ.get(GROQ_MODEL_ENV, DEFAULT_GROQ_CONFIRM_MODEL)
+
+
+def default_live_confirm_model() -> str:
+    """Prefer Gemini when its live flag is on; otherwise Groq if enabled."""
+    if live_calls_enabled():
+        return default_gemini_model()
+    if groq_live_calls_enabled():
+        return default_groq_confirm_model()
+    return default_gemini_model()
 
 
 def prompt_hash(model: str, messages: list[dict[str, str]]) -> str:
@@ -113,7 +140,7 @@ class GeminiConfirmClient:
         labeled_ads: list[LabeledAd] | None = None,
         completion_fn: Callable[..., Any] | None = None,
     ) -> None:
-        self.model = model or default_gemini_model()
+        self.model = model or default_live_confirm_model()
         self.mock_mode: MockMode = mock_mode
         self.cache_dir = Path(cache_dir) if cache_dir else None
         self.labeled_ads = labeled_ads or []
@@ -146,7 +173,11 @@ class GeminiConfirmClient:
             return cached
 
         input_tokens = estimate_message_tokens(messages)
-        if live_calls_enabled() or self.completion_fn is not None:
+        if (
+            live_calls_enabled()
+            or groq_live_calls_enabled()
+            or self.completion_fn is not None
+        ):
             result = self._live_confirm(messages)
         else:
             result = self._mock_confirm(window)
@@ -266,8 +297,12 @@ class GeminiConfirmClient:
                 response_format={"type": "json_object"},
             )
         else:
-            api_key = os.environ.get(GEMINI_API_KEY_ENV, "").strip()
-            os.environ.setdefault("GEMINI_API_KEY", api_key)
+            if groq_live_calls_enabled() and not live_calls_enabled():
+                groq_key = os.environ.get(GROQ_API_KEY_ENV, "").strip()
+                os.environ.setdefault("GROQ_API_KEY", groq_key)
+            else:
+                api_key = os.environ.get(GEMINI_API_KEY_ENV, "").strip()
+                os.environ.setdefault("GEMINI_API_KEY", api_key)
             import litellm  # lazy: CI / mock path never imports for a live call
 
             response = litellm.completion(
