@@ -3,7 +3,7 @@
   "title": "Cue-sparse host-read with no URL/CTA/phone",
   "podcast_title": "Travel Years",
   "podcast_topic": "long-form travel interviews",
-  "duration_seconds": 1200,
+  "duration_seconds": 1200.0,
   "notes": "Expected scout miss even with extras: no sponsor/CTA/URL/phone.",
   "labeled_ads": [
     {

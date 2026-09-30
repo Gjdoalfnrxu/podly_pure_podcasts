@@ -3,7 +3,7 @@
   "title": "prompt.py Wildcard cross-promo example",
   "podcast_title": "Interview Hour",
   "podcast_topic": "culture interviews",
-  "duration_seconds": 360.0,
+  "duration_seconds": 360,
   "notes": "Transition 'after the break' is the only production cue; body has none.",
   "labeled_ads": [
     {

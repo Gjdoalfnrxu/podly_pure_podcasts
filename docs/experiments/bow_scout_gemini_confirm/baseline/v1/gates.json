@@ -1,0 +1,24 @@
+{
+  "corpus_version": "v1",
+  "snapshot_id": "bow_scout_gemini_confirm_v1",
+  "description": "Fail CI if the scout\u00b1confirm path regresses vs the frozen snapshot, or if the production-like oracle mock loses labeled-ad recall.",
+  "tolerances": {
+    "scout_time_recall_drop": 0.02,
+    "scout_ad_hit_rate_drop": 0.02,
+    "scout_time_f1_drop": 0.03,
+    "scout_time_precision_drop": 0.05,
+    "scout_false_negative_rate_rise": 0.02,
+    "scout_residual_strong_cue_rate_rise": 0.01,
+    "scout_token_reduction_pct_drop": 2.0,
+    "scout_input_tokens_rel_rise": 0.1,
+    "production_time_recall_drop": 0.0,
+    "production_input_tokens_rel_rise": 0.1
+  },
+  "required_production_test_modules": [
+    "src/tests/test_cue_detector.py",
+    "src/tests/test_ad_classifier.py",
+    "src/tests/test_audio_processor.py",
+    "src/tests/test_process_audio.py"
+  ],
+  "notes": "Recall/hit/F1/FN/residual are absolute (e.g. 0.02 = 2 percentage points). Token-count rise is relative (0.10 = +10%). Token reduction is in percentage points vs the snapshot mean_token_reduction_pct. Default CI uses mocks; live Gemini is never required."
+}

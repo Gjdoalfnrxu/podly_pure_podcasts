@@ -3,7 +3,7 @@
   "title": "First-party promo versus external sponsor",
   "podcast_title": "Manager Minutes",
   "podcast_topic": "engineering management",
-  "duration_seconds": 900,
+  "duration_seconds": 900.0,
   "notes": "Self-promo should not be flagged at default scout config.",
   "labeled_ads": [
     {

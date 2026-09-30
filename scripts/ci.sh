@@ -3,9 +3,13 @@
 
 # Parse command line arguments
 RUN_INTEGRATION=false
+RUN_EVAL=false
 for arg in "$@"; do
     if [ "$arg" = "--int" ]; then
         RUN_INTEGRATION=true
+    fi
+    if [ "$arg" = "--eval" ]; then
+        RUN_EVAL=true
     fi
 done
 
@@ -34,6 +38,16 @@ echo '============================================================='
 echo "Running 'uv run pytest --disable-warnings'"
 echo '============================================================='
 uv run pytest --disable-warnings
+
+# Offline bow-scout vs production-like eval gates (no API keys).
+# Pytest already includes src/tests/test_bow_scout_regression_gates.py;
+# --eval re-runs the harness CLI against the frozen snapshot for a readable log.
+if [ "$RUN_EVAL" = true ]; then
+    echo '============================================================='
+    echo "Running offline experiment eval gates (--eval, no API keys)..."
+    echo '============================================================='
+    PYTHONPATH=src uv run python scripts/experiments/run_bow_scout_eval.py --check-baseline --skip-artifacts
+fi
 
 # Run integration tests only if --int flag is provided
 if [ "$RUN_INTEGRATION" = true ]; then

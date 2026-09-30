@@ -52,6 +52,15 @@ from shared.processing_paths import (
 logger = logging.getLogger("global_logger")
 
 
+def bow_scout_gemini_confirm_enabled(config: Config) -> bool:
+    """Return whether the experimental scout+confirm classifier is requested.
+
+    Default is False. Even when True, `_classify_ad_segments` currently keeps
+    the production AdClassifier walk (the experiment is eval-only until wired).
+    """
+    return bool(getattr(config, "enable_bow_scout_gemini_confirm", False))
+
+
 def get_post_processed_audio_path(post: Post) -> ProcessingPaths | None:
     """
     Generate the processed audio path based on the post's unprocessed audio path.
@@ -908,6 +917,12 @@ class PodcastProcessor:
         self.status_manager.update_job_status(
             job, "running", 3, "Identifying ads", 75.0
         )
+        if bow_scout_gemini_confirm_enabled(self.config):
+            self.logger.warning(
+                "enable_bow_scout_gemini_confirm is on, but the scout+confirm "
+                "path is eval-only and does not write Identification rows. "
+                "Falling back to the production AdClassifier LLM walk."
+            )
         user_prompt_template = self.get_user_prompt_template(
             DEFAULT_USER_PROMPT_TEMPLATE_PATH
         )

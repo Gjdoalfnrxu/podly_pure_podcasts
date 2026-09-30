@@ -3,7 +3,7 @@
   "title": "Classic pre/mid/post-roll host reads",
   "podcast_title": "The Example Show",
   "podcast_topic": "technology interviews",
-  "duration_seconds": 2700.0,
+  "duration_seconds": 2700,
   "notes": "Production CueDetector hits URL/CTA/promo/phone plus mid-roll transition. Opening 'brought to you by' needs scout extras.",
   "labeled_ads": [
     {

@@ -1,16 +1,16 @@
 {
-  "id": "wildcard_midroll_example",
-  "title": "prompt.py Wildcard cross-promo example",
-  "podcast_title": "Interview Hour",
-  "podcast_topic": "culture interviews",
-  "duration_seconds": 360.0,
-  "notes": "Transition 'after the break' is the only production cue; body has none.",
+  "id": "short_preroll_only",
+  "title": "Short episode, single pre-roll",
+  "podcast_title": "Kitchen Table",
+  "podcast_topic": "home cooking",
+  "duration_seconds": 480,
+  "notes": "Small episode to show full-walk overhead vs one Gemini window.",
   "labeled_ads": [
     {
-      "start": 55.0,
-      "end": 85.0,
-      "kind": "midroll",
-      "notes": "Wildcard promo from system prompt"
+      "start": 0.0,
+      "end": 10.0,
+      "kind": "preroll",
+      "notes": "HelloFresh"
     }
   ],
   "segments": [
@@ -18,13 +18,13 @@
       "sequence_num": 0,
       "start_time": 0.0,
       "end_time": 5.0,
-      "text": "Today we are talking about distributed systems and latency."
+      "text": "Go to hellofresh.com/pod and use code FRESH."
     },
     {
       "sequence_num": 1,
       "start_time": 5.0,
       "end_time": 10.0,
-      "text": "The guest described their early career in hardware labs."
+      "text": "Thanks, and on with the show."
     },
     {
       "sequence_num": 2,
@@ -78,43 +78,43 @@
       "sequence_num": 10,
       "start_time": 50.0,
       "end_time": 55.0,
-      "text": "That's all coming after the break."
+      "text": "I want to pause on that idea of backpressure."
     },
     {
       "sequence_num": 11,
       "start_time": 55.0,
       "end_time": 60.0,
-      "text": "On this week's episode of Wildcard, actor Chris Pine tells us, it's okay not to be perfect."
+      "text": "The numbers they published still surprise me."
     },
     {
       "sequence_num": 12,
       "start_time": 60.0,
       "end_time": 65.0,
-      "text": "My film got absolutely decimated when it premiered, which brings up for me one of my primary triggers or whatever it was like, not being liked."
+      "text": "Anyway, that is the backdrop for this interview."
     },
     {
       "sequence_num": 13,
       "start_time": 65.0,
       "end_time": 70.0,
-      "text": "I'm Rachel Martin, Chris Pine on How to Find Joy in Imperfection."
+      "text": "We will come back to the open source angle later."
     },
     {
       "sequence_num": 14,
       "start_time": 70.0,
       "end_time": 75.0,
-      "text": "That's on the new podcast, Wildcard."
+      "text": "The second half of the show is a bit more personal."
     },
     {
       "sequence_num": 15,
       "start_time": 75.0,
       "end_time": 80.0,
-      "text": "The Game Where Cards control the conversation."
+      "text": "Today we are talking about distributed systems and latency."
     },
     {
       "sequence_num": 16,
       "start_time": 80.0,
       "end_time": 85.0,
-      "text": "And welcome back to the show, today we're talking to Professor Hopkins"
+      "text": "The guest described their early career in hardware labs."
     },
     {
       "sequence_num": 17,
@@ -445,6 +445,150 @@
       "start_time": 355.0,
       "end_time": 360.0,
       "text": "The numbers they published still surprise me."
+    },
+    {
+      "sequence_num": 72,
+      "start_time": 360.0,
+      "end_time": 365.0,
+      "text": "Anyway, that is the backdrop for this interview."
+    },
+    {
+      "sequence_num": 73,
+      "start_time": 365.0,
+      "end_time": 370.0,
+      "text": "We will come back to the open source angle later."
+    },
+    {
+      "sequence_num": 74,
+      "start_time": 370.0,
+      "end_time": 375.0,
+      "text": "The second half of the show is a bit more personal."
+    },
+    {
+      "sequence_num": 75,
+      "start_time": 375.0,
+      "end_time": 380.0,
+      "text": "Today we are talking about distributed systems and latency."
+    },
+    {
+      "sequence_num": 76,
+      "start_time": 380.0,
+      "end_time": 385.0,
+      "text": "The guest described their early career in hardware labs."
+    },
+    {
+      "sequence_num": 77,
+      "start_time": 385.0,
+      "end_time": 390.0,
+      "text": "I think that is a really interesting point about memory."
+    },
+    {
+      "sequence_num": 78,
+      "start_time": 390.0,
+      "end_time": 395.0,
+      "text": "The team spent months measuring tail latency in production."
+    },
+    {
+      "sequence_num": 79,
+      "start_time": 395.0,
+      "end_time": 400.0,
+      "text": "Listeners wrote in with questions about replication."
+    },
+    {
+      "sequence_num": 80,
+      "start_time": 400.0,
+      "end_time": 405.0,
+      "text": "We recorded this conversation on a Thursday morning."
+    },
+    {
+      "sequence_num": 81,
+      "start_time": 405.0,
+      "end_time": 410.0,
+      "text": "That story about the first prototype always lands well."
+    },
+    {
+      "sequence_num": 82,
+      "start_time": 410.0,
+      "end_time": 415.0,
+      "text": "The architecture shifted after the third outage."
+    },
+    {
+      "sequence_num": 83,
+      "start_time": 415.0,
+      "end_time": 420.0,
+      "text": "People forget how slow disks were even ten years ago."
+    },
+    {
+      "sequence_num": 84,
+      "start_time": 420.0,
+      "end_time": 425.0,
+      "text": "There is a lot of nuance in how retries interact."
+    },
+    {
+      "sequence_num": 85,
+      "start_time": 425.0,
+      "end_time": 430.0,
+      "text": "I want to pause on that idea of backpressure."
+    },
+    {
+      "sequence_num": 86,
+      "start_time": 430.0,
+      "end_time": 435.0,
+      "text": "The numbers they published still surprise me."
+    },
+    {
+      "sequence_num": 87,
+      "start_time": 435.0,
+      "end_time": 440.0,
+      "text": "Anyway, that is the backdrop for this interview."
+    },
+    {
+      "sequence_num": 88,
+      "start_time": 440.0,
+      "end_time": 445.0,
+      "text": "We will come back to the open source angle later."
+    },
+    {
+      "sequence_num": 89,
+      "start_time": 445.0,
+      "end_time": 450.0,
+      "text": "The second half of the show is a bit more personal."
+    },
+    {
+      "sequence_num": 90,
+      "start_time": 450.0,
+      "end_time": 455.0,
+      "text": "Today we are talking about distributed systems and latency."
+    },
+    {
+      "sequence_num": 91,
+      "start_time": 455.0,
+      "end_time": 460.0,
+      "text": "The guest described their early career in hardware labs."
+    },
+    {
+      "sequence_num": 92,
+      "start_time": 460.0,
+      "end_time": 465.0,
+      "text": "I think that is a really interesting point about memory."
+    },
+    {
+      "sequence_num": 93,
+      "start_time": 465.0,
+      "end_time": 470.0,
+      "text": "The team spent months measuring tail latency in production."
+    },
+    {
+      "sequence_num": 94,
+      "start_time": 470.0,
+      "end_time": 475.0,
+      "text": "Listeners wrote in with questions about replication."
+    },
+    {
+      "sequence_num": 95,
+      "start_time": 475.0,
+      "end_time": 480.0,
+      "text": "We recorded this conversation on a Thursday morning."
     }
   ]
 }

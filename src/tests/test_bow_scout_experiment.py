@@ -251,7 +251,7 @@ def test_evaluate_all_writes_expected_shape(tmp_path: Path, monkeypatch) -> None
     monkeypatch.delenv(GEMINI_API_KEY_ENV, raising=False)
     results = evaluate_all()
     assert results["live_gemini"] is False
-    assert results["recommended"]["macro"]["n_fixtures"] == 6
+    assert results["recommended"]["macro"]["n_fixtures"] == 9
     assert "mean_token_reduction_pct" in results["recommended"]["macro"]
     assert len(results["sweep"]) >= 3
     from podcast_processor.experiments.eval_harness import write_artifacts

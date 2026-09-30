@@ -15,6 +15,10 @@ LLM_MAX_INPUT_TOKENS_PER_MINUTE: int | None = None
 ENABLE_BOUNDARY_REFINEMENT = True
 ENABLE_WORD_LEVEL_BOUNDARY_REFINDER = False
 ENABLE_LLM_CHAPTER_FALLBACK_TAGGING = False
+# Experimental CueDetector-scout + Gemini-confirm classifier. Default off:
+# production stays on the full AdClassifier LLM walk until this is explicitly
+# enabled *and* the experimental path is wired. See docs/experiments/AGENT_EVAL.md.
+ENABLE_BOW_SCOUT_GEMINI_CONFIRM = False
 
 # Whisper defaults
 WHISPER_DEFAULT_TYPE = "groq"

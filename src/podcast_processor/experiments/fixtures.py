@@ -3,10 +3,15 @@
 Existing tests/data only has an unlabeled MP3 (count_0_99.mp3). Production
 fixtures do not include ad labels, so these transcripts encode known ad spans
 plus the false-positive / false-negative cases CueDetector is likely to hit.
+
+The frozen golden set lives under corpus/v1/*.json (MANIFEST hashes). Eval
+loads that corpus; Python builders here are the generator used by
+`--write-corpus`.
 """
 
 from __future__ import annotations
 
+import hashlib
 import json
 from pathlib import Path
 from typing import Any, cast
@@ -14,6 +19,8 @@ from typing import Any, cast
 from podcast_processor.experiments.types import EpisodeFixture, LabeledAd, ScoutSegment
 
 DATA_DIR = Path(__file__).resolve().parent / "data"
+CORPUS_VERSION = "v1"
+CORPUS_ROOT = Path(__file__).resolve().parent / "corpus"
 
 
 def _as_float(value: object) -> float:
@@ -276,7 +283,89 @@ def wildcard_midroll_example() -> EpisodeFixture:
     )
 
 
-def all_fixtures() -> list[EpisodeFixture]:
+def ad_free_interview() -> EpisodeFixture:
+    """Ten-minute conversation with no ads (false-positive / empty-label check)."""
+    segments = _segments_for_duration(10 * 60)
+    return EpisodeFixture(
+        fixture_id="ad_free_interview",
+        title="Ad-free interview (no sponsor reads)",
+        podcast_title="Clean Room",
+        podcast_topic="systems interviews",
+        duration_seconds=10 * 60,
+        segments=segments,
+        labeled_ads=[],
+        notes="Content lines avoid CueDetector core + scout-extra patterns.",
+    )
+
+
+def stacked_midrolls() -> EpisodeFixture:
+    """Two adjacent mid-rolls that should merge under recommended padding/gap."""
+    segments = _segments_for_duration(18 * 60)
+    first = [
+        "We'll be right back after a short break.",
+        "Visit stripe.com/atlas and use code ATLAS20.",
+        "That's stripe.com/atlas.",
+    ]
+    second = [
+        "Our sponsor today is Linear.",
+        "Go to linear.app/podcast and start now.",
+        "Use promo LINEAR for the extended trial.",
+        "Now back to the conversation.",
+    ]
+    _overlay(segments, 8 * 60, first)
+    # 5s of content between the two blocks (one 5s segment) — merge_gap is 8s
+    # and pad_seconds is 15s, so recommended scout should stitch one window.
+    _overlay(segments, 8 * 60 + 20.0, second)
+    return EpisodeFixture(
+        fixture_id="stacked_midrolls",
+        title="Stacked adjacent mid-roll sponsors",
+        podcast_title="Ship It",
+        podcast_topic="product engineering",
+        duration_seconds=18 * 60,
+        segments=segments,
+        labeled_ads=[
+            LabeledAd(480.0, 495.0, "midroll", "Stripe URL + promo"),
+            LabeledAd(500.0, 520.0, "midroll", "Linear URL + CTA + promo"),
+        ],
+        notes="Two labeled ads 5s apart; scout padding/merge should cover both.",
+    )
+
+
+def chapter_style_ad_break() -> EpisodeFixture:
+    """Sponsor language that production CueDetector misses without scout extras."""
+    segments = _segments_for_duration(9 * 60)
+    ad = [
+        "And now a short advertisement.",
+        "After these messages we continue the interview.",
+        "This episode is sponsored by Athletic Greens.",
+        "The host has used their daily drink on long flights for years.",
+        "Thanks for listening through that.",
+    ]
+    _overlay(segments, 4 * 60, ad)
+    return EpisodeFixture(
+        fixture_id="chapter_style_ad_break",
+        title="Chapter-style ad break without URL/CTA/phone",
+        podcast_title="Long Haul",
+        podcast_topic="travel and health",
+        duration_seconds=9 * 60,
+        segments=segments,
+        labeled_ads=[
+            LabeledAd(
+                240.0,
+                265.0,
+                "midroll",
+                "advertisement / after these messages / sponsored by",
+            ),
+        ],
+        notes=(
+            "Needs scout extras (ad_break + sponsor). Production CueDetector "
+            "has none of URL/CTA/promo/phone/transition in the ad body."
+        ),
+    )
+
+
+def builder_fixtures() -> list[EpisodeFixture]:
+    """Python generators for the golden corpus (used by --write-corpus)."""
     return [
         classic_host_reads(),
         cue_sparse_storytelling(),
@@ -284,7 +373,105 @@ def all_fixtures() -> list[EpisodeFixture]:
         self_promo_vs_sponsor(),
         short_preroll_only(),
         wildcard_midroll_example(),
+        ad_free_interview(),
+        stacked_midrolls(),
+        chapter_style_ad_break(),
     ]
+
+
+def corpus_dir(version: str = CORPUS_VERSION) -> Path:
+    return CORPUS_ROOT / version
+
+
+def corpus_manifest_path(version: str = CORPUS_VERSION) -> Path:
+    return corpus_dir(version) / "MANIFEST.json"
+
+
+def sha256_file(path: Path) -> str:
+    digest = hashlib.sha256()
+    digest.update(path.read_bytes())
+    return digest.hexdigest()
+
+
+def write_corpus(
+    version: str = CORPUS_VERSION,
+    episodes: list[EpisodeFixture] | None = None,
+) -> Path:
+    """Dump builder fixtures to versioned JSON + MANIFEST hashes."""
+    rows = episodes or builder_fixtures()
+    target = corpus_dir(version)
+    target.mkdir(parents=True, exist_ok=True)
+    manifest_fixtures: list[dict[str, Any]] = []
+    for episode in rows:
+        path = write_fixture_json(episode, target / f"{episode.fixture_id}.json")
+        manifest_fixtures.append(
+            {
+                "id": episode.fixture_id,
+                "sha256": sha256_file(path),
+                "n_segments": len(episode.segments),
+                "n_labeled_ads": len(episode.labeled_ads),
+                "duration_seconds": episode.duration_seconds,
+                "labeled_ads": [
+                    {
+                        "start": ad.start,
+                        "end": ad.end,
+                        "kind": ad.kind,
+                        "notes": ad.notes,
+                    }
+                    for ad in episode.labeled_ads
+                ],
+            }
+        )
+    manifest = {
+        "version": version,
+        "corpus_id": "bow_scout_gemini_confirm",
+        "n_fixtures": len(manifest_fixtures),
+        "fixtures": manifest_fixtures,
+    }
+    corpus_manifest_path(version).write_text(
+        json.dumps(manifest, indent=2) + "\n", encoding="utf-8"
+    )
+    return corpus_manifest_path(version)
+
+
+def load_corpus(version: str = CORPUS_VERSION) -> list[EpisodeFixture]:
+    """Load the frozen golden set; fail if a fixture hash drifts."""
+    manifest_path = corpus_manifest_path(version)
+    if not manifest_path.exists():
+        raise FileNotFoundError(
+            f"Golden corpus manifest missing: {manifest_path}. "
+            "Run scripts/experiments/run_bow_scout_eval.py --write-corpus"
+        )
+    payload = json.loads(manifest_path.read_text(encoding="utf-8"))
+    raw_list = payload.get("fixtures")
+    if not isinstance(raw_list, list):
+        raise TypeError("corpus MANIFEST fixtures must be a list")
+    episodes: list[EpisodeFixture] = []
+    for raw_item in raw_list:
+        if not isinstance(raw_item, dict):
+            raise TypeError("corpus MANIFEST fixture rows must be objects")
+        item = cast(dict[str, Any], raw_item)
+        fixture_id = str(item["id"])
+        path = corpus_dir(version) / f"{fixture_id}.json"
+        if not path.exists():
+            raise FileNotFoundError(f"Golden corpus fixture missing: {path}")
+        expected = str(item["sha256"])
+        actual = sha256_file(path)
+        if actual != expected:
+            raise ValueError(
+                f"Golden corpus hash mismatch for {fixture_id}: "
+                f"manifest={expected} file={actual}. "
+                "Regenerate with --write-corpus only if the change is intentional."
+            )
+        episodes.append(episode_from_json(json.loads(path.read_text(encoding="utf-8"))))
+    return episodes
+
+
+def all_fixtures() -> list[EpisodeFixture]:
+    """Eval corpus: frozen JSON when present, else in-memory builders."""
+    if corpus_manifest_path().exists():
+        return load_corpus()
+    return builder_fixtures()
 
 
 def fixture_to_json(episode: EpisodeFixture) -> dict[str, object]:

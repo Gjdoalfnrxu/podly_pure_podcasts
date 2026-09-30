@@ -1,4 +1,9 @@
-"""Offline eval: scout recall/precision, token reduction, cache, residual cues."""
+"""Offline eval: production-like AdClassifier vs scout±confirm.
+
+Comparable metrics: time precision/recall/F1, ad-block hit rate, token
+estimate, residual CueDetector rate, duration-check stubs. Default path is
+fully mocked (no API keys). Live Gemini is opt-in via env flags.
+"""
 
 from __future__ import annotations
 
@@ -8,29 +13,36 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+from podcast_processor.experiments.baseline import extract_snapshot
 from podcast_processor.experiments.bow_scout import (
     BowScout,
     ScoutConfig,
-    overlap_seconds,
 )
 from podcast_processor.experiments.cost_model import (
     DEFAULT_CLASSIFIER_PRICES,
     DEFAULT_GEMINI_PRICES,
-    estimate_adclassifier_tokens,
     estimate_scout_confirm_tokens,
     token_reduction_pct,
 )
-from podcast_processor.experiments.fixtures import all_fixtures, write_fixture_json
-from podcast_processor.experiments.gemini_confirm import GeminiConfirmClient
-from podcast_processor.experiments.removal_verifier import (
-    ads_to_ms,
-    expected_output_duration_ms,
-    residual_cue_scan,
+from podcast_processor.experiments.fixtures import (
+    CORPUS_VERSION,
+    all_fixtures,
+    corpus_manifest_path,
+    sha256_file,
+    write_fixture_json,
 )
+from podcast_processor.experiments.gemini_confirm import (
+    GeminiConfirmClient,
+    live_calls_enabled,
+)
+from podcast_processor.experiments.metrics import (
+    path_quality_metrics,
+    windows_to_spans,
+)
+from podcast_processor.experiments.production_mock import classify_production_like
 from podcast_processor.experiments.types import (
     ConfirmResult,
     EpisodeFixture,
-    LabeledAd,
     ScoutWindow,
 )
 from shared import defaults as DEFAULTS
@@ -94,7 +106,7 @@ RECOMMENDED_CONFIG = ScoutConfig(
 )
 
 
-def labeled_ad_duration(ads: list[LabeledAd]) -> float:
+def labeled_ad_duration(ads: list[Any]) -> float:
     return float(sum(ad.duration() for ad in ads))
 
 
@@ -102,74 +114,41 @@ def window_duration(windows: list[ScoutWindow]) -> float:
     return float(sum(window.duration() for window in windows))
 
 
-def ad_hit_rate(ads: list[LabeledAd], windows: list[ScoutWindow]) -> float:
-    if not ads:
-        return 1.0
-    hits = 0
-    for ad in ads:
-        if any(
-            overlap_seconds(ad.start, ad.end, window.start_time, window.end_time) > 0.5
-            for window in windows
-        ):
-            hits += 1
-    return float(hits) / float(len(ads))
+def ad_hit_rate(ads: list[Any], windows: list[ScoutWindow]) -> float:
+    from podcast_processor.experiments.metrics import ad_hit_rate as _hit
+
+    return _hit(ads, windows_to_spans(windows))
 
 
-def ad_coverage(ads: list[LabeledAd], windows: list[ScoutWindow]) -> float:
-    total = labeled_ad_duration(ads)
-    if total <= 0:
-        return 1.0
-    covered = 0.0
-    for ad in ads:
-        covered += sum(
-            overlap_seconds(ad.start, ad.end, window.start_time, window.end_time)
-            for window in windows
-        )
-    return min(1.0, covered / total)
+def ad_coverage(ads: list[Any], windows: list[ScoutWindow]) -> float:
+    from podcast_processor.experiments.metrics import ads_to_spans, time_prf
+
+    return time_prf(ads_to_spans(ads), windows_to_spans(windows))["recall"]
 
 
-def scout_precision(ads: list[LabeledAd], windows: list[ScoutWindow]) -> float:
-    total = window_duration(windows)
-    if total <= 0:
-        return 1.0
-    overlapping = 0.0
-    for window in windows:
-        overlapping += sum(
-            overlap_seconds(window.start_time, window.end_time, ad.start, ad.end)
-            for ad in ads
-        )
-    return min(1.0, overlapping / total)
+def scout_precision(ads: list[Any], windows: list[ScoutWindow]) -> float:
+    from podcast_processor.experiments.metrics import ads_to_spans, time_prf
+
+    return time_prf(ads_to_spans(ads), windows_to_spans(windows))["precision"]
 
 
-def missed_ads(
-    ads: list[LabeledAd], windows: list[ScoutWindow]
-) -> list[dict[str, Any]]:
-    missed: list[dict[str, Any]] = []
-    for ad in ads:
-        if not any(
-            overlap_seconds(ad.start, ad.end, window.start_time, window.end_time) > 0.5
-            for window in windows
-        ):
-            missed.append(
-                {
-                    "start": ad.start,
-                    "end": ad.end,
-                    "kind": ad.kind,
-                    "notes": ad.notes,
-                }
-            )
-    return missed
+def missed_ads(ads: list[Any], windows: list[ScoutWindow]) -> list[dict[str, Any]]:
+    from podcast_processor.experiments.metrics import missed_ads as _missed
+
+    return _missed(ads, windows_to_spans(windows))
 
 
 def evaluate_episode(
     episode: EpisodeFixture,
     config: ScoutConfig,
     cache_dir: Path | None = None,
+    confirm_mock_mode: str = "oracle",
 ) -> dict[str, Any]:
     scout = BowScout(config=config)
     windows = scout.scout(episode.segments)
+    live = live_calls_enabled()
     client = GeminiConfirmClient(
-        mock_mode="oracle",
+        mock_mode=confirm_mock_mode,  # type: ignore[arg-type]
         cache_dir=cache_dir,
         labeled_ads=episode.labeled_ads,
     )
@@ -178,9 +157,8 @@ def evaluate_episode(
     )
     confirmed_spans = _confirmed_spans(confirms)
 
-    full_tokens = estimate_adclassifier_tokens(
-        episode.segments, episode.podcast_title, episode.podcast_topic
-    )
+    production = classify_production_like(episode)
+    full_tokens = production.tokens
     scout_tokens = estimate_scout_confirm_tokens(
         windows, episode.podcast_title, episode.podcast_topic
     )
@@ -191,19 +169,23 @@ def evaluate_episode(
         cached_hashes=_hashes_from_confirms(confirms),
     )
 
-    oracle_hit = ad_hit_rate(episode.labeled_ads, _spans_as_windows(confirmed_spans))
-    residuals = residual_cue_scan(
-        episode.segments,
-        [
-            LabeledAd(span["start"], span["end"], "confirmed")
-            for span in confirmed_spans
-        ],
+    scout_quality = path_quality_metrics(
+        labeled_ads=episode.labeled_ads,
+        predicted=windows_to_spans(windows),
+        segments=episode.segments,
+        source_seconds=float(episode.duration_seconds),
     )
-    duration = expected_output_duration_ms(
-        source_ms=int(episode.duration_seconds * 1000),
-        ad_segments_ms=ads_to_ms(episode.labeled_ads),
-        fade_ms=DEFAULTS.OUTPUT_FADE_MS,
-        complex_filter=True,
+    confirm_quality = path_quality_metrics(
+        labeled_ads=episode.labeled_ads,
+        predicted=confirmed_spans,
+        segments=episode.segments,
+        source_seconds=float(episode.duration_seconds),
+    )
+    production_quality = path_quality_metrics(
+        labeled_ads=episode.labeled_ads,
+        predicted=production.predicted,
+        segments=episode.segments,
+        source_seconds=float(episode.duration_seconds),
     )
 
     return {
@@ -215,13 +197,14 @@ def evaluate_episode(
         "labeled_ad_seconds": labeled_ad_duration(episode.labeled_ads),
         "n_windows": len(windows),
         "window_seconds": window_duration(windows),
-        "ad_hit_rate": ad_hit_rate(episode.labeled_ads, windows),
-        "ad_coverage": ad_coverage(episode.labeled_ads, windows),
-        "scout_precision": scout_precision(episode.labeled_ads, windows),
-        "false_negative_risk": 1.0 - ad_hit_rate(episode.labeled_ads, windows),
-        "missed_ads": missed_ads(episode.labeled_ads, windows),
-        "oracle_confirm_hit_rate": oracle_hit,
-        "residual_strong_cues": len(residuals),
+        # Backward-compatible scout-window keys used by existing unit tests.
+        "ad_hit_rate": scout_quality["ad_hit_rate"],
+        "ad_coverage": scout_quality["time_recall"],
+        "scout_precision": scout_quality["time_precision"],
+        "false_negative_risk": scout_quality["false_negative_rate"],
+        "missed_ads": scout_quality["missed_ads"],
+        "oracle_confirm_hit_rate": confirm_quality["ad_hit_rate"],
+        "residual_strong_cues": confirm_quality["residual_strong_cues"],
         "full_classifier": {
             "calls": full_tokens.calls,
             "input_tokens": full_tokens.input_tokens,
@@ -229,6 +212,16 @@ def evaluate_episode(
             "usd": full_tokens.usd,
             "model": DEFAULT_CLASSIFIER_PRICES.name,
         },
+        "scout_confirm_tokens": {
+            "calls": scout_tokens.calls,
+            "input_tokens": scout_tokens.input_tokens,
+            "output_tokens": scout_tokens.output_tokens,
+            "usd": scout_tokens.usd,
+            "model": DEFAULT_GEMINI_PRICES.name,
+            "cached_repeat_input_tokens": repeat_tokens.input_tokens,
+            "cached_repeat_usd": repeat_tokens.usd,
+        },
+        # Alias kept for existing tests/docs.
         "scout_confirm": {
             "calls": scout_tokens.calls,
             "input_tokens": scout_tokens.input_tokens,
@@ -244,12 +237,23 @@ def evaluate_episode(
             if full_tokens.usd
             else 0.0
         ),
-        "removal": {
-            "source_ms": duration.source_ms,
-            "removed_ms": duration.removed_ms,
-            "fade_added_ms": duration.fade_added_ms,
-            "expected_output_ms": duration.expected_output_ms,
-            "n_cuts": duration.n_cuts,
+        "removal": confirm_quality["duration"],
+        "paths": {
+            "production_like": {
+                **production_quality,
+                "n_seed_segments": production.n_seed_segments,
+                "n_expanded_segments": production.n_expanded_segments,
+                "neighbor_window": production.neighbor_window,
+                "input_tokens": full_tokens.input_tokens,
+                "calls": full_tokens.calls,
+                "usd": full_tokens.usd,
+            },
+            "scout": scout_quality,
+            "scout_confirm": {
+                **confirm_quality,
+                "live_gemini": live,
+                "confirm_mock_mode": confirm_mock_mode if not live else "live",
+            },
         },
         "config": _config_dict(config),
         "notes": episode.notes,
@@ -285,23 +289,41 @@ def evaluate_all(
                         "scout_precision": row["scout_precision"],
                         "token_reduction_pct": row["token_reduction_pct"],
                         "n_windows": row["n_windows"],
+                        "scout_confirm_time_recall": row["paths"]["scout_confirm"][
+                            "time_recall"
+                        ],
+                        "production_time_recall": row["paths"]["production_like"][
+                            "time_recall"
+                        ],
                     }
                     for row in rows
                 ],
             }
         )
-    return {
+    manifest = corpus_manifest_path()
+    corpus_hash = sha256_file(manifest) if manifest.exists() else None
+    live = live_calls_enabled()
+    payload: dict[str, Any] = {
         "generated_at": datetime.now(UTC).isoformat(),
-        "live_gemini": False,
+        "live_gemini": live,
+        "corpus_version": CORPUS_VERSION,
+        "corpus_sha256": corpus_hash,
+        "enable_bow_scout_gemini_confirm_default": (
+            DEFAULTS.ENABLE_BOW_SCOUT_GEMINI_CONFIRM
+        ),
         "assumptions": {
             "token_rule": "len(text)//4, matching AdClassifier/TokenRateLimiter",
             "adclassifier_overlap": "no-ad walk: ceil(chunk/2) capped at 30",
             "chunk_size": DEFAULTS.PROCESSING_NUM_SEGMENTS_TO_INPUT_TO_PROMPT,
             "fade_ms": DEFAULTS.OUTPUT_FADE_MS,
-            "gemini_mocked": True,
+            "gemini_mocked": not live,
             "oracle_confirm": (
                 "Gemini quality upper bound: confirm keeps labeled overlap in "
                 "scout windows; misses are scout false negatives."
+            ),
+            "production_like": (
+                "Oracle labels (fixture ads) plus CueDetector neighbor "
+                "expansion (window=5, extras off) matching AdClassifier."
             ),
             "prices_usd_per_million": {
                 "classifier_input": DEFAULT_CLASSIFIER_PRICES.input_usd_per_million,
@@ -321,7 +343,10 @@ def evaluate_all(
         "sweep": sweep_rows,
         "follow_up_live_gemini": _follow_up_notes(),
         "ready_to_pr_checklist": _ready_checklist(),
+        "comparable_snapshot": None,
     }
+    payload["comparable_snapshot"] = extract_snapshot(payload)
+    return payload
 
 
 def write_artifacts(
@@ -370,15 +395,57 @@ def render_results_markdown(results: dict[str, Any]) -> str:
         "(optional `sponsored by` / `brought to you by` / `ad break` patterns; "
         "off in production `CueDetector()`)",
         "- include_self_promo: `false` (matches AdClassifier demotion)",
+        f"- production flag `enable_bow_scout_gemini_confirm`: "
+        f"`{results.get('enable_bow_scout_gemini_confirm_default', False)}` "
+        "(Feed/PodcastProcessor stay on the LLM AdClassifier path)",
         "",
-        "## Headline metrics (recommended config, macro over 6 fixtures)",
+        "## Production-like vs scout±confirm (before / after)",
+        "",
+        "Production-like is an **offline oracle** of the current AdClassifier "
+        "walk: labeled ads (perfect LLM) plus CueDetector neighbor expansion "
+        "(extras off, window=5). Scout±confirm is CueDetector windows plus "
+        "oracle Gemini confirm. Live Gemini is not used in default CI.",
+        "",
+        f"Frozen corpus `{results.get('corpus_version', 'v1')}` "
+        f"({macro['n_fixtures']} fixtures). Agent contract: "
+        "`docs/experiments/AGENT_EVAL.md`.",
+        "",
+        "| Path | Time recall | Time precision | Time F1 | Ad-block hit | FN rate | Residual cue rate | Input tokens |",
+        "| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |",
+        "| Production-like (oracle LLM + neighbor expand) | "
+        f"{_pct(macro['production_mean_time_recall'])} | "
+        f"{_pct(macro['production_mean_time_precision'])} | "
+        f"{_pct(macro['production_mean_time_f1'])} | "
+        f"{_pct(macro['production_mean_ad_hit_rate'])} | "
+        f"{_pct(1.0 - macro['production_mean_ad_hit_rate'])} | "
+        f"{macro['production_mean_residual_strong_cue_rate']:.4f} | "
+        f"{macro['sum_full_input_tokens']} |",
+        "| Scout windows (pre-confirm) | "
+        f"{_pct(macro['scout_mean_time_recall'])} | "
+        f"{_pct(macro['scout_mean_time_precision'])} | "
+        f"{_pct(macro['scout_mean_time_f1'])} | "
+        f"{_pct(macro['scout_mean_ad_hit_rate'])} | "
+        f"{_pct(macro['scout_mean_false_negative_rate'])} | "
+        "— | — |",
+        "| Scout + oracle confirm | "
+        f"{_pct(macro['scout_confirm_mean_time_recall'])} | "
+        f"{_pct(macro['scout_confirm_mean_time_precision'])} | "
+        f"{_pct(macro['scout_confirm_mean_time_f1'])} | "
+        f"{_pct(macro['scout_mean_ad_hit_rate'])} | "
+        f"{_pct(macro['scout_mean_false_negative_rate'])} | "
+        f"{macro['scout_confirm_mean_residual_strong_cue_rate']:.4f} | "
+        f"{macro['sum_scout_input_tokens']} |",
+        "",
+        "## Headline metrics (recommended config)",
         "",
         "| Metric | Value |",
         "| --- | ---: |",
         f"| Scout ad-block hit rate | {_pct(macro['mean_ad_hit_rate'])} |",
         f"| Scout labeled-ad time coverage | {_pct(macro['mean_ad_coverage'])} |",
         f"| Scout window precision (pre-confirm) | {_pct(macro['mean_scout_precision'])} |",
+        f"| Scout+confirm time F1 | {_pct(macro['scout_confirm_mean_time_f1'])} |",
         f"| False-negative risk (missed ad blocks) | {_pct(macro['mean_false_negative_risk'])} |",
+        f"| Residual strong-cue rate (after confirm cuts) | {macro['scout_confirm_mean_residual_strong_cue_rate']:.4f} |",
         f"| Mean token reduction vs full AdClassifier | {_pct(macro['mean_token_reduction_pct'] / 100.0)} |",
         f"| Mean USD reduction (est., similar $/M) | {_pct(macro['mean_usd_reduction_pct'] / 100.0)} |",
         f"| Full-walk input tokens (sum) | {macro['sum_full_input_tokens']} |",
@@ -387,8 +454,8 @@ def render_results_markdown(results: dict[str, Any]) -> str:
         "",
         "Hit rate is the fraction of **labeled ad blocks** that overlap a scout "
         "window. Coverage is the fraction of **labeled ad seconds** inside those "
-        "windows. Precision is labeled-ad seconds / scout-window seconds before "
-        "Gemini trims false-positive padding and content traps.",
+        "windows. Precision is labeled-ad seconds / predicted seconds. F1 is "
+        "the harmonic mean of time precision and recall after spans are merged.",
         "",
         "## Per-fixture (recommended config)",
         "",
@@ -532,45 +599,33 @@ def render_results_markdown(results: dict[str, Any]) -> str:
             "",
             "## Files",
             "",
+            "- Agent contract: `docs/experiments/AGENT_EVAL.md`",
+            "- Frozen corpus: `src/podcast_processor/experiments/corpus/v1/`",
+            "- Frozen snapshot/gates: "
+            "`docs/experiments/bow_scout_gemini_confirm/baseline/v1/`",
             "- Experiment package: `src/podcast_processor/experiments/`",
             "- CueDetector extras/score: `src/podcast_processor/cue_detector.py` "
             "(default constructor unchanged)",
             "- Harness: `scripts/experiments/run_bow_scout_eval.py`",
             "- Metrics dump: `metrics.json` (this directory)",
             "",
-            "Production `Feed` defaults and `PodcastProcessor` are not wired to "
-            "this path.",
+            "Production `Feed.ad_detection_strategy` stays `llm` and "
+            "`enable_bow_scout_gemini_confirm` defaults **false**. "
+            "PodcastProcessor does not swap in the experimental classifier.",
             "",
         ]
     )
     return "\n".join(lines) + "\n"
 
 
-def _confirmed_spans(confirms: list[ConfirmResult]) -> list[dict[str, float]]:
-    spans: list[dict[str, float]] = []
+def _confirmed_spans(confirms: list[ConfirmResult]) -> list[tuple[float, float]]:
+    spans: list[tuple[float, float]] = []
     for result in confirms:
         if not result.is_ad:
             continue
         for span in result.ad_spans:
-            spans.append({"start": span.start, "end": span.end})
+            spans.append((float(span.start), float(span.end)))
     return spans
-
-
-def _spans_as_windows(spans: list[dict[str, float]]) -> list[ScoutWindow]:
-    windows: list[ScoutWindow] = []
-    for i, span in enumerate(spans):
-        windows.append(
-            ScoutWindow(
-                start_time=span["start"],
-                end_time=span["end"],
-                start_seq=i,
-                end_seq=i,
-                segment_indices=[i],
-                peak_score=1.0,
-                cue_types=[],
-            )
-        )
-    return windows
 
 
 def _hashes_from_confirms(confirms: list[ConfirmResult]) -> set[str]:
@@ -583,14 +638,27 @@ def _config_dict(config: ScoutConfig) -> dict[str, Any]:
 
 def _macro_summary(rows: list[dict[str, Any]]) -> dict[str, Any]:
     n = len(rows) or 1
+
+    def mean(key_path: list[str]) -> float:
+        total = 0.0
+        for row in rows:
+            value: Any = row
+            for key in key_path:
+                value = value[key]
+            if not isinstance(value, int | float) or isinstance(value, bool):
+                raise TypeError(f"macro metric {key_path} is not numeric: {value!r}")
+            total += float(value)
+        return total / n
+
     return {
         "n_fixtures": len(rows),
-        "mean_ad_hit_rate": sum(r["ad_hit_rate"] for r in rows) / n,
-        "mean_ad_coverage": sum(r["ad_coverage"] for r in rows) / n,
-        "mean_scout_precision": sum(r["scout_precision"] for r in rows) / n,
-        "mean_false_negative_risk": sum(r["false_negative_risk"] for r in rows) / n,
-        "mean_token_reduction_pct": sum(r["token_reduction_pct"] for r in rows) / n,
-        "mean_usd_reduction_pct": sum(r["usd_reduction_pct"] for r in rows) / n,
+        # Backward-compatible aliases (scout windows).
+        "mean_ad_hit_rate": mean(["ad_hit_rate"]),
+        "mean_ad_coverage": mean(["ad_coverage"]),
+        "mean_scout_precision": mean(["scout_precision"]),
+        "mean_false_negative_risk": mean(["false_negative_risk"]),
+        "mean_token_reduction_pct": mean(["token_reduction_pct"]),
+        "mean_usd_reduction_pct": mean(["usd_reduction_pct"]),
         "sum_full_input_tokens": sum(
             r["full_classifier"]["input_tokens"] for r in rows
         ),
@@ -600,13 +668,47 @@ def _macro_summary(rows: list[dict[str, Any]]) -> dict[str, Any]:
         ),
         "sum_full_usd": sum(r["full_classifier"]["usd"] for r in rows),
         "sum_scout_usd": sum(r["scout_confirm"]["usd"] for r in rows),
+        # Gate metrics.
+        "scout_mean_ad_hit_rate": mean(["paths", "scout", "ad_hit_rate"]),
+        "scout_mean_time_recall": mean(["paths", "scout", "time_recall"]),
+        "scout_mean_time_precision": mean(["paths", "scout", "time_precision"]),
+        "scout_mean_time_f1": mean(["paths", "scout", "time_f1"]),
+        "scout_mean_false_negative_rate": mean(
+            ["paths", "scout", "false_negative_rate"]
+        ),
+        "scout_confirm_mean_time_recall": mean(
+            ["paths", "scout_confirm", "time_recall"]
+        ),
+        "scout_confirm_mean_time_precision": mean(
+            ["paths", "scout_confirm", "time_precision"]
+        ),
+        "scout_confirm_mean_time_f1": mean(["paths", "scout_confirm", "time_f1"]),
+        "scout_confirm_mean_residual_strong_cue_rate": mean(
+            ["paths", "scout_confirm", "residual_strong_cue_rate"]
+        ),
+        "scout_confirm_sum_residual_strong_cues": sum(
+            r["paths"]["scout_confirm"]["residual_strong_cues"] for r in rows
+        ),
+        "production_mean_time_recall": mean(
+            ["paths", "production_like", "time_recall"]
+        ),
+        "production_mean_time_precision": mean(
+            ["paths", "production_like", "time_precision"]
+        ),
+        "production_mean_time_f1": mean(["paths", "production_like", "time_f1"]),
+        "production_mean_ad_hit_rate": mean(
+            ["paths", "production_like", "ad_hit_rate"]
+        ),
+        "production_mean_residual_strong_cue_rate": mean(
+            ["paths", "production_like", "residual_strong_cue_rate"]
+        ),
     }
 
 
 def _follow_up_notes() -> list[str]:
     return [
-        "Run the same 6 fixtures plus 5–10 real Whisper transcripts with human "
-        "or current-AdClassifier labels; budget Gemini 2.5 Flash at ≤ $0.50/day "
+        "Run corpus v1 plus 5–10 real Whisper transcripts with human or "
+        "current-AdClassifier labels; budget Gemini 2.5 Flash at ≤ $0.50/day "
         "and enable the content-hash cache directory first.",
         "Measure live confirm precision/recall vs oracle: does Gemini drop "
         "false-positive windows (Shopify.com technical mentions, 'check out this "
@@ -619,20 +721,29 @@ def _follow_up_notes() -> list[str]:
         "replace some of that second LLM pass, not add a third.",
         "Record actual litellm usage tokens vs the chars/4 estimate; adjust "
         "cost_model prices to the Gemini SKU you actually call.",
-        "Do not change Feed defaults until live recall on real episodes is "
-        "within an agreed band of the full AdClassifier walk.",
+        "Do not set enable_bow_scout_gemini_confirm or change Feed defaults "
+        "until live recall on real episodes is within the AGENT_EVAL band of "
+        "the full AdClassifier walk.",
     ]
 
 
 def _ready_checklist() -> list[str]:
     return [
+        "[x] Frozen golden corpus under "
+        "`src/podcast_processor/experiments/corpus/v1/` with MANIFEST hashes.",
+        "[x] Committed baseline snapshot + gates under "
+        "`docs/experiments/bow_scout_gemini_confirm/baseline/v1/`.",
+        "[x] Dual-path harness: production-like AdClassifier mock vs "
+        "scout±confirm (time P/R/F1, tokens, residual cues, duration stubs).",
+        "[x] Pytest/CI gates fail on recall drop, FN/residual rise, or token "
+        "blow-up vs snapshot (see docs/experiments/AGENT_EVAL.md).",
         "[x] Experimental package isolated under "
-        "`src/podcast_processor/experiments/` (not imported by PodcastProcessor).",
+        "`src/podcast_processor/experiments/` (PodcastProcessor does not swap "
+        "classifiers).",
         "[x] CueDetector default constructor / `analyze` keys unchanged for production.",
         "[x] Gemini client mocks by default; live path requires GEMINI_API_KEY + "
         "PODLY_GEMINI_CONFIRM_LIVE=true.",
-        "[x] Offline tests without API keys.",
-        "[x] RESULTS.md + metrics.json from the harness.",
+        "[x] `enable_bow_scout_gemini_confirm` defaults False; Feed strategy stays `llm`.",
         "[ ] Human review of scout extras (`brought to you by`, etc.) before "
         "enabling them in production neighbor expansion.",
         "[ ] Live Gemini confirm on real transcripts ($0.50/day, cache-first).",

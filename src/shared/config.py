@@ -112,6 +112,15 @@ class Config(BaseModel):
             "generate fallback chapter tags from description/transcript."
         ),
     )
+    enable_bow_scout_gemini_confirm: bool = Field(
+        default=DEFAULTS.ENABLE_BOW_SCOUT_GEMINI_CONFIRM,
+        description=(
+            "Experimental: CueDetector scout + Gemini confirm instead of the "
+            "full AdClassifier LLM walk. Default off. Production Feed and "
+            "PodcastProcessor stay on the current LLM path until this is "
+            "explicitly enabled and the experimental classifier is wired."
+        ),
+    )
     developer_mode: bool = Field(
         default=False,
         description="Enable developer mode features like test feeds",
