@@ -1,0 +1,3270 @@
+{
+  "id": "classic_host_reads",
+  "title": "Classic pre/mid/post-roll host reads",
+  "podcast_title": "The Example Show",
+  "podcast_topic": "technology interviews",
+  "duration_seconds": 2700,
+  "notes": "Production CueDetector hits URL/CTA/promo/phone plus mid-roll transition. Opening 'brought to you by' needs scout extras.",
+  "labeled_ads": [
+    {
+      "start": 0.0,
+      "end": 30.0,
+      "kind": "preroll",
+      "notes": "Squarespace URL + promo code"
+    },
+    {
+      "start": 1200.0,
+      "end": 1240.0,
+      "kind": "midroll",
+      "notes": "BetterHelp URL + CTA"
+    },
+    {
+      "start": 2640.0,
+      "end": 2655.0,
+      "kind": "postroll",
+      "notes": "phone + discount"
+    }
+  ],
+  "segments": [
+    {
+      "sequence_num": 0,
+      "start_time": 0.0,
+      "end_time": 5.0,
+      "text": "This episode is brought to you by Squarespace."
+    },
+    {
+      "sequence_num": 1,
+      "start_time": 5.0,
+      "end_time": 10.0,
+      "text": "If you need a website, Squarespace makes it simple."
+    },
+    {
+      "sequence_num": 2,
+      "start_time": 10.0,
+      "end_time": 15.0,
+      "text": "Just visit squarespace.com/podcast and get started."
+    },
+    {
+      "sequence_num": 3,
+      "start_time": 15.0,
+      "end_time": 20.0,
+      "text": "Use code PODCAST for ten percent off your first year."
+    },
+    {
+      "sequence_num": 4,
+      "start_time": 20.0,
+      "end_time": 25.0,
+      "text": "That's squarespace.com slash podcast."
+    },
+    {
+      "sequence_num": 5,
+      "start_time": 25.0,
+      "end_time": 30.0,
+      "text": "And we are back with a great conversation today."
+    },
+    {
+      "sequence_num": 6,
+      "start_time": 30.0,
+      "end_time": 35.0,
+      "text": "That story about the first prototype always lands well."
+    },
+    {
+      "sequence_num": 7,
+      "start_time": 35.0,
+      "end_time": 40.0,
+      "text": "The architecture shifted after the third outage."
+    },
+    {
+      "sequence_num": 8,
+      "start_time": 40.0,
+      "end_time": 45.0,
+      "text": "People forget how slow disks were even ten years ago."
+    },
+    {
+      "sequence_num": 9,
+      "start_time": 45.0,
+      "end_time": 50.0,
+      "text": "There is a lot of nuance in how retries interact."
+    },
+    {
+      "sequence_num": 10,
+      "start_time": 50.0,
+      "end_time": 55.0,
+      "text": "I want to pause on that idea of backpressure."
+    },
+    {
+      "sequence_num": 11,
+      "start_time": 55.0,
+      "end_time": 60.0,
+      "text": "The numbers they published still surprise me."
+    },
+    {
+      "sequence_num": 12,
+      "start_time": 60.0,
+      "end_time": 65.0,
+      "text": "Anyway, that is the backdrop for this interview."
+    },
+    {
+      "sequence_num": 13,
+      "start_time": 65.0,
+      "end_time": 70.0,
+      "text": "We will come back to the open source angle later."
+    },
+    {
+      "sequence_num": 14,
+      "start_time": 70.0,
+      "end_time": 75.0,
+      "text": "The second half of the show is a bit more personal."
+    },
+    {
+      "sequence_num": 15,
+      "start_time": 75.0,
+      "end_time": 80.0,
+      "text": "Today we are talking about distributed systems and latency."
+    },
+    {
+      "sequence_num": 16,
+      "start_time": 80.0,
+      "end_time": 85.0,
+      "text": "The guest described their early career in hardware labs."
+    },
+    {
+      "sequence_num": 17,
+      "start_time": 85.0,
+      "end_time": 90.0,
+      "text": "I think that is a really interesting point about memory."
+    },
+    {
+      "sequence_num": 18,
+      "start_time": 90.0,
+      "end_time": 95.0,
+      "text": "The team spent months measuring tail latency in production."
+    },
+    {
+      "sequence_num": 19,
+      "start_time": 95.0,
+      "end_time": 100.0,
+      "text": "Listeners wrote in with questions about replication."
+    },
+    {
+      "sequence_num": 20,
+      "start_time": 100.0,
+      "end_time": 105.0,
+      "text": "We recorded this conversation on a Thursday morning."
+    },
+    {
+      "sequence_num": 21,
+      "start_time": 105.0,
+      "end_time": 110.0,
+      "text": "That story about the first prototype always lands well."
+    },
+    {
+      "sequence_num": 22,
+      "start_time": 110.0,
+      "end_time": 115.0,
+      "text": "The architecture shifted after the third outage."
+    },
+    {
+      "sequence_num": 23,
+      "start_time": 115.0,
+      "end_time": 120.0,
+      "text": "People forget how slow disks were even ten years ago."
+    },
+    {
+      "sequence_num": 24,
+      "start_time": 120.0,
+      "end_time": 125.0,
+      "text": "There is a lot of nuance in how retries interact."
+    },
+    {
+      "sequence_num": 25,
+      "start_time": 125.0,
+      "end_time": 130.0,
+      "text": "I want to pause on that idea of backpressure."
+    },
+    {
+      "sequence_num": 26,
+      "start_time": 130.0,
+      "end_time": 135.0,
+      "text": "The numbers they published still surprise me."
+    },
+    {
+      "sequence_num": 27,
+      "start_time": 135.0,
+      "end_time": 140.0,
+      "text": "Anyway, that is the backdrop for this interview."
+    },
+    {
+      "sequence_num": 28,
+      "start_time": 140.0,
+      "end_time": 145.0,
+      "text": "We will come back to the open source angle later."
+    },
+    {
+      "sequence_num": 29,
+      "start_time": 145.0,
+      "end_time": 150.0,
+      "text": "The second half of the show is a bit more personal."
+    },
+    {
+      "sequence_num": 30,
+      "start_time": 150.0,
+      "end_time": 155.0,
+      "text": "Today we are talking about distributed systems and latency."
+    },
+    {
+      "sequence_num": 31,
+      "start_time": 155.0,
+      "end_time": 160.0,
+      "text": "The guest described their early career in hardware labs."
+    },
+    {
+      "sequence_num": 32,
+      "start_time": 160.0,
+      "end_time": 165.0,
+      "text": "I think that is a really interesting point about memory."
+    },
+    {
+      "sequence_num": 33,
+      "start_time": 165.0,
+      "end_time": 170.0,
+      "text": "The team spent months measuring tail latency in production."
+    },
+    {
+      "sequence_num": 34,
+      "start_time": 170.0,
+      "end_time": 175.0,
+      "text": "Listeners wrote in with questions about replication."
+    },
+    {
+      "sequence_num": 35,
+      "start_time": 175.0,
+      "end_time": 180.0,
+      "text": "We recorded this conversation on a Thursday morning."
+    },
+    {
+      "sequence_num": 36,
+      "start_time": 180.0,
+      "end_time": 185.0,
+      "text": "That story about the first prototype always lands well."
+    },
+    {
+      "sequence_num": 37,
+      "start_time": 185.0,
+      "end_time": 190.0,
+      "text": "The architecture shifted after the third outage."
+    },
+    {
+      "sequence_num": 38,
+      "start_time": 190.0,
+      "end_time": 195.0,
+      "text": "People forget how slow disks were even ten years ago."
+    },
+    {
+      "sequence_num": 39,
+      "start_time": 195.0,
+      "end_time": 200.0,
+      "text": "There is a lot of nuance in how retries interact."
+    },
+    {
+      "sequence_num": 40,
+      "start_time": 200.0,
+      "end_time": 205.0,
+      "text": "I want to pause on that idea of backpressure."
+    },
+    {
+      "sequence_num": 41,
+      "start_time": 205.0,
+      "end_time": 210.0,
+      "text": "The numbers they published still surprise me."
+    },
+    {
+      "sequence_num": 42,
+      "start_time": 210.0,
+      "end_time": 215.0,
+      "text": "Anyway, that is the backdrop for this interview."
+    },
+    {
+      "sequence_num": 43,
+      "start_time": 215.0,
+      "end_time": 220.0,
+      "text": "We will come back to the open source angle later."
+    },
+    {
+      "sequence_num": 44,
+      "start_time": 220.0,
+      "end_time": 225.0,
+      "text": "The second half of the show is a bit more personal."
+    },
+    {
+      "sequence_num": 45,
+      "start_time": 225.0,
+      "end_time": 230.0,
+      "text": "Today we are talking about distributed systems and latency."
+    },
+    {
+      "sequence_num": 46,
+      "start_time": 230.0,
+      "end_time": 235.0,
+      "text": "The guest described their early career in hardware labs."
+    },
+    {
+      "sequence_num": 47,
+      "start_time": 235.0,
+      "end_time": 240.0,
+      "text": "I think that is a really interesting point about memory."
+    },
+    {
+      "sequence_num": 48,
+      "start_time": 240.0,
+      "end_time": 245.0,
+      "text": "The team spent months measuring tail latency in production."
+    },
+    {
+      "sequence_num": 49,
+      "start_time": 245.0,
+      "end_time": 250.0,
+      "text": "Listeners wrote in with questions about replication."
+    },
+    {
+      "sequence_num": 50,
+      "start_time": 250.0,
+      "end_time": 255.0,
+      "text": "We recorded this conversation on a Thursday morning."
+    },
+    {
+      "sequence_num": 51,
+      "start_time": 255.0,
+      "end_time": 260.0,
+      "text": "That story about the first prototype always lands well."
+    },
+    {
+      "sequence_num": 52,
+      "start_time": 260.0,
+      "end_time": 265.0,
+      "text": "The architecture shifted after the third outage."
+    },
+    {
+      "sequence_num": 53,
+      "start_time": 265.0,
+      "end_time": 270.0,
+      "text": "People forget how slow disks were even ten years ago."
+    },
+    {
+      "sequence_num": 54,
+      "start_time": 270.0,
+      "end_time": 275.0,
+      "text": "There is a lot of nuance in how retries interact."
+    },
+    {
+      "sequence_num": 55,
+      "start_time": 275.0,
+      "end_time": 280.0,
+      "text": "I want to pause on that idea of backpressure."
+    },
+    {
+      "sequence_num": 56,
+      "start_time": 280.0,
+      "end_time": 285.0,
+      "text": "The numbers they published still surprise me."
+    },
+    {
+      "sequence_num": 57,
+      "start_time": 285.0,
+      "end_time": 290.0,
+      "text": "Anyway, that is the backdrop for this interview."
+    },
+    {
+      "sequence_num": 58,
+      "start_time": 290.0,
+      "end_time": 295.0,
+      "text": "We will come back to the open source angle later."
+    },
+    {
+      "sequence_num": 59,
+      "start_time": 295.0,
+      "end_time": 300.0,
+      "text": "The second half of the show is a bit more personal."
+    },
+    {
+      "sequence_num": 60,
+      "start_time": 300.0,
+      "end_time": 305.0,
+      "text": "Today we are talking about distributed systems and latency."
+    },
+    {
+      "sequence_num": 61,
+      "start_time": 305.0,
+      "end_time": 310.0,
+      "text": "The guest described their early career in hardware labs."
+    },
+    {
+      "sequence_num": 62,
+      "start_time": 310.0,
+      "end_time": 315.0,
+      "text": "I think that is a really interesting point about memory."
+    },
+    {
+      "sequence_num": 63,
+      "start_time": 315.0,
+      "end_time": 320.0,
+      "text": "The team spent months measuring tail latency in production."
+    },
+    {
+      "sequence_num": 64,
+      "start_time": 320.0,
+      "end_time": 325.0,
+      "text": "Listeners wrote in with questions about replication."
+    },
+    {
+      "sequence_num": 65,
+      "start_time": 325.0,
+      "end_time": 330.0,
+      "text": "We recorded this conversation on a Thursday morning."
+    },
+    {
+      "sequence_num": 66,
+      "start_time": 330.0,
+      "end_time": 335.0,
+      "text": "That story about the first prototype always lands well."
+    },
+    {
+      "sequence_num": 67,
+      "start_time": 335.0,
+      "end_time": 340.0,
+      "text": "The architecture shifted after the third outage."
+    },
+    {
+      "sequence_num": 68,
+      "start_time": 340.0,
+      "end_time": 345.0,
+      "text": "People forget how slow disks were even ten years ago."
+    },
+    {
+      "sequence_num": 69,
+      "start_time": 345.0,
+      "end_time": 350.0,
+      "text": "There is a lot of nuance in how retries interact."
+    },
+    {
+      "sequence_num": 70,
+      "start_time": 350.0,
+      "end_time": 355.0,
+      "text": "I want to pause on that idea of backpressure."
+    },
+    {
+      "sequence_num": 71,
+      "start_time": 355.0,
+      "end_time": 360.0,
+      "text": "The numbers they published still surprise me."
+    },
+    {
+      "sequence_num": 72,
+      "start_time": 360.0,
+      "end_time": 365.0,
+      "text": "Anyway, that is the backdrop for this interview."
+    },
+    {
+      "sequence_num": 73,
+      "start_time": 365.0,
+      "end_time": 370.0,
+      "text": "We will come back to the open source angle later."
+    },
+    {
+      "sequence_num": 74,
+      "start_time": 370.0,
+      "end_time": 375.0,
+      "text": "The second half of the show is a bit more personal."
+    },
+    {
+      "sequence_num": 75,
+      "start_time": 375.0,
+      "end_time": 380.0,
+      "text": "Today we are talking about distributed systems and latency."
+    },
+    {
+      "sequence_num": 76,
+      "start_time": 380.0,
+      "end_time": 385.0,
+      "text": "The guest described their early career in hardware labs."
+    },
+    {
+      "sequence_num": 77,
+      "start_time": 385.0,
+      "end_time": 390.0,
+      "text": "I think that is a really interesting point about memory."
+    },
+    {
+      "sequence_num": 78,
+      "start_time": 390.0,
+      "end_time": 395.0,
+      "text": "The team spent months measuring tail latency in production."
+    },
+    {
+      "sequence_num": 79,
+      "start_time": 395.0,
+      "end_time": 400.0,
+      "text": "Listeners wrote in with questions about replication."
+    },
+    {
+      "sequence_num": 80,
+      "start_time": 400.0,
+      "end_time": 405.0,
+      "text": "We recorded this conversation on a Thursday morning."
+    },
+    {
+      "sequence_num": 81,
+      "start_time": 405.0,
+      "end_time": 410.0,
+      "text": "That story about the first prototype always lands well."
+    },
+    {
+      "sequence_num": 82,
+      "start_time": 410.0,
+      "end_time": 415.0,
+      "text": "The architecture shifted after the third outage."
+    },
+    {
+      "sequence_num": 83,
+      "start_time": 415.0,
+      "end_time": 420.0,
+      "text": "People forget how slow disks were even ten years ago."
+    },
+    {
+      "sequence_num": 84,
+      "start_time": 420.0,
+      "end_time": 425.0,
+      "text": "There is a lot of nuance in how retries interact."
+    },
+    {
+      "sequence_num": 85,
+      "start_time": 425.0,
+      "end_time": 430.0,
+      "text": "I want to pause on that idea of backpressure."
+    },
+    {
+      "sequence_num": 86,
+      "start_time": 430.0,
+      "end_time": 435.0,
+      "text": "The numbers they published still surprise me."
+    },
+    {
+      "sequence_num": 87,
+      "start_time": 435.0,
+      "end_time": 440.0,
+      "text": "Anyway, that is the backdrop for this interview."
+    },
+    {
+      "sequence_num": 88,
+      "start_time": 440.0,
+      "end_time": 445.0,
+      "text": "We will come back to the open source angle later."
+    },
+    {
+      "sequence_num": 89,
+      "start_time": 445.0,
+      "end_time": 450.0,
+      "text": "The second half of the show is a bit more personal."
+    },
+    {
+      "sequence_num": 90,
+      "start_time": 450.0,
+      "end_time": 455.0,
+      "text": "Today we are talking about distributed systems and latency."
+    },
+    {
+      "sequence_num": 91,
+      "start_time": 455.0,
+      "end_time": 460.0,
+      "text": "The guest described their early career in hardware labs."
+    },
+    {
+      "sequence_num": 92,
+      "start_time": 460.0,
+      "end_time": 465.0,
+      "text": "I think that is a really interesting point about memory."
+    },
+    {
+      "sequence_num": 93,
+      "start_time": 465.0,
+      "end_time": 470.0,
+      "text": "The team spent months measuring tail latency in production."
+    },
+    {
+      "sequence_num": 94,
+      "start_time": 470.0,
+      "end_time": 475.0,
+      "text": "Listeners wrote in with questions about replication."
+    },
+    {
+      "sequence_num": 95,
+      "start_time": 475.0,
+      "end_time": 480.0,
+      "text": "We recorded this conversation on a Thursday morning."
+    },
+    {
+      "sequence_num": 96,
+      "start_time": 480.0,
+      "end_time": 485.0,
+      "text": "That story about the first prototype always lands well."
+    },
+    {
+      "sequence_num": 97,
+      "start_time": 485.0,
+      "end_time": 490.0,
+      "text": "The architecture shifted after the third outage."
+    },
+    {
+      "sequence_num": 98,
+      "start_time": 490.0,
+      "end_time": 495.0,
+      "text": "People forget how slow disks were even ten years ago."
+    },
+    {
+      "sequence_num": 99,
+      "start_time": 495.0,
+      "end_time": 500.0,
+      "text": "There is a lot of nuance in how retries interact."
+    },
+    {
+      "sequence_num": 100,
+      "start_time": 500.0,
+      "end_time": 505.0,
+      "text": "I want to pause on that idea of backpressure."
+    },
+    {
+      "sequence_num": 101,
+      "start_time": 505.0,
+      "end_time": 510.0,
+      "text": "The numbers they published still surprise me."
+    },
+    {
+      "sequence_num": 102,
+      "start_time": 510.0,
+      "end_time": 515.0,
+      "text": "Anyway, that is the backdrop for this interview."
+    },
+    {
+      "sequence_num": 103,
+      "start_time": 515.0,
+      "end_time": 520.0,
+      "text": "We will come back to the open source angle later."
+    },
+    {
+      "sequence_num": 104,
+      "start_time": 520.0,
+      "end_time": 525.0,
+      "text": "The second half of the show is a bit more personal."
+    },
+    {
+      "sequence_num": 105,
+      "start_time": 525.0,
+      "end_time": 530.0,
+      "text": "Today we are talking about distributed systems and latency."
+    },
+    {
+      "sequence_num": 106,
+      "start_time": 530.0,
+      "end_time": 535.0,
+      "text": "The guest described their early career in hardware labs."
+    },
+    {
+      "sequence_num": 107,
+      "start_time": 535.0,
+      "end_time": 540.0,
+      "text": "I think that is a really interesting point about memory."
+    },
+    {
+      "sequence_num": 108,
+      "start_time": 540.0,
+      "end_time": 545.0,
+      "text": "The team spent months measuring tail latency in production."
+    },
+    {
+      "sequence_num": 109,
+      "start_time": 545.0,
+      "end_time": 550.0,
+      "text": "Listeners wrote in with questions about replication."
+    },
+    {
+      "sequence_num": 110,
+      "start_time": 550.0,
+      "end_time": 555.0,
+      "text": "We recorded this conversation on a Thursday morning."
+    },
+    {
+      "sequence_num": 111,
+      "start_time": 555.0,
+      "end_time": 560.0,
+      "text": "That story about the first prototype always lands well."
+    },
+    {
+      "sequence_num": 112,
+      "start_time": 560.0,
+      "end_time": 565.0,
+      "text": "The architecture shifted after the third outage."
+    },
+    {
+      "sequence_num": 113,
+      "start_time": 565.0,
+      "end_time": 570.0,
+      "text": "People forget how slow disks were even ten years ago."
+    },
+    {
+      "sequence_num": 114,
+      "start_time": 570.0,
+      "end_time": 575.0,
+      "text": "There is a lot of nuance in how retries interact."
+    },
+    {
+      "sequence_num": 115,
+      "start_time": 575.0,
+      "end_time": 580.0,
+      "text": "I want to pause on that idea of backpressure."
+    },
+    {
+      "sequence_num": 116,
+      "start_time": 580.0,
+      "end_time": 585.0,
+      "text": "The numbers they published still surprise me."
+    },
+    {
+      "sequence_num": 117,
+      "start_time": 585.0,
+      "end_time": 590.0,
+      "text": "Anyway, that is the backdrop for this interview."
+    },
+    {
+      "sequence_num": 118,
+      "start_time": 590.0,
+      "end_time": 595.0,
+      "text": "We will come back to the open source angle later."
+    },
+    {
+      "sequence_num": 119,
+      "start_time": 595.0,
+      "end_time": 600.0,
+      "text": "The second half of the show is a bit more personal."
+    },
+    {
+      "sequence_num": 120,
+      "start_time": 600.0,
+      "end_time": 605.0,
+      "text": "Today we are talking about distributed systems and latency."
+    },
+    {
+      "sequence_num": 121,
+      "start_time": 605.0,
+      "end_time": 610.0,
+      "text": "The guest described their early career in hardware labs."
+    },
+    {
+      "sequence_num": 122,
+      "start_time": 610.0,
+      "end_time": 615.0,
+      "text": "I think that is a really interesting point about memory."
+    },
+    {
+      "sequence_num": 123,
+      "start_time": 615.0,
+      "end_time": 620.0,
+      "text": "The team spent months measuring tail latency in production."
+    },
+    {
+      "sequence_num": 124,
+      "start_time": 620.0,
+      "end_time": 625.0,
+      "text": "Listeners wrote in with questions about replication."
+    },
+    {
+      "sequence_num": 125,
+      "start_time": 625.0,
+      "end_time": 630.0,
+      "text": "We recorded this conversation on a Thursday morning."
+    },
+    {
+      "sequence_num": 126,
+      "start_time": 630.0,
+      "end_time": 635.0,
+      "text": "That story about the first prototype always lands well."
+    },
+    {
+      "sequence_num": 127,
+      "start_time": 635.0,
+      "end_time": 640.0,
+      "text": "The architecture shifted after the third outage."
+    },
+    {
+      "sequence_num": 128,
+      "start_time": 640.0,
+      "end_time": 645.0,
+      "text": "People forget how slow disks were even ten years ago."
+    },
+    {
+      "sequence_num": 129,
+      "start_time": 645.0,
+      "end_time": 650.0,
+      "text": "There is a lot of nuance in how retries interact."
+    },
+    {
+      "sequence_num": 130,
+      "start_time": 650.0,
+      "end_time": 655.0,
+      "text": "I want to pause on that idea of backpressure."
+    },
+    {
+      "sequence_num": 131,
+      "start_time": 655.0,
+      "end_time": 660.0,
+      "text": "The numbers they published still surprise me."
+    },
+    {
+      "sequence_num": 132,
+      "start_time": 660.0,
+      "end_time": 665.0,
+      "text": "Anyway, that is the backdrop for this interview."
+    },
+    {
+      "sequence_num": 133,
+      "start_time": 665.0,
+      "end_time": 670.0,
+      "text": "We will come back to the open source angle later."
+    },
+    {
+      "sequence_num": 134,
+      "start_time": 670.0,
+      "end_time": 675.0,
+      "text": "The second half of the show is a bit more personal."
+    },
+    {
+      "sequence_num": 135,
+      "start_time": 675.0,
+      "end_time": 680.0,
+      "text": "Today we are talking about distributed systems and latency."
+    },
+    {
+      "sequence_num": 136,
+      "start_time": 680.0,
+      "end_time": 685.0,
+      "text": "The guest described their early career in hardware labs."
+    },
+    {
+      "sequence_num": 137,
+      "start_time": 685.0,
+      "end_time": 690.0,
+      "text": "I think that is a really interesting point about memory."
+    },
+    {
+      "sequence_num": 138,
+      "start_time": 690.0,
+      "end_time": 695.0,
+      "text": "The team spent months measuring tail latency in production."
+    },
+    {
+      "sequence_num": 139,
+      "start_time": 695.0,
+      "end_time": 700.0,
+      "text": "Listeners wrote in with questions about replication."
+    },
+    {
+      "sequence_num": 140,
+      "start_time": 700.0,
+      "end_time": 705.0,
+      "text": "We recorded this conversation on a Thursday morning."
+    },
+    {
+      "sequence_num": 141,
+      "start_time": 705.0,
+      "end_time": 710.0,
+      "text": "That story about the first prototype always lands well."
+    },
+    {
+      "sequence_num": 142,
+      "start_time": 710.0,
+      "end_time": 715.0,
+      "text": "The architecture shifted after the third outage."
+    },
+    {
+      "sequence_num": 143,
+      "start_time": 715.0,
+      "end_time": 720.0,
+      "text": "People forget how slow disks were even ten years ago."
+    },
+    {
+      "sequence_num": 144,
+      "start_time": 720.0,
+      "end_time": 725.0,
+      "text": "There is a lot of nuance in how retries interact."
+    },
+    {
+      "sequence_num": 145,
+      "start_time": 725.0,
+      "end_time": 730.0,
+      "text": "I want to pause on that idea of backpressure."
+    },
+    {
+      "sequence_num": 146,
+      "start_time": 730.0,
+      "end_time": 735.0,
+      "text": "The numbers they published still surprise me."
+    },
+    {
+      "sequence_num": 147,
+      "start_time": 735.0,
+      "end_time": 740.0,
+      "text": "Anyway, that is the backdrop for this interview."
+    },
+    {
+      "sequence_num": 148,
+      "start_time": 740.0,
+      "end_time": 745.0,
+      "text": "We will come back to the open source angle later."
+    },
+    {
+      "sequence_num": 149,
+      "start_time": 745.0,
+      "end_time": 750.0,
+      "text": "The second half of the show is a bit more personal."
+    },
+    {
+      "sequence_num": 150,
+      "start_time": 750.0,
+      "end_time": 755.0,
+      "text": "Today we are talking about distributed systems and latency."
+    },
+    {
+      "sequence_num": 151,
+      "start_time": 755.0,
+      "end_time": 760.0,
+      "text": "The guest described their early career in hardware labs."
+    },
+    {
+      "sequence_num": 152,
+      "start_time": 760.0,
+      "end_time": 765.0,
+      "text": "I think that is a really interesting point about memory."
+    },
+    {
+      "sequence_num": 153,
+      "start_time": 765.0,
+      "end_time": 770.0,
+      "text": "The team spent months measuring tail latency in production."
+    },
+    {
+      "sequence_num": 154,
+      "start_time": 770.0,
+      "end_time": 775.0,
+      "text": "Listeners wrote in with questions about replication."
+    },
+    {
+      "sequence_num": 155,
+      "start_time": 775.0,
+      "end_time": 780.0,
+      "text": "We recorded this conversation on a Thursday morning."
+    },
+    {
+      "sequence_num": 156,
+      "start_time": 780.0,
+      "end_time": 785.0,
+      "text": "That story about the first prototype always lands well."
+    },
+    {
+      "sequence_num": 157,
+      "start_time": 785.0,
+      "end_time": 790.0,
+      "text": "The architecture shifted after the third outage."
+    },
+    {
+      "sequence_num": 158,
+      "start_time": 790.0,
+      "end_time": 795.0,
+      "text": "People forget how slow disks were even ten years ago."
+    },
+    {
+      "sequence_num": 159,
+      "start_time": 795.0,
+      "end_time": 800.0,
+      "text": "There is a lot of nuance in how retries interact."
+    },
+    {
+      "sequence_num": 160,
+      "start_time": 800.0,
+      "end_time": 805.0,
+      "text": "I want to pause on that idea of backpressure."
+    },
+    {
+      "sequence_num": 161,
+      "start_time": 805.0,
+      "end_time": 810.0,
+      "text": "The numbers they published still surprise me."
+    },
+    {
+      "sequence_num": 162,
+      "start_time": 810.0,
+      "end_time": 815.0,
+      "text": "Anyway, that is the backdrop for this interview."
+    },
+    {
+      "sequence_num": 163,
+      "start_time": 815.0,
+      "end_time": 820.0,
+      "text": "We will come back to the open source angle later."
+    },
+    {
+      "sequence_num": 164,
+      "start_time": 820.0,
+      "end_time": 825.0,
+      "text": "The second half of the show is a bit more personal."
+    },
+    {
+      "sequence_num": 165,
+      "start_time": 825.0,
+      "end_time": 830.0,
+      "text": "Today we are talking about distributed systems and latency."
+    },
+    {
+      "sequence_num": 166,
+      "start_time": 830.0,
+      "end_time": 835.0,
+      "text": "The guest described their early career in hardware labs."
+    },
+    {
+      "sequence_num": 167,
+      "start_time": 835.0,
+      "end_time": 840.0,
+      "text": "I think that is a really interesting point about memory."
+    },
+    {
+      "sequence_num": 168,
+      "start_time": 840.0,
+      "end_time": 845.0,
+      "text": "The team spent months measuring tail latency in production."
+    },
+    {
+      "sequence_num": 169,
+      "start_time": 845.0,
+      "end_time": 850.0,
+      "text": "Listeners wrote in with questions about replication."
+    },
+    {
+      "sequence_num": 170,
+      "start_time": 850.0,
+      "end_time": 855.0,
+      "text": "We recorded this conversation on a Thursday morning."
+    },
+    {
+      "sequence_num": 171,
+      "start_time": 855.0,
+      "end_time": 860.0,
+      "text": "That story about the first prototype always lands well."
+    },
+    {
+      "sequence_num": 172,
+      "start_time": 860.0,
+      "end_time": 865.0,
+      "text": "The architecture shifted after the third outage."
+    },
+    {
+      "sequence_num": 173,
+      "start_time": 865.0,
+      "end_time": 870.0,
+      "text": "People forget how slow disks were even ten years ago."
+    },
+    {
+      "sequence_num": 174,
+      "start_time": 870.0,
+      "end_time": 875.0,
+      "text": "There is a lot of nuance in how retries interact."
+    },
+    {
+      "sequence_num": 175,
+      "start_time": 875.0,
+      "end_time": 880.0,
+      "text": "I want to pause on that idea of backpressure."
+    },
+    {
+      "sequence_num": 176,
+      "start_time": 880.0,
+      "end_time": 885.0,
+      "text": "The numbers they published still surprise me."
+    },
+    {
+      "sequence_num": 177,
+      "start_time": 885.0,
+      "end_time": 890.0,
+      "text": "Anyway, that is the backdrop for this interview."
+    },
+    {
+      "sequence_num": 178,
+      "start_time": 890.0,
+      "end_time": 895.0,
+      "text": "We will come back to the open source angle later."
+    },
+    {
+      "sequence_num": 179,
+      "start_time": 895.0,
+      "end_time": 900.0,
+      "text": "The second half of the show is a bit more personal."
+    },
+    {
+      "sequence_num": 180,
+      "start_time": 900.0,
+      "end_time": 905.0,
+      "text": "Today we are talking about distributed systems and latency."
+    },
+    {
+      "sequence_num": 181,
+      "start_time": 905.0,
+      "end_time": 910.0,
+      "text": "The guest described their early career in hardware labs."
+    },
+    {
+      "sequence_num": 182,
+      "start_time": 910.0,
+      "end_time": 915.0,
+      "text": "I think that is a really interesting point about memory."
+    },
+    {
+      "sequence_num": 183,
+      "start_time": 915.0,
+      "end_time": 920.0,
+      "text": "The team spent months measuring tail latency in production."
+    },
+    {
+      "sequence_num": 184,
+      "start_time": 920.0,
+      "end_time": 925.0,
+      "text": "Listeners wrote in with questions about replication."
+    },
+    {
+      "sequence_num": 185,
+      "start_time": 925.0,
+      "end_time": 930.0,
+      "text": "We recorded this conversation on a Thursday morning."
+    },
+    {
+      "sequence_num": 186,
+      "start_time": 930.0,
+      "end_time": 935.0,
+      "text": "That story about the first prototype always lands well."
+    },
+    {
+      "sequence_num": 187,
+      "start_time": 935.0,
+      "end_time": 940.0,
+      "text": "The architecture shifted after the third outage."
+    },
+    {
+      "sequence_num": 188,
+      "start_time": 940.0,
+      "end_time": 945.0,
+      "text": "People forget how slow disks were even ten years ago."
+    },
+    {
+      "sequence_num": 189,
+      "start_time": 945.0,
+      "end_time": 950.0,
+      "text": "There is a lot of nuance in how retries interact."
+    },
+    {
+      "sequence_num": 190,
+      "start_time": 950.0,
+      "end_time": 955.0,
+      "text": "I want to pause on that idea of backpressure."
+    },
+    {
+      "sequence_num": 191,
+      "start_time": 955.0,
+      "end_time": 960.0,
+      "text": "The numbers they published still surprise me."
+    },
+    {
+      "sequence_num": 192,
+      "start_time": 960.0,
+      "end_time": 965.0,
+      "text": "Anyway, that is the backdrop for this interview."
+    },
+    {
+      "sequence_num": 193,
+      "start_time": 965.0,
+      "end_time": 970.0,
+      "text": "We will come back to the open source angle later."
+    },
+    {
+      "sequence_num": 194,
+      "start_time": 970.0,
+      "end_time": 975.0,
+      "text": "The second half of the show is a bit more personal."
+    },
+    {
+      "sequence_num": 195,
+      "start_time": 975.0,
+      "end_time": 980.0,
+      "text": "Today we are talking about distributed systems and latency."
+    },
+    {
+      "sequence_num": 196,
+      "start_time": 980.0,
+      "end_time": 985.0,
+      "text": "The guest described their early career in hardware labs."
+    },
+    {
+      "sequence_num": 197,
+      "start_time": 985.0,
+      "end_time": 990.0,
+      "text": "I think that is a really interesting point about memory."
+    },
+    {
+      "sequence_num": 198,
+      "start_time": 990.0,
+      "end_time": 995.0,
+      "text": "The team spent months measuring tail latency in production."
+    },
+    {
+      "sequence_num": 199,
+      "start_time": 995.0,
+      "end_time": 1000.0,
+      "text": "Listeners wrote in with questions about replication."
+    },
+    {
+      "sequence_num": 200,
+      "start_time": 1000.0,
+      "end_time": 1005.0,
+      "text": "We recorded this conversation on a Thursday morning."
+    },
+    {
+      "sequence_num": 201,
+      "start_time": 1005.0,
+      "end_time": 1010.0,
+      "text": "That story about the first prototype always lands well."
+    },
+    {
+      "sequence_num": 202,
+      "start_time": 1010.0,
+      "end_time": 1015.0,
+      "text": "The architecture shifted after the third outage."
+    },
+    {
+      "sequence_num": 203,
+      "start_time": 1015.0,
+      "end_time": 1020.0,
+      "text": "People forget how slow disks were even ten years ago."
+    },
+    {
+      "sequence_num": 204,
+      "start_time": 1020.0,
+      "end_time": 1025.0,
+      "text": "There is a lot of nuance in how retries interact."
+    },
+    {
+      "sequence_num": 205,
+      "start_time": 1025.0,
+      "end_time": 1030.0,
+      "text": "I want to pause on that idea of backpressure."
+    },
+    {
+      "sequence_num": 206,
+      "start_time": 1030.0,
+      "end_time": 1035.0,
+      "text": "The numbers they published still surprise me."
+    },
+    {
+      "sequence_num": 207,
+      "start_time": 1035.0,
+      "end_time": 1040.0,
+      "text": "Anyway, that is the backdrop for this interview."
+    },
+    {
+      "sequence_num": 208,
+      "start_time": 1040.0,
+      "end_time": 1045.0,
+      "text": "We will come back to the open source angle later."
+    },
+    {
+      "sequence_num": 209,
+      "start_time": 1045.0,
+      "end_time": 1050.0,
+      "text": "The second half of the show is a bit more personal."
+    },
+    {
+      "sequence_num": 210,
+      "start_time": 1050.0,
+      "end_time": 1055.0,
+      "text": "Today we are talking about distributed systems and latency."
+    },
+    {
+      "sequence_num": 211,
+      "start_time": 1055.0,
+      "end_time": 1060.0,
+      "text": "The guest described their early career in hardware labs."
+    },
+    {
+      "sequence_num": 212,
+      "start_time": 1060.0,
+      "end_time": 1065.0,
+      "text": "I think that is a really interesting point about memory."
+    },
+    {
+      "sequence_num": 213,
+      "start_time": 1065.0,
+      "end_time": 1070.0,
+      "text": "The team spent months measuring tail latency in production."
+    },
+    {
+      "sequence_num": 214,
+      "start_time": 1070.0,
+      "end_time": 1075.0,
+      "text": "Listeners wrote in with questions about replication."
+    },
+    {
+      "sequence_num": 215,
+      "start_time": 1075.0,
+      "end_time": 1080.0,
+      "text": "We recorded this conversation on a Thursday morning."
+    },
+    {
+      "sequence_num": 216,
+      "start_time": 1080.0,
+      "end_time": 1085.0,
+      "text": "That story about the first prototype always lands well."
+    },
+    {
+      "sequence_num": 217,
+      "start_time": 1085.0,
+      "end_time": 1090.0,
+      "text": "The architecture shifted after the third outage."
+    },
+    {
+      "sequence_num": 218,
+      "start_time": 1090.0,
+      "end_time": 1095.0,
+      "text": "People forget how slow disks were even ten years ago."
+    },
+    {
+      "sequence_num": 219,
+      "start_time": 1095.0,
+      "end_time": 1100.0,
+      "text": "There is a lot of nuance in how retries interact."
+    },
+    {
+      "sequence_num": 220,
+      "start_time": 1100.0,
+      "end_time": 1105.0,
+      "text": "I want to pause on that idea of backpressure."
+    },
+    {
+      "sequence_num": 221,
+      "start_time": 1105.0,
+      "end_time": 1110.0,
+      "text": "The numbers they published still surprise me."
+    },
+    {
+      "sequence_num": 222,
+      "start_time": 1110.0,
+      "end_time": 1115.0,
+      "text": "Anyway, that is the backdrop for this interview."
+    },
+    {
+      "sequence_num": 223,
+      "start_time": 1115.0,
+      "end_time": 1120.0,
+      "text": "We will come back to the open source angle later."
+    },
+    {
+      "sequence_num": 224,
+      "start_time": 1120.0,
+      "end_time": 1125.0,
+      "text": "The second half of the show is a bit more personal."
+    },
+    {
+      "sequence_num": 225,
+      "start_time": 1125.0,
+      "end_time": 1130.0,
+      "text": "Today we are talking about distributed systems and latency."
+    },
+    {
+      "sequence_num": 226,
+      "start_time": 1130.0,
+      "end_time": 1135.0,
+      "text": "The guest described their early career in hardware labs."
+    },
+    {
+      "sequence_num": 227,
+      "start_time": 1135.0,
+      "end_time": 1140.0,
+      "text": "I think that is a really interesting point about memory."
+    },
+    {
+      "sequence_num": 228,
+      "start_time": 1140.0,
+      "end_time": 1145.0,
+      "text": "The team spent months measuring tail latency in production."
+    },
+    {
+      "sequence_num": 229,
+      "start_time": 1145.0,
+      "end_time": 1150.0,
+      "text": "Listeners wrote in with questions about replication."
+    },
+    {
+      "sequence_num": 230,
+      "start_time": 1150.0,
+      "end_time": 1155.0,
+      "text": "We recorded this conversation on a Thursday morning."
+    },
+    {
+      "sequence_num": 231,
+      "start_time": 1155.0,
+      "end_time": 1160.0,
+      "text": "That story about the first prototype always lands well."
+    },
+    {
+      "sequence_num": 232,
+      "start_time": 1160.0,
+      "end_time": 1165.0,
+      "text": "The architecture shifted after the third outage."
+    },
+    {
+      "sequence_num": 233,
+      "start_time": 1165.0,
+      "end_time": 1170.0,
+      "text": "People forget how slow disks were even ten years ago."
+    },
+    {
+      "sequence_num": 234,
+      "start_time": 1170.0,
+      "end_time": 1175.0,
+      "text": "There is a lot of nuance in how retries interact."
+    },
+    {
+      "sequence_num": 235,
+      "start_time": 1175.0,
+      "end_time": 1180.0,
+      "text": "I want to pause on that idea of backpressure."
+    },
+    {
+      "sequence_num": 236,
+      "start_time": 1180.0,
+      "end_time": 1185.0,
+      "text": "The numbers they published still surprise me."
+    },
+    {
+      "sequence_num": 237,
+      "start_time": 1185.0,
+      "end_time": 1190.0,
+      "text": "Anyway, that is the backdrop for this interview."
+    },
+    {
+      "sequence_num": 238,
+      "start_time": 1190.0,
+      "end_time": 1195.0,
+      "text": "We will come back to the open source angle later."
+    },
+    {
+      "sequence_num": 239,
+      "start_time": 1195.0,
+      "end_time": 1200.0,
+      "text": "The second half of the show is a bit more personal."
+    },
+    {
+      "sequence_num": 240,
+      "start_time": 1200.0,
+      "end_time": 1205.0,
+      "text": "We'll be right back after a short break."
+    },
+    {
+      "sequence_num": 241,
+      "start_time": 1205.0,
+      "end_time": 1210.0,
+      "text": "Our sponsor today is BetterHelp."
+    },
+    {
+      "sequence_num": 242,
+      "start_time": 1210.0,
+      "end_time": 1215.0,
+      "text": "Therapy can help you work through stress."
+    },
+    {
+      "sequence_num": 243,
+      "start_time": 1215.0,
+      "end_time": 1220.0,
+      "text": "Go to betterhelp.com/example to get started."
+    },
+    {
+      "sequence_num": 244,
+      "start_time": 1220.0,
+      "end_time": 1225.0,
+      "text": "You can sign up in a few minutes from your phone."
+    },
+    {
+      "sequence_num": 245,
+      "start_time": 1225.0,
+      "end_time": 1230.0,
+      "text": "They match you with a licensed therapist."
+    },
+    {
+      "sequence_num": 246,
+      "start_time": 1230.0,
+      "end_time": 1235.0,
+      "text": "Again that's betterhelp.com/example."
+    },
+    {
+      "sequence_num": 247,
+      "start_time": 1235.0,
+      "end_time": 1240.0,
+      "text": "And now back to the conversation with our guest."
+    },
+    {
+      "sequence_num": 248,
+      "start_time": 1240.0,
+      "end_time": 1245.0,
+      "text": "People forget how slow disks were even ten years ago."
+    },
+    {
+      "sequence_num": 249,
+      "start_time": 1245.0,
+      "end_time": 1250.0,
+      "text": "There is a lot of nuance in how retries interact."
+    },
+    {
+      "sequence_num": 250,
+      "start_time": 1250.0,
+      "end_time": 1255.0,
+      "text": "I want to pause on that idea of backpressure."
+    },
+    {
+      "sequence_num": 251,
+      "start_time": 1255.0,
+      "end_time": 1260.0,
+      "text": "The numbers they published still surprise me."
+    },
+    {
+      "sequence_num": 252,
+      "start_time": 1260.0,
+      "end_time": 1265.0,
+      "text": "Anyway, that is the backdrop for this interview."
+    },
+    {
+      "sequence_num": 253,
+      "start_time": 1265.0,
+      "end_time": 1270.0,
+      "text": "We will come back to the open source angle later."
+    },
+    {
+      "sequence_num": 254,
+      "start_time": 1270.0,
+      "end_time": 1275.0,
+      "text": "The second half of the show is a bit more personal."
+    },
+    {
+      "sequence_num": 255,
+      "start_time": 1275.0,
+      "end_time": 1280.0,
+      "text": "Today we are talking about distributed systems and latency."
+    },
+    {
+      "sequence_num": 256,
+      "start_time": 1280.0,
+      "end_time": 1285.0,
+      "text": "The guest described their early career in hardware labs."
+    },
+    {
+      "sequence_num": 257,
+      "start_time": 1285.0,
+      "end_time": 1290.0,
+      "text": "I think that is a really interesting point about memory."
+    },
+    {
+      "sequence_num": 258,
+      "start_time": 1290.0,
+      "end_time": 1295.0,
+      "text": "The team spent months measuring tail latency in production."
+    },
+    {
+      "sequence_num": 259,
+      "start_time": 1295.0,
+      "end_time": 1300.0,
+      "text": "Listeners wrote in with questions about replication."
+    },
+    {
+      "sequence_num": 260,
+      "start_time": 1300.0,
+      "end_time": 1305.0,
+      "text": "We recorded this conversation on a Thursday morning."
+    },
+    {
+      "sequence_num": 261,
+      "start_time": 1305.0,
+      "end_time": 1310.0,
+      "text": "That story about the first prototype always lands well."
+    },
+    {
+      "sequence_num": 262,
+      "start_time": 1310.0,
+      "end_time": 1315.0,
+      "text": "The architecture shifted after the third outage."
+    },
+    {
+      "sequence_num": 263,
+      "start_time": 1315.0,
+      "end_time": 1320.0,
+      "text": "People forget how slow disks were even ten years ago."
+    },
+    {
+      "sequence_num": 264,
+      "start_time": 1320.0,
+      "end_time": 1325.0,
+      "text": "There is a lot of nuance in how retries interact."
+    },
+    {
+      "sequence_num": 265,
+      "start_time": 1325.0,
+      "end_time": 1330.0,
+      "text": "I want to pause on that idea of backpressure."
+    },
+    {
+      "sequence_num": 266,
+      "start_time": 1330.0,
+      "end_time": 1335.0,
+      "text": "The numbers they published still surprise me."
+    },
+    {
+      "sequence_num": 267,
+      "start_time": 1335.0,
+      "end_time": 1340.0,
+      "text": "Anyway, that is the backdrop for this interview."
+    },
+    {
+      "sequence_num": 268,
+      "start_time": 1340.0,
+      "end_time": 1345.0,
+      "text": "We will come back to the open source angle later."
+    },
+    {
+      "sequence_num": 269,
+      "start_time": 1345.0,
+      "end_time": 1350.0,
+      "text": "The second half of the show is a bit more personal."
+    },
+    {
+      "sequence_num": 270,
+      "start_time": 1350.0,
+      "end_time": 1355.0,
+      "text": "Today we are talking about distributed systems and latency."
+    },
+    {
+      "sequence_num": 271,
+      "start_time": 1355.0,
+      "end_time": 1360.0,
+      "text": "The guest described their early career in hardware labs."
+    },
+    {
+      "sequence_num": 272,
+      "start_time": 1360.0,
+      "end_time": 1365.0,
+      "text": "I think that is a really interesting point about memory."
+    },
+    {
+      "sequence_num": 273,
+      "start_time": 1365.0,
+      "end_time": 1370.0,
+      "text": "The team spent months measuring tail latency in production."
+    },
+    {
+      "sequence_num": 274,
+      "start_time": 1370.0,
+      "end_time": 1375.0,
+      "text": "Listeners wrote in with questions about replication."
+    },
+    {
+      "sequence_num": 275,
+      "start_time": 1375.0,
+      "end_time": 1380.0,
+      "text": "We recorded this conversation on a Thursday morning."
+    },
+    {
+      "sequence_num": 276,
+      "start_time": 1380.0,
+      "end_time": 1385.0,
+      "text": "That story about the first prototype always lands well."
+    },
+    {
+      "sequence_num": 277,
+      "start_time": 1385.0,
+      "end_time": 1390.0,
+      "text": "The architecture shifted after the third outage."
+    },
+    {
+      "sequence_num": 278,
+      "start_time": 1390.0,
+      "end_time": 1395.0,
+      "text": "People forget how slow disks were even ten years ago."
+    },
+    {
+      "sequence_num": 279,
+      "start_time": 1395.0,
+      "end_time": 1400.0,
+      "text": "There is a lot of nuance in how retries interact."
+    },
+    {
+      "sequence_num": 280,
+      "start_time": 1400.0,
+      "end_time": 1405.0,
+      "text": "I want to pause on that idea of backpressure."
+    },
+    {
+      "sequence_num": 281,
+      "start_time": 1405.0,
+      "end_time": 1410.0,
+      "text": "The numbers they published still surprise me."
+    },
+    {
+      "sequence_num": 282,
+      "start_time": 1410.0,
+      "end_time": 1415.0,
+      "text": "Anyway, that is the backdrop for this interview."
+    },
+    {
+      "sequence_num": 283,
+      "start_time": 1415.0,
+      "end_time": 1420.0,
+      "text": "We will come back to the open source angle later."
+    },
+    {
+      "sequence_num": 284,
+      "start_time": 1420.0,
+      "end_time": 1425.0,
+      "text": "The second half of the show is a bit more personal."
+    },
+    {
+      "sequence_num": 285,
+      "start_time": 1425.0,
+      "end_time": 1430.0,
+      "text": "Today we are talking about distributed systems and latency."
+    },
+    {
+      "sequence_num": 286,
+      "start_time": 1430.0,
+      "end_time": 1435.0,
+      "text": "The guest described their early career in hardware labs."
+    },
+    {
+      "sequence_num": 287,
+      "start_time": 1435.0,
+      "end_time": 1440.0,
+      "text": "I think that is a really interesting point about memory."
+    },
+    {
+      "sequence_num": 288,
+      "start_time": 1440.0,
+      "end_time": 1445.0,
+      "text": "The team spent months measuring tail latency in production."
+    },
+    {
+      "sequence_num": 289,
+      "start_time": 1445.0,
+      "end_time": 1450.0,
+      "text": "Listeners wrote in with questions about replication."
+    },
+    {
+      "sequence_num": 290,
+      "start_time": 1450.0,
+      "end_time": 1455.0,
+      "text": "We recorded this conversation on a Thursday morning."
+    },
+    {
+      "sequence_num": 291,
+      "start_time": 1455.0,
+      "end_time": 1460.0,
+      "text": "That story about the first prototype always lands well."
+    },
+    {
+      "sequence_num": 292,
+      "start_time": 1460.0,
+      "end_time": 1465.0,
+      "text": "The architecture shifted after the third outage."
+    },
+    {
+      "sequence_num": 293,
+      "start_time": 1465.0,
+      "end_time": 1470.0,
+      "text": "People forget how slow disks were even ten years ago."
+    },
+    {
+      "sequence_num": 294,
+      "start_time": 1470.0,
+      "end_time": 1475.0,
+      "text": "There is a lot of nuance in how retries interact."
+    },
+    {
+      "sequence_num": 295,
+      "start_time": 1475.0,
+      "end_time": 1480.0,
+      "text": "I want to pause on that idea of backpressure."
+    },
+    {
+      "sequence_num": 296,
+      "start_time": 1480.0,
+      "end_time": 1485.0,
+      "text": "The numbers they published still surprise me."
+    },
+    {
+      "sequence_num": 297,
+      "start_time": 1485.0,
+      "end_time": 1490.0,
+      "text": "Anyway, that is the backdrop for this interview."
+    },
+    {
+      "sequence_num": 298,
+      "start_time": 1490.0,
+      "end_time": 1495.0,
+      "text": "We will come back to the open source angle later."
+    },
+    {
+      "sequence_num": 299,
+      "start_time": 1495.0,
+      "end_time": 1500.0,
+      "text": "The second half of the show is a bit more personal."
+    },
+    {
+      "sequence_num": 300,
+      "start_time": 1500.0,
+      "end_time": 1505.0,
+      "text": "Today we are talking about distributed systems and latency."
+    },
+    {
+      "sequence_num": 301,
+      "start_time": 1505.0,
+      "end_time": 1510.0,
+      "text": "The guest described their early career in hardware labs."
+    },
+    {
+      "sequence_num": 302,
+      "start_time": 1510.0,
+      "end_time": 1515.0,
+      "text": "I think that is a really interesting point about memory."
+    },
+    {
+      "sequence_num": 303,
+      "start_time": 1515.0,
+      "end_time": 1520.0,
+      "text": "The team spent months measuring tail latency in production."
+    },
+    {
+      "sequence_num": 304,
+      "start_time": 1520.0,
+      "end_time": 1525.0,
+      "text": "Listeners wrote in with questions about replication."
+    },
+    {
+      "sequence_num": 305,
+      "start_time": 1525.0,
+      "end_time": 1530.0,
+      "text": "We recorded this conversation on a Thursday morning."
+    },
+    {
+      "sequence_num": 306,
+      "start_time": 1530.0,
+      "end_time": 1535.0,
+      "text": "That story about the first prototype always lands well."
+    },
+    {
+      "sequence_num": 307,
+      "start_time": 1535.0,
+      "end_time": 1540.0,
+      "text": "The architecture shifted after the third outage."
+    },
+    {
+      "sequence_num": 308,
+      "start_time": 1540.0,
+      "end_time": 1545.0,
+      "text": "People forget how slow disks were even ten years ago."
+    },
+    {
+      "sequence_num": 309,
+      "start_time": 1545.0,
+      "end_time": 1550.0,
+      "text": "There is a lot of nuance in how retries interact."
+    },
+    {
+      "sequence_num": 310,
+      "start_time": 1550.0,
+      "end_time": 1555.0,
+      "text": "I want to pause on that idea of backpressure."
+    },
+    {
+      "sequence_num": 311,
+      "start_time": 1555.0,
+      "end_time": 1560.0,
+      "text": "The numbers they published still surprise me."
+    },
+    {
+      "sequence_num": 312,
+      "start_time": 1560.0,
+      "end_time": 1565.0,
+      "text": "Anyway, that is the backdrop for this interview."
+    },
+    {
+      "sequence_num": 313,
+      "start_time": 1565.0,
+      "end_time": 1570.0,
+      "text": "We will come back to the open source angle later."
+    },
+    {
+      "sequence_num": 314,
+      "start_time": 1570.0,
+      "end_time": 1575.0,
+      "text": "The second half of the show is a bit more personal."
+    },
+    {
+      "sequence_num": 315,
+      "start_time": 1575.0,
+      "end_time": 1580.0,
+      "text": "Today we are talking about distributed systems and latency."
+    },
+    {
+      "sequence_num": 316,
+      "start_time": 1580.0,
+      "end_time": 1585.0,
+      "text": "The guest described their early career in hardware labs."
+    },
+    {
+      "sequence_num": 317,
+      "start_time": 1585.0,
+      "end_time": 1590.0,
+      "text": "I think that is a really interesting point about memory."
+    },
+    {
+      "sequence_num": 318,
+      "start_time": 1590.0,
+      "end_time": 1595.0,
+      "text": "The team spent months measuring tail latency in production."
+    },
+    {
+      "sequence_num": 319,
+      "start_time": 1595.0,
+      "end_time": 1600.0,
+      "text": "Listeners wrote in with questions about replication."
+    },
+    {
+      "sequence_num": 320,
+      "start_time": 1600.0,
+      "end_time": 1605.0,
+      "text": "We recorded this conversation on a Thursday morning."
+    },
+    {
+      "sequence_num": 321,
+      "start_time": 1605.0,
+      "end_time": 1610.0,
+      "text": "That story about the first prototype always lands well."
+    },
+    {
+      "sequence_num": 322,
+      "start_time": 1610.0,
+      "end_time": 1615.0,
+      "text": "The architecture shifted after the third outage."
+    },
+    {
+      "sequence_num": 323,
+      "start_time": 1615.0,
+      "end_time": 1620.0,
+      "text": "People forget how slow disks were even ten years ago."
+    },
+    {
+      "sequence_num": 324,
+      "start_time": 1620.0,
+      "end_time": 1625.0,
+      "text": "There is a lot of nuance in how retries interact."
+    },
+    {
+      "sequence_num": 325,
+      "start_time": 1625.0,
+      "end_time": 1630.0,
+      "text": "I want to pause on that idea of backpressure."
+    },
+    {
+      "sequence_num": 326,
+      "start_time": 1630.0,
+      "end_time": 1635.0,
+      "text": "The numbers they published still surprise me."
+    },
+    {
+      "sequence_num": 327,
+      "start_time": 1635.0,
+      "end_time": 1640.0,
+      "text": "Anyway, that is the backdrop for this interview."
+    },
+    {
+      "sequence_num": 328,
+      "start_time": 1640.0,
+      "end_time": 1645.0,
+      "text": "We will come back to the open source angle later."
+    },
+    {
+      "sequence_num": 329,
+      "start_time": 1645.0,
+      "end_time": 1650.0,
+      "text": "The second half of the show is a bit more personal."
+    },
+    {
+      "sequence_num": 330,
+      "start_time": 1650.0,
+      "end_time": 1655.0,
+      "text": "Today we are talking about distributed systems and latency."
+    },
+    {
+      "sequence_num": 331,
+      "start_time": 1655.0,
+      "end_time": 1660.0,
+      "text": "The guest described their early career in hardware labs."
+    },
+    {
+      "sequence_num": 332,
+      "start_time": 1660.0,
+      "end_time": 1665.0,
+      "text": "I think that is a really interesting point about memory."
+    },
+    {
+      "sequence_num": 333,
+      "start_time": 1665.0,
+      "end_time": 1670.0,
+      "text": "The team spent months measuring tail latency in production."
+    },
+    {
+      "sequence_num": 334,
+      "start_time": 1670.0,
+      "end_time": 1675.0,
+      "text": "Listeners wrote in with questions about replication."
+    },
+    {
+      "sequence_num": 335,
+      "start_time": 1675.0,
+      "end_time": 1680.0,
+      "text": "We recorded this conversation on a Thursday morning."
+    },
+    {
+      "sequence_num": 336,
+      "start_time": 1680.0,
+      "end_time": 1685.0,
+      "text": "That story about the first prototype always lands well."
+    },
+    {
+      "sequence_num": 337,
+      "start_time": 1685.0,
+      "end_time": 1690.0,
+      "text": "The architecture shifted after the third outage."
+    },
+    {
+      "sequence_num": 338,
+      "start_time": 1690.0,
+      "end_time": 1695.0,
+      "text": "People forget how slow disks were even ten years ago."
+    },
+    {
+      "sequence_num": 339,
+      "start_time": 1695.0,
+      "end_time": 1700.0,
+      "text": "There is a lot of nuance in how retries interact."
+    },
+    {
+      "sequence_num": 340,
+      "start_time": 1700.0,
+      "end_time": 1705.0,
+      "text": "I want to pause on that idea of backpressure."
+    },
+    {
+      "sequence_num": 341,
+      "start_time": 1705.0,
+      "end_time": 1710.0,
+      "text": "The numbers they published still surprise me."
+    },
+    {
+      "sequence_num": 342,
+      "start_time": 1710.0,
+      "end_time": 1715.0,
+      "text": "Anyway, that is the backdrop for this interview."
+    },
+    {
+      "sequence_num": 343,
+      "start_time": 1715.0,
+      "end_time": 1720.0,
+      "text": "We will come back to the open source angle later."
+    },
+    {
+      "sequence_num": 344,
+      "start_time": 1720.0,
+      "end_time": 1725.0,
+      "text": "The second half of the show is a bit more personal."
+    },
+    {
+      "sequence_num": 345,
+      "start_time": 1725.0,
+      "end_time": 1730.0,
+      "text": "Today we are talking about distributed systems and latency."
+    },
+    {
+      "sequence_num": 346,
+      "start_time": 1730.0,
+      "end_time": 1735.0,
+      "text": "The guest described their early career in hardware labs."
+    },
+    {
+      "sequence_num": 347,
+      "start_time": 1735.0,
+      "end_time": 1740.0,
+      "text": "I think that is a really interesting point about memory."
+    },
+    {
+      "sequence_num": 348,
+      "start_time": 1740.0,
+      "end_time": 1745.0,
+      "text": "The team spent months measuring tail latency in production."
+    },
+    {
+      "sequence_num": 349,
+      "start_time": 1745.0,
+      "end_time": 1750.0,
+      "text": "Listeners wrote in with questions about replication."
+    },
+    {
+      "sequence_num": 350,
+      "start_time": 1750.0,
+      "end_time": 1755.0,
+      "text": "We recorded this conversation on a Thursday morning."
+    },
+    {
+      "sequence_num": 351,
+      "start_time": 1755.0,
+      "end_time": 1760.0,
+      "text": "That story about the first prototype always lands well."
+    },
+    {
+      "sequence_num": 352,
+      "start_time": 1760.0,
+      "end_time": 1765.0,
+      "text": "The architecture shifted after the third outage."
+    },
+    {
+      "sequence_num": 353,
+      "start_time": 1765.0,
+      "end_time": 1770.0,
+      "text": "People forget how slow disks were even ten years ago."
+    },
+    {
+      "sequence_num": 354,
+      "start_time": 1770.0,
+      "end_time": 1775.0,
+      "text": "There is a lot of nuance in how retries interact."
+    },
+    {
+      "sequence_num": 355,
+      "start_time": 1775.0,
+      "end_time": 1780.0,
+      "text": "I want to pause on that idea of backpressure."
+    },
+    {
+      "sequence_num": 356,
+      "start_time": 1780.0,
+      "end_time": 1785.0,
+      "text": "The numbers they published still surprise me."
+    },
+    {
+      "sequence_num": 357,
+      "start_time": 1785.0,
+      "end_time": 1790.0,
+      "text": "Anyway, that is the backdrop for this interview."
+    },
+    {
+      "sequence_num": 358,
+      "start_time": 1790.0,
+      "end_time": 1795.0,
+      "text": "We will come back to the open source angle later."
+    },
+    {
+      "sequence_num": 359,
+      "start_time": 1795.0,
+      "end_time": 1800.0,
+      "text": "The second half of the show is a bit more personal."
+    },
+    {
+      "sequence_num": 360,
+      "start_time": 1800.0,
+      "end_time": 1805.0,
+      "text": "Today we are talking about distributed systems and latency."
+    },
+    {
+      "sequence_num": 361,
+      "start_time": 1805.0,
+      "end_time": 1810.0,
+      "text": "The guest described their early career in hardware labs."
+    },
+    {
+      "sequence_num": 362,
+      "start_time": 1810.0,
+      "end_time": 1815.0,
+      "text": "I think that is a really interesting point about memory."
+    },
+    {
+      "sequence_num": 363,
+      "start_time": 1815.0,
+      "end_time": 1820.0,
+      "text": "The team spent months measuring tail latency in production."
+    },
+    {
+      "sequence_num": 364,
+      "start_time": 1820.0,
+      "end_time": 1825.0,
+      "text": "Listeners wrote in with questions about replication."
+    },
+    {
+      "sequence_num": 365,
+      "start_time": 1825.0,
+      "end_time": 1830.0,
+      "text": "We recorded this conversation on a Thursday morning."
+    },
+    {
+      "sequence_num": 366,
+      "start_time": 1830.0,
+      "end_time": 1835.0,
+      "text": "That story about the first prototype always lands well."
+    },
+    {
+      "sequence_num": 367,
+      "start_time": 1835.0,
+      "end_time": 1840.0,
+      "text": "The architecture shifted after the third outage."
+    },
+    {
+      "sequence_num": 368,
+      "start_time": 1840.0,
+      "end_time": 1845.0,
+      "text": "People forget how slow disks were even ten years ago."
+    },
+    {
+      "sequence_num": 369,
+      "start_time": 1845.0,
+      "end_time": 1850.0,
+      "text": "There is a lot of nuance in how retries interact."
+    },
+    {
+      "sequence_num": 370,
+      "start_time": 1850.0,
+      "end_time": 1855.0,
+      "text": "I want to pause on that idea of backpressure."
+    },
+    {
+      "sequence_num": 371,
+      "start_time": 1855.0,
+      "end_time": 1860.0,
+      "text": "The numbers they published still surprise me."
+    },
+    {
+      "sequence_num": 372,
+      "start_time": 1860.0,
+      "end_time": 1865.0,
+      "text": "Anyway, that is the backdrop for this interview."
+    },
+    {
+      "sequence_num": 373,
+      "start_time": 1865.0,
+      "end_time": 1870.0,
+      "text": "We will come back to the open source angle later."
+    },
+    {
+      "sequence_num": 374,
+      "start_time": 1870.0,
+      "end_time": 1875.0,
+      "text": "The second half of the show is a bit more personal."
+    },
+    {
+      "sequence_num": 375,
+      "start_time": 1875.0,
+      "end_time": 1880.0,
+      "text": "Today we are talking about distributed systems and latency."
+    },
+    {
+      "sequence_num": 376,
+      "start_time": 1880.0,
+      "end_time": 1885.0,
+      "text": "The guest described their early career in hardware labs."
+    },
+    {
+      "sequence_num": 377,
+      "start_time": 1885.0,
+      "end_time": 1890.0,
+      "text": "I think that is a really interesting point about memory."
+    },
+    {
+      "sequence_num": 378,
+      "start_time": 1890.0,
+      "end_time": 1895.0,
+      "text": "The team spent months measuring tail latency in production."
+    },
+    {
+      "sequence_num": 379,
+      "start_time": 1895.0,
+      "end_time": 1900.0,
+      "text": "Listeners wrote in with questions about replication."
+    },
+    {
+      "sequence_num": 380,
+      "start_time": 1900.0,
+      "end_time": 1905.0,
+      "text": "We recorded this conversation on a Thursday morning."
+    },
+    {
+      "sequence_num": 381,
+      "start_time": 1905.0,
+      "end_time": 1910.0,
+      "text": "That story about the first prototype always lands well."
+    },
+    {
+      "sequence_num": 382,
+      "start_time": 1910.0,
+      "end_time": 1915.0,
+      "text": "The architecture shifted after the third outage."
+    },
+    {
+      "sequence_num": 383,
+      "start_time": 1915.0,
+      "end_time": 1920.0,
+      "text": "People forget how slow disks were even ten years ago."
+    },
+    {
+      "sequence_num": 384,
+      "start_time": 1920.0,
+      "end_time": 1925.0,
+      "text": "There is a lot of nuance in how retries interact."
+    },
+    {
+      "sequence_num": 385,
+      "start_time": 1925.0,
+      "end_time": 1930.0,
+      "text": "I want to pause on that idea of backpressure."
+    },
+    {
+      "sequence_num": 386,
+      "start_time": 1930.0,
+      "end_time": 1935.0,
+      "text": "The numbers they published still surprise me."
+    },
+    {
+      "sequence_num": 387,
+      "start_time": 1935.0,
+      "end_time": 1940.0,
+      "text": "Anyway, that is the backdrop for this interview."
+    },
+    {
+      "sequence_num": 388,
+      "start_time": 1940.0,
+      "end_time": 1945.0,
+      "text": "We will come back to the open source angle later."
+    },
+    {
+      "sequence_num": 389,
+      "start_time": 1945.0,
+      "end_time": 1950.0,
+      "text": "The second half of the show is a bit more personal."
+    },
+    {
+      "sequence_num": 390,
+      "start_time": 1950.0,
+      "end_time": 1955.0,
+      "text": "Today we are talking about distributed systems and latency."
+    },
+    {
+      "sequence_num": 391,
+      "start_time": 1955.0,
+      "end_time": 1960.0,
+      "text": "The guest described their early career in hardware labs."
+    },
+    {
+      "sequence_num": 392,
+      "start_time": 1960.0,
+      "end_time": 1965.0,
+      "text": "I think that is a really interesting point about memory."
+    },
+    {
+      "sequence_num": 393,
+      "start_time": 1965.0,
+      "end_time": 1970.0,
+      "text": "The team spent months measuring tail latency in production."
+    },
+    {
+      "sequence_num": 394,
+      "start_time": 1970.0,
+      "end_time": 1975.0,
+      "text": "Listeners wrote in with questions about replication."
+    },
+    {
+      "sequence_num": 395,
+      "start_time": 1975.0,
+      "end_time": 1980.0,
+      "text": "We recorded this conversation on a Thursday morning."
+    },
+    {
+      "sequence_num": 396,
+      "start_time": 1980.0,
+      "end_time": 1985.0,
+      "text": "That story about the first prototype always lands well."
+    },
+    {
+      "sequence_num": 397,
+      "start_time": 1985.0,
+      "end_time": 1990.0,
+      "text": "The architecture shifted after the third outage."
+    },
+    {
+      "sequence_num": 398,
+      "start_time": 1990.0,
+      "end_time": 1995.0,
+      "text": "People forget how slow disks were even ten years ago."
+    },
+    {
+      "sequence_num": 399,
+      "start_time": 1995.0,
+      "end_time": 2000.0,
+      "text": "There is a lot of nuance in how retries interact."
+    },
+    {
+      "sequence_num": 400,
+      "start_time": 2000.0,
+      "end_time": 2005.0,
+      "text": "I want to pause on that idea of backpressure."
+    },
+    {
+      "sequence_num": 401,
+      "start_time": 2005.0,
+      "end_time": 2010.0,
+      "text": "The numbers they published still surprise me."
+    },
+    {
+      "sequence_num": 402,
+      "start_time": 2010.0,
+      "end_time": 2015.0,
+      "text": "Anyway, that is the backdrop for this interview."
+    },
+    {
+      "sequence_num": 403,
+      "start_time": 2015.0,
+      "end_time": 2020.0,
+      "text": "We will come back to the open source angle later."
+    },
+    {
+      "sequence_num": 404,
+      "start_time": 2020.0,
+      "end_time": 2025.0,
+      "text": "The second half of the show is a bit more personal."
+    },
+    {
+      "sequence_num": 405,
+      "start_time": 2025.0,
+      "end_time": 2030.0,
+      "text": "Today we are talking about distributed systems and latency."
+    },
+    {
+      "sequence_num": 406,
+      "start_time": 2030.0,
+      "end_time": 2035.0,
+      "text": "The guest described their early career in hardware labs."
+    },
+    {
+      "sequence_num": 407,
+      "start_time": 2035.0,
+      "end_time": 2040.0,
+      "text": "I think that is a really interesting point about memory."
+    },
+    {
+      "sequence_num": 408,
+      "start_time": 2040.0,
+      "end_time": 2045.0,
+      "text": "The team spent months measuring tail latency in production."
+    },
+    {
+      "sequence_num": 409,
+      "start_time": 2045.0,
+      "end_time": 2050.0,
+      "text": "Listeners wrote in with questions about replication."
+    },
+    {
+      "sequence_num": 410,
+      "start_time": 2050.0,
+      "end_time": 2055.0,
+      "text": "We recorded this conversation on a Thursday morning."
+    },
+    {
+      "sequence_num": 411,
+      "start_time": 2055.0,
+      "end_time": 2060.0,
+      "text": "That story about the first prototype always lands well."
+    },
+    {
+      "sequence_num": 412,
+      "start_time": 2060.0,
+      "end_time": 2065.0,
+      "text": "The architecture shifted after the third outage."
+    },
+    {
+      "sequence_num": 413,
+      "start_time": 2065.0,
+      "end_time": 2070.0,
+      "text": "People forget how slow disks were even ten years ago."
+    },
+    {
+      "sequence_num": 414,
+      "start_time": 2070.0,
+      "end_time": 2075.0,
+      "text": "There is a lot of nuance in how retries interact."
+    },
+    {
+      "sequence_num": 415,
+      "start_time": 2075.0,
+      "end_time": 2080.0,
+      "text": "I want to pause on that idea of backpressure."
+    },
+    {
+      "sequence_num": 416,
+      "start_time": 2080.0,
+      "end_time": 2085.0,
+      "text": "The numbers they published still surprise me."
+    },
+    {
+      "sequence_num": 417,
+      "start_time": 2085.0,
+      "end_time": 2090.0,
+      "text": "Anyway, that is the backdrop for this interview."
+    },
+    {
+      "sequence_num": 418,
+      "start_time": 2090.0,
+      "end_time": 2095.0,
+      "text": "We will come back to the open source angle later."
+    },
+    {
+      "sequence_num": 419,
+      "start_time": 2095.0,
+      "end_time": 2100.0,
+      "text": "The second half of the show is a bit more personal."
+    },
+    {
+      "sequence_num": 420,
+      "start_time": 2100.0,
+      "end_time": 2105.0,
+      "text": "Today we are talking about distributed systems and latency."
+    },
+    {
+      "sequence_num": 421,
+      "start_time": 2105.0,
+      "end_time": 2110.0,
+      "text": "The guest described their early career in hardware labs."
+    },
+    {
+      "sequence_num": 422,
+      "start_time": 2110.0,
+      "end_time": 2115.0,
+      "text": "I think that is a really interesting point about memory."
+    },
+    {
+      "sequence_num": 423,
+      "start_time": 2115.0,
+      "end_time": 2120.0,
+      "text": "The team spent months measuring tail latency in production."
+    },
+    {
+      "sequence_num": 424,
+      "start_time": 2120.0,
+      "end_time": 2125.0,
+      "text": "Listeners wrote in with questions about replication."
+    },
+    {
+      "sequence_num": 425,
+      "start_time": 2125.0,
+      "end_time": 2130.0,
+      "text": "We recorded this conversation on a Thursday morning."
+    },
+    {
+      "sequence_num": 426,
+      "start_time": 2130.0,
+      "end_time": 2135.0,
+      "text": "That story about the first prototype always lands well."
+    },
+    {
+      "sequence_num": 427,
+      "start_time": 2135.0,
+      "end_time": 2140.0,
+      "text": "The architecture shifted after the third outage."
+    },
+    {
+      "sequence_num": 428,
+      "start_time": 2140.0,
+      "end_time": 2145.0,
+      "text": "People forget how slow disks were even ten years ago."
+    },
+    {
+      "sequence_num": 429,
+      "start_time": 2145.0,
+      "end_time": 2150.0,
+      "text": "There is a lot of nuance in how retries interact."
+    },
+    {
+      "sequence_num": 430,
+      "start_time": 2150.0,
+      "end_time": 2155.0,
+      "text": "I want to pause on that idea of backpressure."
+    },
+    {
+      "sequence_num": 431,
+      "start_time": 2155.0,
+      "end_time": 2160.0,
+      "text": "The numbers they published still surprise me."
+    },
+    {
+      "sequence_num": 432,
+      "start_time": 2160.0,
+      "end_time": 2165.0,
+      "text": "Anyway, that is the backdrop for this interview."
+    },
+    {
+      "sequence_num": 433,
+      "start_time": 2165.0,
+      "end_time": 2170.0,
+      "text": "We will come back to the open source angle later."
+    },
+    {
+      "sequence_num": 434,
+      "start_time": 2170.0,
+      "end_time": 2175.0,
+      "text": "The second half of the show is a bit more personal."
+    },
+    {
+      "sequence_num": 435,
+      "start_time": 2175.0,
+      "end_time": 2180.0,
+      "text": "Today we are talking about distributed systems and latency."
+    },
+    {
+      "sequence_num": 436,
+      "start_time": 2180.0,
+      "end_time": 2185.0,
+      "text": "The guest described their early career in hardware labs."
+    },
+    {
+      "sequence_num": 437,
+      "start_time": 2185.0,
+      "end_time": 2190.0,
+      "text": "I think that is a really interesting point about memory."
+    },
+    {
+      "sequence_num": 438,
+      "start_time": 2190.0,
+      "end_time": 2195.0,
+      "text": "The team spent months measuring tail latency in production."
+    },
+    {
+      "sequence_num": 439,
+      "start_time": 2195.0,
+      "end_time": 2200.0,
+      "text": "Listeners wrote in with questions about replication."
+    },
+    {
+      "sequence_num": 440,
+      "start_time": 2200.0,
+      "end_time": 2205.0,
+      "text": "We recorded this conversation on a Thursday morning."
+    },
+    {
+      "sequence_num": 441,
+      "start_time": 2205.0,
+      "end_time": 2210.0,
+      "text": "That story about the first prototype always lands well."
+    },
+    {
+      "sequence_num": 442,
+      "start_time": 2210.0,
+      "end_time": 2215.0,
+      "text": "The architecture shifted after the third outage."
+    },
+    {
+      "sequence_num": 443,
+      "start_time": 2215.0,
+      "end_time": 2220.0,
+      "text": "People forget how slow disks were even ten years ago."
+    },
+    {
+      "sequence_num": 444,
+      "start_time": 2220.0,
+      "end_time": 2225.0,
+      "text": "There is a lot of nuance in how retries interact."
+    },
+    {
+      "sequence_num": 445,
+      "start_time": 2225.0,
+      "end_time": 2230.0,
+      "text": "I want to pause on that idea of backpressure."
+    },
+    {
+      "sequence_num": 446,
+      "start_time": 2230.0,
+      "end_time": 2235.0,
+      "text": "The numbers they published still surprise me."
+    },
+    {
+      "sequence_num": 447,
+      "start_time": 2235.0,
+      "end_time": 2240.0,
+      "text": "Anyway, that is the backdrop for this interview."
+    },
+    {
+      "sequence_num": 448,
+      "start_time": 2240.0,
+      "end_time": 2245.0,
+      "text": "We will come back to the open source angle later."
+    },
+    {
+      "sequence_num": 449,
+      "start_time": 2245.0,
+      "end_time": 2250.0,
+      "text": "The second half of the show is a bit more personal."
+    },
+    {
+      "sequence_num": 450,
+      "start_time": 2250.0,
+      "end_time": 2255.0,
+      "text": "Today we are talking about distributed systems and latency."
+    },
+    {
+      "sequence_num": 451,
+      "start_time": 2255.0,
+      "end_time": 2260.0,
+      "text": "The guest described their early career in hardware labs."
+    },
+    {
+      "sequence_num": 452,
+      "start_time": 2260.0,
+      "end_time": 2265.0,
+      "text": "I think that is a really interesting point about memory."
+    },
+    {
+      "sequence_num": 453,
+      "start_time": 2265.0,
+      "end_time": 2270.0,
+      "text": "The team spent months measuring tail latency in production."
+    },
+    {
+      "sequence_num": 454,
+      "start_time": 2270.0,
+      "end_time": 2275.0,
+      "text": "Listeners wrote in with questions about replication."
+    },
+    {
+      "sequence_num": 455,
+      "start_time": 2275.0,
+      "end_time": 2280.0,
+      "text": "We recorded this conversation on a Thursday morning."
+    },
+    {
+      "sequence_num": 456,
+      "start_time": 2280.0,
+      "end_time": 2285.0,
+      "text": "That story about the first prototype always lands well."
+    },
+    {
+      "sequence_num": 457,
+      "start_time": 2285.0,
+      "end_time": 2290.0,
+      "text": "The architecture shifted after the third outage."
+    },
+    {
+      "sequence_num": 458,
+      "start_time": 2290.0,
+      "end_time": 2295.0,
+      "text": "People forget how slow disks were even ten years ago."
+    },
+    {
+      "sequence_num": 459,
+      "start_time": 2295.0,
+      "end_time": 2300.0,
+      "text": "There is a lot of nuance in how retries interact."
+    },
+    {
+      "sequence_num": 460,
+      "start_time": 2300.0,
+      "end_time": 2305.0,
+      "text": "I want to pause on that idea of backpressure."
+    },
+    {
+      "sequence_num": 461,
+      "start_time": 2305.0,
+      "end_time": 2310.0,
+      "text": "The numbers they published still surprise me."
+    },
+    {
+      "sequence_num": 462,
+      "start_time": 2310.0,
+      "end_time": 2315.0,
+      "text": "Anyway, that is the backdrop for this interview."
+    },
+    {
+      "sequence_num": 463,
+      "start_time": 2315.0,
+      "end_time": 2320.0,
+      "text": "We will come back to the open source angle later."
+    },
+    {
+      "sequence_num": 464,
+      "start_time": 2320.0,
+      "end_time": 2325.0,
+      "text": "The second half of the show is a bit more personal."
+    },
+    {
+      "sequence_num": 465,
+      "start_time": 2325.0,
+      "end_time": 2330.0,
+      "text": "Today we are talking about distributed systems and latency."
+    },
+    {
+      "sequence_num": 466,
+      "start_time": 2330.0,
+      "end_time": 2335.0,
+      "text": "The guest described their early career in hardware labs."
+    },
+    {
+      "sequence_num": 467,
+      "start_time": 2335.0,
+      "end_time": 2340.0,
+      "text": "I think that is a really interesting point about memory."
+    },
+    {
+      "sequence_num": 468,
+      "start_time": 2340.0,
+      "end_time": 2345.0,
+      "text": "The team spent months measuring tail latency in production."
+    },
+    {
+      "sequence_num": 469,
+      "start_time": 2345.0,
+      "end_time": 2350.0,
+      "text": "Listeners wrote in with questions about replication."
+    },
+    {
+      "sequence_num": 470,
+      "start_time": 2350.0,
+      "end_time": 2355.0,
+      "text": "We recorded this conversation on a Thursday morning."
+    },
+    {
+      "sequence_num": 471,
+      "start_time": 2355.0,
+      "end_time": 2360.0,
+      "text": "That story about the first prototype always lands well."
+    },
+    {
+      "sequence_num": 472,
+      "start_time": 2360.0,
+      "end_time": 2365.0,
+      "text": "The architecture shifted after the third outage."
+    },
+    {
+      "sequence_num": 473,
+      "start_time": 2365.0,
+      "end_time": 2370.0,
+      "text": "People forget how slow disks were even ten years ago."
+    },
+    {
+      "sequence_num": 474,
+      "start_time": 2370.0,
+      "end_time": 2375.0,
+      "text": "There is a lot of nuance in how retries interact."
+    },
+    {
+      "sequence_num": 475,
+      "start_time": 2375.0,
+      "end_time": 2380.0,
+      "text": "I want to pause on that idea of backpressure."
+    },
+    {
+      "sequence_num": 476,
+      "start_time": 2380.0,
+      "end_time": 2385.0,
+      "text": "The numbers they published still surprise me."
+    },
+    {
+      "sequence_num": 477,
+      "start_time": 2385.0,
+      "end_time": 2390.0,
+      "text": "Anyway, that is the backdrop for this interview."
+    },
+    {
+      "sequence_num": 478,
+      "start_time": 2390.0,
+      "end_time": 2395.0,
+      "text": "We will come back to the open source angle later."
+    },
+    {
+      "sequence_num": 479,
+      "start_time": 2395.0,
+      "end_time": 2400.0,
+      "text": "The second half of the show is a bit more personal."
+    },
+    {
+      "sequence_num": 480,
+      "start_time": 2400.0,
+      "end_time": 2405.0,
+      "text": "Today we are talking about distributed systems and latency."
+    },
+    {
+      "sequence_num": 481,
+      "start_time": 2405.0,
+      "end_time": 2410.0,
+      "text": "The guest described their early career in hardware labs."
+    },
+    {
+      "sequence_num": 482,
+      "start_time": 2410.0,
+      "end_time": 2415.0,
+      "text": "I think that is a really interesting point about memory."
+    },
+    {
+      "sequence_num": 483,
+      "start_time": 2415.0,
+      "end_time": 2420.0,
+      "text": "The team spent months measuring tail latency in production."
+    },
+    {
+      "sequence_num": 484,
+      "start_time": 2420.0,
+      "end_time": 2425.0,
+      "text": "Listeners wrote in with questions about replication."
+    },
+    {
+      "sequence_num": 485,
+      "start_time": 2425.0,
+      "end_time": 2430.0,
+      "text": "We recorded this conversation on a Thursday morning."
+    },
+    {
+      "sequence_num": 486,
+      "start_time": 2430.0,
+      "end_time": 2435.0,
+      "text": "That story about the first prototype always lands well."
+    },
+    {
+      "sequence_num": 487,
+      "start_time": 2435.0,
+      "end_time": 2440.0,
+      "text": "The architecture shifted after the third outage."
+    },
+    {
+      "sequence_num": 488,
+      "start_time": 2440.0,
+      "end_time": 2445.0,
+      "text": "People forget how slow disks were even ten years ago."
+    },
+    {
+      "sequence_num": 489,
+      "start_time": 2445.0,
+      "end_time": 2450.0,
+      "text": "There is a lot of nuance in how retries interact."
+    },
+    {
+      "sequence_num": 490,
+      "start_time": 2450.0,
+      "end_time": 2455.0,
+      "text": "I want to pause on that idea of backpressure."
+    },
+    {
+      "sequence_num": 491,
+      "start_time": 2455.0,
+      "end_time": 2460.0,
+      "text": "The numbers they published still surprise me."
+    },
+    {
+      "sequence_num": 492,
+      "start_time": 2460.0,
+      "end_time": 2465.0,
+      "text": "Anyway, that is the backdrop for this interview."
+    },
+    {
+      "sequence_num": 493,
+      "start_time": 2465.0,
+      "end_time": 2470.0,
+      "text": "We will come back to the open source angle later."
+    },
+    {
+      "sequence_num": 494,
+      "start_time": 2470.0,
+      "end_time": 2475.0,
+      "text": "The second half of the show is a bit more personal."
+    },
+    {
+      "sequence_num": 495,
+      "start_time": 2475.0,
+      "end_time": 2480.0,
+      "text": "Today we are talking about distributed systems and latency."
+    },
+    {
+      "sequence_num": 496,
+      "start_time": 2480.0,
+      "end_time": 2485.0,
+      "text": "The guest described their early career in hardware labs."
+    },
+    {
+      "sequence_num": 497,
+      "start_time": 2485.0,
+      "end_time": 2490.0,
+      "text": "I think that is a really interesting point about memory."
+    },
+    {
+      "sequence_num": 498,
+      "start_time": 2490.0,
+      "end_time": 2495.0,
+      "text": "The team spent months measuring tail latency in production."
+    },
+    {
+      "sequence_num": 499,
+      "start_time": 2495.0,
+      "end_time": 2500.0,
+      "text": "Listeners wrote in with questions about replication."
+    },
+    {
+      "sequence_num": 500,
+      "start_time": 2500.0,
+      "end_time": 2505.0,
+      "text": "We recorded this conversation on a Thursday morning."
+    },
+    {
+      "sequence_num": 501,
+      "start_time": 2505.0,
+      "end_time": 2510.0,
+      "text": "That story about the first prototype always lands well."
+    },
+    {
+      "sequence_num": 502,
+      "start_time": 2510.0,
+      "end_time": 2515.0,
+      "text": "The architecture shifted after the third outage."
+    },
+    {
+      "sequence_num": 503,
+      "start_time": 2515.0,
+      "end_time": 2520.0,
+      "text": "People forget how slow disks were even ten years ago."
+    },
+    {
+      "sequence_num": 504,
+      "start_time": 2520.0,
+      "end_time": 2525.0,
+      "text": "There is a lot of nuance in how retries interact."
+    },
+    {
+      "sequence_num": 505,
+      "start_time": 2525.0,
+      "end_time": 2530.0,
+      "text": "I want to pause on that idea of backpressure."
+    },
+    {
+      "sequence_num": 506,
+      "start_time": 2530.0,
+      "end_time": 2535.0,
+      "text": "The numbers they published still surprise me."
+    },
+    {
+      "sequence_num": 507,
+      "start_time": 2535.0,
+      "end_time": 2540.0,
+      "text": "Anyway, that is the backdrop for this interview."
+    },
+    {
+      "sequence_num": 508,
+      "start_time": 2540.0,
+      "end_time": 2545.0,
+      "text": "We will come back to the open source angle later."
+    },
+    {
+      "sequence_num": 509,
+      "start_time": 2545.0,
+      "end_time": 2550.0,
+      "text": "The second half of the show is a bit more personal."
+    },
+    {
+      "sequence_num": 510,
+      "start_time": 2550.0,
+      "end_time": 2555.0,
+      "text": "Today we are talking about distributed systems and latency."
+    },
+    {
+      "sequence_num": 511,
+      "start_time": 2555.0,
+      "end_time": 2560.0,
+      "text": "The guest described their early career in hardware labs."
+    },
+    {
+      "sequence_num": 512,
+      "start_time": 2560.0,
+      "end_time": 2565.0,
+      "text": "I think that is a really interesting point about memory."
+    },
+    {
+      "sequence_num": 513,
+      "start_time": 2565.0,
+      "end_time": 2570.0,
+      "text": "The team spent months measuring tail latency in production."
+    },
+    {
+      "sequence_num": 514,
+      "start_time": 2570.0,
+      "end_time": 2575.0,
+      "text": "Listeners wrote in with questions about replication."
+    },
+    {
+      "sequence_num": 515,
+      "start_time": 2575.0,
+      "end_time": 2580.0,
+      "text": "We recorded this conversation on a Thursday morning."
+    },
+    {
+      "sequence_num": 516,
+      "start_time": 2580.0,
+      "end_time": 2585.0,
+      "text": "That story about the first prototype always lands well."
+    },
+    {
+      "sequence_num": 517,
+      "start_time": 2585.0,
+      "end_time": 2590.0,
+      "text": "The architecture shifted after the third outage."
+    },
+    {
+      "sequence_num": 518,
+      "start_time": 2590.0,
+      "end_time": 2595.0,
+      "text": "People forget how slow disks were even ten years ago."
+    },
+    {
+      "sequence_num": 519,
+      "start_time": 2595.0,
+      "end_time": 2600.0,
+      "text": "There is a lot of nuance in how retries interact."
+    },
+    {
+      "sequence_num": 520,
+      "start_time": 2600.0,
+      "end_time": 2605.0,
+      "text": "I want to pause on that idea of backpressure."
+    },
+    {
+      "sequence_num": 521,
+      "start_time": 2605.0,
+      "end_time": 2610.0,
+      "text": "The numbers they published still surprise me."
+    },
+    {
+      "sequence_num": 522,
+      "start_time": 2610.0,
+      "end_time": 2615.0,
+      "text": "Anyway, that is the backdrop for this interview."
+    },
+    {
+      "sequence_num": 523,
+      "start_time": 2615.0,
+      "end_time": 2620.0,
+      "text": "We will come back to the open source angle later."
+    },
+    {
+      "sequence_num": 524,
+      "start_time": 2620.0,
+      "end_time": 2625.0,
+      "text": "The second half of the show is a bit more personal."
+    },
+    {
+      "sequence_num": 525,
+      "start_time": 2625.0,
+      "end_time": 2630.0,
+      "text": "Today we are talking about distributed systems and latency."
+    },
+    {
+      "sequence_num": 526,
+      "start_time": 2630.0,
+      "end_time": 2635.0,
+      "text": "The guest described their early career in hardware labs."
+    },
+    {
+      "sequence_num": 527,
+      "start_time": 2635.0,
+      "end_time": 2640.0,
+      "text": "I think that is a really interesting point about memory."
+    },
+    {
+      "sequence_num": 528,
+      "start_time": 2640.0,
+      "end_time": 2645.0,
+      "text": "Before we go, a word from our friends at Quip."
+    },
+    {
+      "sequence_num": 529,
+      "start_time": 2645.0,
+      "end_time": 2650.0,
+      "text": "Call 800-555-0199 to hear more about the plan."
+    },
+    {
+      "sequence_num": 530,
+      "start_time": 2650.0,
+      "end_time": 2655.0,
+      "text": "Mention discount HOMESHOW when you call this week."
+    },
+    {
+      "sequence_num": 531,
+      "start_time": 2655.0,
+      "end_time": 2660.0,
+      "text": "Thanks for listening, we will see you next time."
+    },
+    {
+      "sequence_num": 532,
+      "start_time": 2660.0,
+      "end_time": 2665.0,
+      "text": "The architecture shifted after the third outage."
+    },
+    {
+      "sequence_num": 533,
+      "start_time": 2665.0,
+      "end_time": 2670.0,
+      "text": "People forget how slow disks were even ten years ago."
+    },
+    {
+      "sequence_num": 534,
+      "start_time": 2670.0,
+      "end_time": 2675.0,
+      "text": "There is a lot of nuance in how retries interact."
+    },
+    {
+      "sequence_num": 535,
+      "start_time": 2675.0,
+      "end_time": 2680.0,
+      "text": "I want to pause on that idea of backpressure."
+    },
+    {
+      "sequence_num": 536,
+      "start_time": 2680.0,
+      "end_time": 2685.0,
+      "text": "The numbers they published still surprise me."
+    },
+    {
+      "sequence_num": 537,
+      "start_time": 2685.0,
+      "end_time": 2690.0,
+      "text": "Anyway, that is the backdrop for this interview."
+    },
+    {
+      "sequence_num": 538,
+      "start_time": 2690.0,
+      "end_time": 2695.0,
+      "text": "We will come back to the open source angle later."
+    },
+    {
+      "sequence_num": 539,
+      "start_time": 2695.0,
+      "end_time": 2700.0,
+      "text": "The second half of the show is a bit more personal."
+    }
+  ]
+}

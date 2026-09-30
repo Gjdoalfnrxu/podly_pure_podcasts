@@ -1,0 +1,973 @@
+{
+  "generated_at": "2026-09-30T19:50:43.594060+00:00",
+  "live_gemini": false,
+  "assumptions": {
+    "token_rule": "len(text)//4, matching AdClassifier/TokenRateLimiter",
+    "adclassifier_overlap": "no-ad walk: ceil(chunk/2) capped at 30",
+    "chunk_size": 60,
+    "fade_ms": 3000,
+    "gemini_mocked": true,
+    "oracle_confirm": "Gemini quality upper bound: confirm keeps labeled overlap in scout windows; misses are scout false negatives.",
+    "prices_usd_per_million": {
+      "classifier_input": 0.15,
+      "classifier_output": 0.6,
+      "gemini_input": 0.15,
+      "gemini_output": 0.6,
+      "classifier_model": "groq/openai/gpt-oss-120b",
+      "gemini_model": "gemini/gemini-2.5-flash",
+      "note": "Estimates for relative comparison, not invoices."
+    }
+  },
+  "recommended_config": {
+    "threshold": 0.5,
+    "pad_seconds": 15.0,
+    "pad_segments": 3,
+    "merge_gap_seconds": 8.0,
+    "include_scout_extras": true,
+    "include_self_promo": false
+  },
+  "recommended": {
+    "macro": {
+      "n_fixtures": 6,
+      "mean_ad_hit_rate": 0.8333333333333334,
+      "mean_ad_coverage": 0.8333333333333334,
+      "mean_scout_precision": 0.4531746031746032,
+      "mean_false_negative_risk": 0.16666666666666666,
+      "mean_token_reduction_pct": 92.4566224947474,
+      "mean_usd_reduction_pct": 81.94079893707939,
+      "sum_full_input_tokens": 49121,
+      "sum_scout_input_tokens": 3069,
+      "sum_cached_repeat_input_tokens": 0,
+      "sum_full_usd": 0.010818149999999999,
+      "sum_scout_usd": 0.0016603499999999999
+    },
+    "per_fixture": [
+      {
+        "fixture_id": "classic_host_reads",
+        "title": "Classic pre/mid/post-roll host reads",
+        "n_segments": 540,
+        "duration_seconds": 2700,
+        "n_labeled_ads": 3,
+        "labeled_ad_seconds": 85.0,
+        "n_windows": 3,
+        "window_seconds": 175.0,
+        "ad_hit_rate": 1.0,
+        "ad_coverage": 1.0,
+        "scout_precision": 0.4857142857142857,
+        "false_negative_risk": 0.0,
+        "missed_ads": [],
+        "oracle_confirm_hit_rate": 1.0,
+        "residual_strong_cues": 0,
+        "full_classifier": {
+          "calls": 9,
+          "input_tokens": 20503,
+          "output_tokens": 2250,
+          "usd": 0.00442545,
+          "model": "groq/openai/gpt-oss-120b"
+        },
+        "scout_confirm": {
+          "calls": 3,
+          "input_tokens": 1172,
+          "output_tokens": 750,
+          "usd": 0.0006258,
+          "model": "gemini/gemini-2.5-flash",
+          "cached_repeat_input_tokens": 0,
+          "cached_repeat_usd": 0.0
+        },
+        "token_reduction_pct": 94.28376335170464,
+        "usd_reduction_pct": 85.85906517981222,
+        "removal": {
+          "source_ms": 2700000,
+          "removed_ms": 85000,
+          "fade_added_ms": 18000,
+          "expected_output_ms": 2633000,
+          "n_cuts": 3
+        },
+        "config": {
+          "threshold": 0.5,
+          "pad_seconds": 15.0,
+          "pad_segments": 3,
+          "merge_gap_seconds": 8.0,
+          "include_scout_extras": true,
+          "include_self_promo": false
+        },
+        "notes": "Production CueDetector hits URL/CTA/promo/phone plus mid-roll transition. Opening 'brought to you by' needs scout extras."
+      },
+      {
+        "fixture_id": "cue_sparse_storytelling",
+        "title": "Cue-sparse host-read with no URL/CTA/phone",
+        "n_segments": 240,
+        "duration_seconds": 1200,
+        "n_labeled_ads": 1,
+        "labeled_ad_seconds": 35.0,
+        "n_windows": 0,
+        "window_seconds": 0.0,
+        "ad_hit_rate": 0.0,
+        "ad_coverage": 0.0,
+        "scout_precision": 1.0,
+        "false_negative_risk": 1.0,
+        "missed_ads": [
+          {
+            "start": 480.0,
+            "end": 515.0,
+            "kind": "midroll",
+            "notes": "Away brand read, no CueDetector tokens"
+          }
+        ],
+        "oracle_confirm_hit_rate": 0.0,
+        "residual_strong_cues": 0,
+        "full_classifier": {
+          "calls": 4,
+          "input_tokens": 8849,
+          "output_tokens": 1000,
+          "usd": 0.00192735,
+          "model": "groq/openai/gpt-oss-120b"
+        },
+        "scout_confirm": {
+          "calls": 0,
+          "input_tokens": 0,
+          "output_tokens": 0,
+          "usd": 0.0,
+          "model": "gemini/gemini-2.5-flash",
+          "cached_repeat_input_tokens": 0,
+          "cached_repeat_usd": 0.0
+        },
+        "token_reduction_pct": 100.0,
+        "usd_reduction_pct": 100.0,
+        "removal": {
+          "source_ms": 1200000,
+          "removed_ms": 35000,
+          "fade_added_ms": 6000,
+          "expected_output_ms": 1171000,
+          "n_cuts": 1
+        },
+        "config": {
+          "threshold": 0.5,
+          "pad_seconds": 15.0,
+          "pad_segments": 3,
+          "merge_gap_seconds": 8.0,
+          "include_scout_extras": true,
+          "include_self_promo": false
+        },
+        "notes": "Expected scout miss even with extras: no sponsor/CTA/URL/phone."
+      },
+      {
+        "fixture_id": "false_positive_content",
+        "title": "Technical mentions that look like cues",
+        "n_segments": 144,
+        "duration_seconds": 720,
+        "n_labeled_ads": 1,
+        "labeled_ad_seconds": 10.0,
+        "n_windows": 2,
+        "window_seconds": 100.0,
+        "ad_hit_rate": 1.0,
+        "ad_coverage": 1.0,
+        "scout_precision": 0.1,
+        "false_negative_risk": 0.0,
+        "missed_ads": [],
+        "oracle_confirm_hit_rate": 1.0,
+        "residual_strong_cues": 5,
+        "full_classifier": {
+          "calls": 3,
+          "input_tokens": 5964,
+          "output_tokens": 750,
+          "usd": 0.0013446,
+          "model": "groq/openai/gpt-oss-120b"
+        },
+        "scout_confirm": {
+          "calls": 2,
+          "input_tokens": 742,
+          "output_tokens": 500,
+          "usd": 0.00041129999999999997,
+          "model": "gemini/gemini-2.5-flash",
+          "cached_repeat_input_tokens": 0,
+          "cached_repeat_usd": 0.0
+        },
+        "token_reduction_pct": 87.55868544600939,
+        "usd_reduction_pct": 69.41097724230254,
+        "removal": {
+          "source_ms": 720000,
+          "removed_ms": 10000,
+          "fade_added_ms": 6000,
+          "expected_output_ms": 716000,
+          "n_cuts": 1
+        },
+        "config": {
+          "threshold": 0.5,
+          "pad_seconds": 15.0,
+          "pad_segments": 3,
+          "merge_gap_seconds": 8.0,
+          "include_scout_extras": true,
+          "include_self_promo": false
+        },
+        "notes": "Shopify.com, check out, visit, my newsletter, sign up, deal."
+      },
+      {
+        "fixture_id": "self_promo_vs_sponsor",
+        "title": "First-party promo versus external sponsor",
+        "n_segments": 180,
+        "duration_seconds": 900,
+        "n_labeled_ads": 1,
+        "labeled_ad_seconds": 20.0,
+        "n_windows": 1,
+        "window_seconds": 60.0,
+        "ad_hit_rate": 1.0,
+        "ad_coverage": 1.0,
+        "scout_precision": 0.3333333333333333,
+        "false_negative_risk": 0.0,
+        "missed_ads": [],
+        "oracle_confirm_hit_rate": 1.0,
+        "residual_strong_cues": 0,
+        "full_classifier": {
+          "calls": 3,
+          "input_tokens": 6505,
+          "output_tokens": 750,
+          "usd": 0.00142575,
+          "model": "groq/openai/gpt-oss-120b"
+        },
+        "scout_confirm": {
+          "calls": 1,
+          "input_tokens": 400,
+          "output_tokens": 250,
+          "usd": 0.00020999999999999998,
+          "model": "gemini/gemini-2.5-flash",
+          "cached_repeat_input_tokens": 0,
+          "cached_repeat_usd": 0.0
+        },
+        "token_reduction_pct": 93.85088393543428,
+        "usd_reduction_pct": 85.2709100473435,
+        "removal": {
+          "source_ms": 900000,
+          "removed_ms": 20000,
+          "fade_added_ms": 6000,
+          "expected_output_ms": 886000,
+          "n_cuts": 1
+        },
+        "config": {
+          "threshold": 0.5,
+          "pad_seconds": 15.0,
+          "pad_segments": 3,
+          "merge_gap_seconds": 8.0,
+          "include_scout_extras": true,
+          "include_self_promo": false
+        },
+        "notes": "Self-promo should not be flagged at default scout config."
+      },
+      {
+        "fixture_id": "short_preroll_only",
+        "title": "Short episode, single pre-roll",
+        "n_segments": 96,
+        "duration_seconds": 480,
+        "n_labeled_ads": 1,
+        "labeled_ad_seconds": 10.0,
+        "n_windows": 1,
+        "window_seconds": 25.0,
+        "ad_hit_rate": 1.0,
+        "ad_coverage": 1.0,
+        "scout_precision": 0.4,
+        "false_negative_risk": 0.0,
+        "missed_ads": [],
+        "oracle_confirm_hit_rate": 1.0,
+        "residual_strong_cues": 0,
+        "full_classifier": {
+          "calls": 2,
+          "input_tokens": 3812,
+          "output_tokens": 500,
+          "usd": 0.0008717999999999998,
+          "model": "groq/openai/gpt-oss-120b"
+        },
+        "scout_confirm": {
+          "calls": 1,
+          "input_tokens": 284,
+          "output_tokens": 250,
+          "usd": 0.0001926,
+          "model": "gemini/gemini-2.5-flash",
+          "cached_repeat_input_tokens": 0,
+          "cached_repeat_usd": 0.0
+        },
+        "token_reduction_pct": 92.5498426023085,
+        "usd_reduction_pct": 77.90777701307638,
+        "removal": {
+          "source_ms": 480000,
+          "removed_ms": 10000,
+          "fade_added_ms": 6000,
+          "expected_output_ms": 476000,
+          "n_cuts": 1
+        },
+        "config": {
+          "threshold": 0.5,
+          "pad_seconds": 15.0,
+          "pad_segments": 3,
+          "merge_gap_seconds": 8.0,
+          "include_scout_extras": true,
+          "include_self_promo": false
+        },
+        "notes": "Small episode to show full-walk overhead vs one Gemini window."
+      },
+      {
+        "fixture_id": "wildcard_midroll_example",
+        "title": "prompt.py Wildcard cross-promo example",
+        "n_segments": 72,
+        "duration_seconds": 360,
+        "n_labeled_ads": 1,
+        "labeled_ad_seconds": 30.0,
+        "n_windows": 1,
+        "window_seconds": 75.0,
+        "ad_hit_rate": 1.0,
+        "ad_coverage": 1.0,
+        "scout_precision": 0.4,
+        "false_negative_risk": 0.0,
+        "missed_ads": [],
+        "oracle_confirm_hit_rate": 1.0,
+        "residual_strong_cues": 0,
+        "full_classifier": {
+          "calls": 2,
+          "input_tokens": 3488,
+          "output_tokens": 500,
+          "usd": 0.0008232000000000001,
+          "model": "groq/openai/gpt-oss-120b"
+        },
+        "scout_confirm": {
+          "calls": 1,
+          "input_tokens": 471,
+          "output_tokens": 250,
+          "usd": 0.00022064999999999997,
+          "model": "gemini/gemini-2.5-flash",
+          "cached_repeat_input_tokens": 0,
+          "cached_repeat_usd": 0.0
+        },
+        "token_reduction_pct": 86.49655963302753,
+        "usd_reduction_pct": 73.1960641399417,
+        "removal": {
+          "source_ms": 360000,
+          "removed_ms": 30000,
+          "fade_added_ms": 6000,
+          "expected_output_ms": 336000,
+          "n_cuts": 1
+        },
+        "config": {
+          "threshold": 0.5,
+          "pad_seconds": 15.0,
+          "pad_segments": 3,
+          "merge_gap_seconds": 8.0,
+          "include_scout_extras": true,
+          "include_self_promo": false
+        },
+        "notes": "Transition 'after the break' is the only production cue; body has none."
+      }
+    ]
+  },
+  "sweep": [
+    {
+      "config": {
+        "threshold": 0.5,
+        "pad_seconds": 15.0,
+        "pad_segments": 3,
+        "merge_gap_seconds": 8.0,
+        "include_scout_extras": false,
+        "include_self_promo": false
+      },
+      "macro": {
+        "n_fixtures": 6,
+        "mean_ad_hit_rate": 0.8333333333333334,
+        "mean_ad_coverage": 0.8333333333333334,
+        "mean_scout_precision": 0.4531746031746032,
+        "mean_false_negative_risk": 0.16666666666666666,
+        "mean_token_reduction_pct": 92.45987405143016,
+        "mean_usd_reduction_pct": 81.9430585942894,
+        "sum_full_input_tokens": 49121,
+        "sum_scout_input_tokens": 3065,
+        "sum_cached_repeat_input_tokens": 0,
+        "sum_full_usd": 0.010818149999999999,
+        "sum_scout_usd": 0.00165975
+      },
+      "per_fixture": [
+        {
+          "fixture_id": "classic_host_reads",
+          "ad_hit_rate": 1.0,
+          "ad_coverage": 1.0,
+          "scout_precision": 0.4857142857142857,
+          "token_reduction_pct": 94.3032726918012,
+          "n_windows": 3
+        },
+        {
+          "fixture_id": "cue_sparse_storytelling",
+          "ad_hit_rate": 0.0,
+          "ad_coverage": 0.0,
+          "scout_precision": 1.0,
+          "token_reduction_pct": 100.0,
+          "n_windows": 0
+        },
+        {
+          "fixture_id": "false_positive_content",
+          "ad_hit_rate": 1.0,
+          "ad_coverage": 1.0,
+          "scout_precision": 0.1,
+          "token_reduction_pct": 87.55868544600939,
+          "n_windows": 2
+        },
+        {
+          "fixture_id": "self_promo_vs_sponsor",
+          "ad_hit_rate": 1.0,
+          "ad_coverage": 1.0,
+          "scout_precision": 0.3333333333333333,
+          "token_reduction_pct": 93.85088393543428,
+          "n_windows": 1
+        },
+        {
+          "fixture_id": "short_preroll_only",
+          "ad_hit_rate": 1.0,
+          "ad_coverage": 1.0,
+          "scout_precision": 0.4,
+          "token_reduction_pct": 92.5498426023085,
+          "n_windows": 1
+        },
+        {
+          "fixture_id": "wildcard_midroll_example",
+          "ad_hit_rate": 1.0,
+          "ad_coverage": 1.0,
+          "scout_precision": 0.4,
+          "token_reduction_pct": 86.49655963302753,
+          "n_windows": 1
+        }
+      ]
+    },
+    {
+      "config": {
+        "threshold": 0.8,
+        "pad_seconds": 15.0,
+        "pad_segments": 3,
+        "merge_gap_seconds": 8.0,
+        "include_scout_extras": false,
+        "include_self_promo": false
+      },
+      "macro": {
+        "n_fixtures": 6,
+        "mean_ad_hit_rate": 0.6666666666666666,
+        "mean_ad_coverage": 0.6666666666666666,
+        "mean_scout_precision": 0.5747311827956989,
+        "mean_false_negative_risk": 0.3333333333333333,
+        "mean_token_reduction_pct": 94.83108394776842,
+        "mean_usd_reduction_pct": 86.49343178247341,
+        "sum_full_input_tokens": 49121,
+        "sum_scout_input_tokens": 2508,
+        "sum_cached_repeat_input_tokens": 0,
+        "sum_full_usd": 0.010818149999999999,
+        "sum_scout_usd": 0.0014261999999999999
+      },
+      "per_fixture": [
+        {
+          "fixture_id": "classic_host_reads",
+          "ad_hit_rate": 1.0,
+          "ad_coverage": 1.0,
+          "scout_precision": 0.5483870967741935,
+          "token_reduction_pct": 94.58128078817734,
+          "n_windows": 3
+        },
+        {
+          "fixture_id": "cue_sparse_storytelling",
+          "ad_hit_rate": 0.0,
+          "ad_coverage": 0.0,
+          "scout_precision": 1.0,
+          "token_reduction_pct": 100.0,
+          "n_windows": 0
+        },
+        {
+          "fixture_id": "false_positive_content",
+          "ad_hit_rate": 1.0,
+          "ad_coverage": 1.0,
+          "scout_precision": 0.1,
+          "token_reduction_pct": 87.55868544600939,
+          "n_windows": 2
+        },
+        {
+          "fixture_id": "self_promo_vs_sponsor",
+          "ad_hit_rate": 1.0,
+          "ad_coverage": 1.0,
+          "scout_precision": 0.4,
+          "token_reduction_pct": 94.29669485011529,
+          "n_windows": 1
+        },
+        {
+          "fixture_id": "short_preroll_only",
+          "ad_hit_rate": 1.0,
+          "ad_coverage": 1.0,
+          "scout_precision": 0.4,
+          "token_reduction_pct": 92.5498426023085,
+          "n_windows": 1
+        },
+        {
+          "fixture_id": "wildcard_midroll_example",
+          "ad_hit_rate": 0.0,
+          "ad_coverage": 0.0,
+          "scout_precision": 1.0,
+          "token_reduction_pct": 100.0,
+          "n_windows": 0
+        }
+      ]
+    },
+    {
+      "config": {
+        "threshold": 1.0,
+        "pad_seconds": 15.0,
+        "pad_segments": 3,
+        "merge_gap_seconds": 8.0,
+        "include_scout_extras": false,
+        "include_self_promo": false
+      },
+      "macro": {
+        "n_fixtures": 6,
+        "mean_ad_hit_rate": 0.6666666666666666,
+        "mean_ad_coverage": 0.6666666666666666,
+        "mean_scout_precision": 0.5802867383512544,
+        "mean_false_negative_risk": 0.3333333333333333,
+        "mean_token_reduction_pct": 95.04905846151757,
+        "mean_usd_reduction_pct": 86.63845632508833,
+        "sum_full_input_tokens": 49121,
+        "sum_scout_input_tokens": 2430,
+        "sum_cached_repeat_input_tokens": 0,
+        "sum_full_usd": 0.010818149999999999,
+        "sum_scout_usd": 0.0014144999999999997
+      },
+      "per_fixture": [
+        {
+          "fixture_id": "classic_host_reads",
+          "ad_hit_rate": 1.0,
+          "ad_coverage": 1.0,
+          "scout_precision": 0.5483870967741935,
+          "token_reduction_pct": 94.58128078817734,
+          "n_windows": 3
+        },
+        {
+          "fixture_id": "cue_sparse_storytelling",
+          "ad_hit_rate": 0.0,
+          "ad_coverage": 0.0,
+          "scout_precision": 1.0,
+          "token_reduction_pct": 100.0,
+          "n_windows": 0
+        },
+        {
+          "fixture_id": "false_positive_content",
+          "ad_hit_rate": 1.0,
+          "ad_coverage": 1.0,
+          "scout_precision": 0.13333333333333333,
+          "token_reduction_pct": 88.86653252850437,
+          "n_windows": 2
+        },
+        {
+          "fixture_id": "self_promo_vs_sponsor",
+          "ad_hit_rate": 1.0,
+          "ad_coverage": 1.0,
+          "scout_precision": 0.4,
+          "token_reduction_pct": 94.29669485011529,
+          "n_windows": 1
+        },
+        {
+          "fixture_id": "short_preroll_only",
+          "ad_hit_rate": 1.0,
+          "ad_coverage": 1.0,
+          "scout_precision": 0.4,
+          "token_reduction_pct": 92.5498426023085,
+          "n_windows": 1
+        },
+        {
+          "fixture_id": "wildcard_midroll_example",
+          "ad_hit_rate": 0.0,
+          "ad_coverage": 0.0,
+          "scout_precision": 1.0,
+          "token_reduction_pct": 100.0,
+          "n_windows": 0
+        }
+      ]
+    },
+    {
+      "config": {
+        "threshold": 0.5,
+        "pad_seconds": 15.0,
+        "pad_segments": 3,
+        "merge_gap_seconds": 8.0,
+        "include_scout_extras": true,
+        "include_self_promo": false
+      },
+      "macro": {
+        "n_fixtures": 6,
+        "mean_ad_hit_rate": 0.8333333333333334,
+        "mean_ad_coverage": 0.8333333333333334,
+        "mean_scout_precision": 0.4531746031746032,
+        "mean_false_negative_risk": 0.16666666666666666,
+        "mean_token_reduction_pct": 92.4566224947474,
+        "mean_usd_reduction_pct": 81.94079893707939,
+        "sum_full_input_tokens": 49121,
+        "sum_scout_input_tokens": 3069,
+        "sum_cached_repeat_input_tokens": 0,
+        "sum_full_usd": 0.010818149999999999,
+        "sum_scout_usd": 0.0016603499999999999
+      },
+      "per_fixture": [
+        {
+          "fixture_id": "classic_host_reads",
+          "ad_hit_rate": 1.0,
+          "ad_coverage": 1.0,
+          "scout_precision": 0.4857142857142857,
+          "token_reduction_pct": 94.28376335170464,
+          "n_windows": 3
+        },
+        {
+          "fixture_id": "cue_sparse_storytelling",
+          "ad_hit_rate": 0.0,
+          "ad_coverage": 0.0,
+          "scout_precision": 1.0,
+          "token_reduction_pct": 100.0,
+          "n_windows": 0
+        },
+        {
+          "fixture_id": "false_positive_content",
+          "ad_hit_rate": 1.0,
+          "ad_coverage": 1.0,
+          "scout_precision": 0.1,
+          "token_reduction_pct": 87.55868544600939,
+          "n_windows": 2
+        },
+        {
+          "fixture_id": "self_promo_vs_sponsor",
+          "ad_hit_rate": 1.0,
+          "ad_coverage": 1.0,
+          "scout_precision": 0.3333333333333333,
+          "token_reduction_pct": 93.85088393543428,
+          "n_windows": 1
+        },
+        {
+          "fixture_id": "short_preroll_only",
+          "ad_hit_rate": 1.0,
+          "ad_coverage": 1.0,
+          "scout_precision": 0.4,
+          "token_reduction_pct": 92.5498426023085,
+          "n_windows": 1
+        },
+        {
+          "fixture_id": "wildcard_midroll_example",
+          "ad_hit_rate": 1.0,
+          "ad_coverage": 1.0,
+          "scout_precision": 0.4,
+          "token_reduction_pct": 86.49655963302753,
+          "n_windows": 1
+        }
+      ]
+    },
+    {
+      "config": {
+        "threshold": 0.8,
+        "pad_seconds": 0.0,
+        "pad_segments": 0,
+        "merge_gap_seconds": 8.0,
+        "include_scout_extras": true,
+        "include_self_promo": false
+      },
+      "macro": {
+        "n_fixtures": 6,
+        "mean_ad_hit_rate": 0.6666666666666666,
+        "mean_ad_coverage": 0.6666666666666666,
+        "mean_scout_precision": 0.8543771043771043,
+        "mean_false_negative_risk": 0.3333333333333333,
+        "mean_token_reduction_pct": 95.80918125026066,
+        "mean_usd_reduction_pct": 87.1514880000639,
+        "sum_full_input_tokens": 49121,
+        "sum_scout_input_tokens": 2039,
+        "sum_cached_repeat_input_tokens": 0,
+        "sum_full_usd": 0.010818149999999999,
+        "sum_scout_usd": 0.00135585
+      },
+      "per_fixture": [
+        {
+          "fixture_id": "classic_host_reads",
+          "ad_hit_rate": 1.0,
+          "ad_coverage": 1.0,
+          "scout_precision": 0.9444444444444444,
+          "token_reduction_pct": 95.53236111788519,
+          "n_windows": 3
+        },
+        {
+          "fixture_id": "cue_sparse_storytelling",
+          "ad_hit_rate": 0.0,
+          "ad_coverage": 0.0,
+          "scout_precision": 1.0,
+          "token_reduction_pct": 100.0,
+          "n_windows": 0
+        },
+        {
+          "fixture_id": "false_positive_content",
+          "ad_hit_rate": 1.0,
+          "ad_coverage": 1.0,
+          "scout_precision": 0.18181818181818182,
+          "token_reduction_pct": 89.7719651240778,
+          "n_windows": 2
+        },
+        {
+          "fixture_id": "self_promo_vs_sponsor",
+          "ad_hit_rate": 1.0,
+          "ad_coverage": 1.0,
+          "scout_precision": 1.0,
+          "token_reduction_pct": 95.74173712528824,
+          "n_windows": 1
+        },
+        {
+          "fixture_id": "short_preroll_only",
+          "ad_hit_rate": 1.0,
+          "ad_coverage": 1.0,
+          "scout_precision": 1.0,
+          "token_reduction_pct": 93.80902413431271,
+          "n_windows": 1
+        },
+        {
+          "fixture_id": "wildcard_midroll_example",
+          "ad_hit_rate": 0.0,
+          "ad_coverage": 0.0,
+          "scout_precision": 1.0,
+          "token_reduction_pct": 100.0,
+          "n_windows": 0
+        }
+      ]
+    },
+    {
+      "config": {
+        "threshold": 0.8,
+        "pad_seconds": 15.0,
+        "pad_segments": 3,
+        "merge_gap_seconds": 8.0,
+        "include_scout_extras": true,
+        "include_self_promo": false
+      },
+      "macro": {
+        "n_fixtures": 6,
+        "mean_ad_hit_rate": 0.6666666666666666,
+        "mean_ad_coverage": 0.6666666666666666,
+        "mean_scout_precision": 0.5691919191919191,
+        "mean_false_negative_risk": 0.3333333333333333,
+        "mean_token_reduction_pct": 94.80344571596494,
+        "mean_usd_reduction_pct": 86.4742246961884,
+        "sum_full_input_tokens": 49121,
+        "sum_scout_input_tokens": 2542,
+        "sum_cached_repeat_input_tokens": 0,
+        "sum_full_usd": 0.010818149999999999,
+        "sum_scout_usd": 0.0014313
+      },
+      "per_fixture": [
+        {
+          "fixture_id": "classic_host_reads",
+          "ad_hit_rate": 1.0,
+          "ad_coverage": 1.0,
+          "scout_precision": 0.5151515151515151,
+          "token_reduction_pct": 94.41545139735649,
+          "n_windows": 3
+        },
+        {
+          "fixture_id": "cue_sparse_storytelling",
+          "ad_hit_rate": 0.0,
+          "ad_coverage": 0.0,
+          "scout_precision": 1.0,
+          "token_reduction_pct": 100.0,
+          "n_windows": 0
+        },
+        {
+          "fixture_id": "false_positive_content",
+          "ad_hit_rate": 1.0,
+          "ad_coverage": 1.0,
+          "scout_precision": 0.1,
+          "token_reduction_pct": 87.55868544600939,
+          "n_windows": 2
+        },
+        {
+          "fixture_id": "self_promo_vs_sponsor",
+          "ad_hit_rate": 1.0,
+          "ad_coverage": 1.0,
+          "scout_precision": 0.4,
+          "token_reduction_pct": 94.29669485011529,
+          "n_windows": 1
+        },
+        {
+          "fixture_id": "short_preroll_only",
+          "ad_hit_rate": 1.0,
+          "ad_coverage": 1.0,
+          "scout_precision": 0.4,
+          "token_reduction_pct": 92.5498426023085,
+          "n_windows": 1
+        },
+        {
+          "fixture_id": "wildcard_midroll_example",
+          "ad_hit_rate": 0.0,
+          "ad_coverage": 0.0,
+          "scout_precision": 1.0,
+          "token_reduction_pct": 100.0,
+          "n_windows": 0
+        }
+      ]
+    },
+    {
+      "config": {
+        "threshold": 0.8,
+        "pad_seconds": 30.0,
+        "pad_segments": 5,
+        "merge_gap_seconds": 8.0,
+        "include_scout_extras": true,
+        "include_self_promo": false
+      },
+      "macro": {
+        "n_fixtures": 6,
+        "mean_ad_hit_rate": 0.6666666666666666,
+        "mean_ad_coverage": 0.6666666666666666,
+        "mean_scout_precision": 0.4871886973180077,
+        "mean_false_negative_risk": 0.3333333333333333,
+        "mean_token_reduction_pct": 93.85329404720095,
+        "mean_usd_reduction_pct": 85.83466757184885,
+        "sum_full_input_tokens": 49121,
+        "sum_scout_input_tokens": 3014,
+        "sum_cached_repeat_input_tokens": 0,
+        "sum_full_usd": 0.010818149999999999,
+        "sum_scout_usd": 0.0015021000000000001
+      },
+      "per_fixture": [
+        {
+          "fixture_id": "classic_host_reads",
+          "ad_hit_rate": 1.0,
+          "ad_coverage": 1.0,
+          "scout_precision": 0.3541666666666667,
+          "token_reduction_pct": 93.3814563722382,
+          "n_windows": 3
+        },
+        {
+          "fixture_id": "cue_sparse_storytelling",
+          "ad_hit_rate": 0.0,
+          "ad_coverage": 0.0,
+          "scout_precision": 1.0,
+          "token_reduction_pct": 100.0,
+          "n_windows": 0
+        },
+        {
+          "fixture_id": "false_positive_content",
+          "ad_hit_rate": 1.0,
+          "ad_coverage": 1.0,
+          "scout_precision": 0.06896551724137931,
+          "token_reduction_pct": 85.37894030851777,
+          "n_windows": 2
+        },
+        {
+          "fixture_id": "self_promo_vs_sponsor",
+          "ad_hit_rate": 1.0,
+          "ad_coverage": 1.0,
+          "scout_precision": 0.25,
+          "token_reduction_pct": 92.99000768639509,
+          "n_windows": 1
+        },
+        {
+          "fixture_id": "short_preroll_only",
+          "ad_hit_rate": 1.0,
+          "ad_coverage": 1.0,
+          "scout_precision": 0.25,
+          "token_reduction_pct": 91.36935991605456,
+          "n_windows": 1
+        },
+        {
+          "fixture_id": "wildcard_midroll_example",
+          "ad_hit_rate": 0.0,
+          "ad_coverage": 0.0,
+          "scout_precision": 1.0,
+          "token_reduction_pct": 100.0,
+          "n_windows": 0
+        }
+      ]
+    },
+    {
+      "config": {
+        "threshold": 1.5,
+        "pad_seconds": 15.0,
+        "pad_segments": 3,
+        "merge_gap_seconds": 8.0,
+        "include_scout_extras": true,
+        "include_self_promo": false
+      },
+      "macro": {
+        "n_fixtures": 6,
+        "mean_ad_hit_rate": 0.611111111111111,
+        "mean_ad_coverage": 0.6372549019607843,
+        "mean_scout_precision": 0.677995642701525,
+        "mean_false_negative_risk": 0.3888888888888889,
+        "mean_token_reduction_pct": 96.48674423094002,
+        "mean_usd_reduction_pct": 90.030107942269,
+        "sum_full_input_tokens": 49121,
+        "sum_scout_input_tokens": 1613,
+        "sum_cached_repeat_input_tokens": 0,
+        "sum_full_usd": 0.010818149999999999,
+        "sum_scout_usd": 0.00099195
+      },
+      "per_fixture": [
+        {
+          "fixture_id": "classic_host_reads",
+          "ad_hit_rate": 0.6666666666666666,
+          "ad_coverage": 0.8235294117647058,
+          "scout_precision": 0.8235294117647058,
+          "token_reduction_pct": 96.65414817343803,
+          "n_windows": 2
+        },
+        {
+          "fixture_id": "cue_sparse_storytelling",
+          "ad_hit_rate": 0.0,
+          "ad_coverage": 0.0,
+          "scout_precision": 1.0,
+          "token_reduction_pct": 100.0,
+          "n_windows": 0
+        },
+        {
+          "fixture_id": "false_positive_content",
+          "ad_hit_rate": 1.0,
+          "ad_coverage": 1.0,
+          "scout_precision": 0.4,
+          "token_reduction_pct": 95.20456069751845,
+          "n_windows": 1
+        },
+        {
+          "fixture_id": "self_promo_vs_sponsor",
+          "ad_hit_rate": 1.0,
+          "ad_coverage": 1.0,
+          "scout_precision": 0.4444444444444444,
+          "token_reduction_pct": 94.5119139123751,
+          "n_windows": 1
+        },
+        {
+          "fixture_id": "short_preroll_only",
+          "ad_hit_rate": 1.0,
+          "ad_coverage": 1.0,
+          "scout_precision": 0.4,
+          "token_reduction_pct": 92.5498426023085,
+          "n_windows": 1
+        },
+        {
+          "fixture_id": "wildcard_midroll_example",
+          "ad_hit_rate": 0.0,
+          "ad_coverage": 0.0,
+          "scout_precision": 1.0,
+          "token_reduction_pct": 100.0,
+          "n_windows": 0
+        }
+      ]
+    }
+  ],
+  "follow_up_live_gemini": [
+    "Run the same 6 fixtures plus 5\u201310 real Whisper transcripts with human or current-AdClassifier labels; budget Gemini 2.5 Flash at \u2264 $0.50/day and enable the content-hash cache directory first.",
+    "Measure live confirm precision/recall vs oracle: does Gemini drop false-positive windows (Shopify.com technical mentions, 'check out this paper') and tighten boundaries inside padded windows?",
+    "Measure live false negatives on cue-sparse host-reads; decide whether a periodic full AdClassifier pass, extra scout phrases, or chapter metadata should cover that tail.",
+    "Compare boundary error (start/end vs labels) against production BoundaryRefiner / WordBoundaryRefiner \u2014 Gemini confirm is intended to replace some of that second LLM pass, not add a third.",
+    "Record actual litellm usage tokens vs the chars/4 estimate; adjust cost_model prices to the Gemini SKU you actually call.",
+    "Do not change Feed defaults until live recall on real episodes is within an agreed band of the full AdClassifier walk."
+  ],
+  "ready_to_pr_checklist": [
+    "[x] Experimental package isolated under `src/podcast_processor/experiments/` (not imported by PodcastProcessor).",
+    "[x] CueDetector default constructor / `analyze` keys unchanged for production.",
+    "[x] Gemini client mocks by default; live path requires GEMINI_API_KEY + PODLY_GEMINI_CONFIRM_LIVE=true.",
+    "[x] Offline tests without API keys.",
+    "[x] RESULTS.md + metrics.json from the harness.",
+    "[ ] Human review of scout extras (`brought to you by`, etc.) before enabling them in production neighbor expansion.",
+    "[ ] Live Gemini confirm on real transcripts ($0.50/day, cache-first).",
+    "[ ] Decision on cue-sparse fallback before wiring into PodcastProcessor.",
+    "[ ] Alembic not required (no model changes)."
+  ]
+}
