@@ -1,0 +1,13 @@
+{
+  "hypothesis_id": "H003",
+  "status": "measured",
+  "verdict": "no_win",
+  "extras": {
+    "kind": "pad_sweep",
+    "improved_primary": false,
+    "fold_eligible": false,
+    "production_flag": false,
+    "winner": "extras=True t=0.5 pad=15.0/3 (frozen recommended)",
+    "note": "t=0.4/15/3 tied on detection/cost; no strict beat. extras=False fails recall ε."
+  }
+}

@@ -1,0 +1,9 @@
+{
+  "date": "2026-09-30",
+  "limit_usd": 0.5,
+  "hard_stop_usd": 0.45,
+  "spent_usd": 0.0511,
+  "gemini_usd": 0.0095,
+  "groq_usd": 0.0416,
+  "note": "Billable session total $0.0511. Excludes prior real-transcript-probe spend reused via cached transcripts."
+}

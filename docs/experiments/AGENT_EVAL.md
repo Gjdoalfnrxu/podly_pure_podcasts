@@ -108,9 +108,11 @@ Absolute priorities: **confidence** (no regressions) → **detection**
 1. Load `docs/experiments/hypotheses/hypotheses.json`.
 2. Take `status=open` rows, sort by `metric_primary` in
    `(confidence, detection, cost)` then `id`.
-3. Seeded open ids: `H001` (tight `code <word>` FP), `H002` (cue-sparse
-   recovery without full walk), `H003` (pad/threshold sweep under gates),
-   `H004` (secret-safe The Daily / Soft Skills-style golden ingest).
+3. Seeded ids after 2026-09-30 live run: `H001` measured (live
+   confidence win 26→15 windows; offline corpus `no_win`), `H002`
+   rejected (scout-token ε), `H003` measured/`no_win` (keep recommended
+   pad), `H004` measured/`process_ok` (ingest process; no corpus
+   promote). Next open: none until Soft Skills-style goldens land.
 
 ### Run
 

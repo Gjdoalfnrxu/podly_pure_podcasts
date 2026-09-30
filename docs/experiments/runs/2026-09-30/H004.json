@@ -1,0 +1,16 @@
+{
+  "hypothesis_id": "H004",
+  "status": "measured",
+  "verdict": "process_ok",
+  "extras": {
+    "kind": "golden_ingest",
+    "fold_eligible": false,
+    "production_flag": false,
+    "promotes_to_corpus": false,
+    "secret_rejection": true,
+    "templates_validated": [
+      "soft_skills_style_template",
+      "news_briefing_style_template"
+    ]
+  }
+}

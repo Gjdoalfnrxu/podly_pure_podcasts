@@ -1,0 +1,20 @@
+{
+  "hypothesis_id": "H002",
+  "status": "rejected",
+  "verdict": "failed_gates",
+  "extras": {
+    "kind": "cheap_recovery",
+    "variants": ["storytelling_phrase", "cheap_midroll_probe"],
+    "fold_eligible": false,
+    "production_flag": false,
+    "gate_failures": [
+      {
+        "metric": "sum_scout_input_tokens",
+        "actual": 4707.0,
+        "baseline": 3901.0,
+        "limit": 4291.1
+      }
+    ],
+    "live": "skipped"
+  }
+}

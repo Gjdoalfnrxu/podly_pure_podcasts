@@ -1,0 +1,44 @@
+{
+  "generated_at": "2026-09-30T23:06:19+00:00",
+  "run_date": "2026-09-30",
+  "offline": false,
+  "live_provider": "gemini",
+  "spent_usd": 0.0511,
+  "daily_budget_usd": 0.5,
+  "hard_stop_usd": 0.45,
+  "production": {
+    "enable_bow_scout_gemini_confirm": false,
+    "ad_detection_default_strategy": "llm"
+  },
+  "gates_loosened": false,
+  "hypotheses": [
+    {
+      "id": "H001",
+      "status": "measured",
+      "verdict": "no_win",
+      "fold_eligible": false,
+      "live_confidence_win": true,
+      "live_baseline_windows": 26,
+      "live_tight_windows": 15
+    },
+    {
+      "id": "H002",
+      "status": "rejected",
+      "verdict": "failed_gates",
+      "fold_eligible": false
+    },
+    {
+      "id": "H003",
+      "status": "measured",
+      "verdict": "no_win",
+      "fold_eligible": false
+    },
+    {
+      "id": "H004",
+      "status": "measured",
+      "verdict": "process_ok",
+      "fold_eligible": false
+    }
+  ],
+  "fold_policy": "accepted = fold-eligible on the experiment package only. Do not set enable_bow_scout_gemini_confirm. Do not loosen gates.json."
+}

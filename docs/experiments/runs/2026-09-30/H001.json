@@ -1,0 +1,21 @@
+{
+  "hypothesis_id": "H001",
+  "status": "measured",
+  "verdict": "no_win",
+  "extras": {
+    "kind": "cue_pattern",
+    "detector": "TightPromoCueDetector",
+    "improved_primary": false,
+    "fold_eligible": false,
+    "production_flag": false,
+    "offline_corpus": "macros identical to frozen recommended (F1=0.8889, tok↓=93.32%, scout_tok=3901)",
+    "live_confidence_win": true,
+    "live_real": {
+      "n_episodes": 4,
+      "baseline_windows": 26,
+      "tight_windows": 15,
+      "windows_dropped": 13,
+      "window_reduction_pct": 42.3
+    }
+  }
+}

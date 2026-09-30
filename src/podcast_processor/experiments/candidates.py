@@ -34,7 +34,14 @@ STORYTELLING_WEIGHT = 1.0
 
 
 class TightPromoCueDetector(CueDetector):
-    """Same as CueDetector except promo requires use/promo/discount-code phrasing."""
+    """Same as CueDetector except promo requires use/promo/discount-code phrasing.
+
+    2026-09-30 live (4 real eps): baseline scout windows 26 → TightPromo 15
+    (−42.3%). Soft Skills tech-speech `code <word>` FPs drop; The Daily
+    window counts stay the same. Experiment-only — do not copy
+    TIGHT_PROMO_PATTERN into production CueDetector until Soft Skills-style
+    goldens are promoted and offline confidence metrics move.
+    """
 
     def __init__(self, include_scout_extras: bool = False) -> None:
         super().__init__(include_scout_extras=include_scout_extras)

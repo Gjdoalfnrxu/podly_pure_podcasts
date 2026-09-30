@@ -1,14 +1,14 @@
 {
   "schema_version": 1,
   "priorities": ["confidence", "detection", "cost"],
-  "updated_at": null,
-  "notes": "Seeded from corpus v1 gaps. Production AdClassifier and enable_bow_scout_gemini_confirm stay off. Frozen gates.json must not be loosened.",
+  "updated_at": "2026-09-30T23:06:19+00:00",
+  "notes": "Seeded from corpus v1 gaps. Production AdClassifier and enable_bow_scout_gemini_confirm stay off. Frozen gates.json must not be loosened. 2026-09-30 live: H001 measured (26→15 windows on real eps), H002 rejected, H003 no_win, H004 process_ok.",
   "hypotheses": [
     {
       "id": "H001",
       "statement": "Tighten CueDetector promo so bare `code <word>` (tech speech: code review, code path) is not a strong cue, while `use code SAVE20` / `promo CODE` still flag real ads.",
       "metric_primary": "confidence",
-      "status": "open",
+      "status": "measured",
       "rank": 1,
       "predicted_effect": {
         "confidence": "Fewer promo false positives on technical discussion; residual strong-cue rate on false_positive_content should not rise.",
@@ -22,14 +22,45 @@
           "production_change": false
         }
       },
-      "last_result": null,
-      "notes": "Experiment-only detector. Do not edit production cue_detector.promo_pattern until this is accepted and gates stay green."
+      "last_result": {
+        "run_date": "2026-09-30",
+        "run_dir": "docs/experiments/runs/2026-09-30",
+        "summary_path": "docs/experiments/runs/2026-09-30/summary.md",
+        "hypothesis_result_path": "docs/experiments/runs/2026-09-30/H001.json",
+        "verdict": "no_win",
+        "passed_gates": true,
+        "score": {
+          "name": "H001",
+          "rejected": false,
+          "gate_failures": [],
+          "detection_f1": 0.8888888888888888,
+          "detection_recall": 0.8888888888888888,
+          "ad_hit_rate": 0.8888888888888888,
+          "token_reduction_pct": 93.3178665118304,
+          "scout_input_tokens": 3901.0,
+          "offline_verdict": "no_win",
+          "live_confidence_win": true,
+          "live_baseline_windows": 26,
+          "live_tight_windows": 15,
+          "live_windows_dropped": 13,
+          "live_window_reduction_pct": 42.3,
+          "config": {
+            "threshold": 0.5,
+            "pad_seconds": 15.0,
+            "pad_segments": 3,
+            "merge_gap_seconds": 8.0,
+            "include_scout_extras": true,
+            "include_self_promo": false
+          }
+        }
+      },
+      "notes": "Experiment-only detector. Do not edit production cue_detector.promo_pattern until this is accepted and gates stay green. Offline corpus v1: measured/no_win (macros identical to frozen recommended). Live 2026-09-30 confidence win: baseline 26 → TightPromo 15 windows (−42.3%) on 4 real eps (Soft Skills 532/531 drop tech-speech FPs; The Daily window counts unchanged). Keep TightPromoCueDetector in candidates.py; mark accepted after Soft Skills-style goldens land and offline confidence metrics move."
     },
     {
       "id": "H002",
       "statement": "Recover cue-sparse host-reads (Away-style brand story, no URL/CTA/phone) without paying a full AdClassifier walk.",
       "metric_primary": "detection",
-      "status": "open",
+      "status": "rejected",
       "rank": 2,
       "predicted_effect": {
         "confidence": "Must still pass frozen ε. Ad-free episodes must not grow residual strong cues.",
@@ -42,14 +73,39 @@
           "variants": ["storytelling_phrase", "cheap_midroll_probe"]
         }
       },
-      "last_result": null,
-      "notes": "Padding cannot recover an ad the scout never flags. Production CueDetector extras stay off."
+      "last_result": {
+        "run_date": "2026-09-30",
+        "run_dir": "docs/experiments/runs/2026-09-30",
+        "summary_path": "docs/experiments/runs/2026-09-30/summary.md",
+        "hypothesis_result_path": "docs/experiments/runs/2026-09-30/H002.json",
+        "verdict": "failed_gates",
+        "passed_gates": false,
+        "score": {
+          "name": "H002-midroll-probe",
+          "rejected": true,
+          "gate_failures": [
+            {
+              "metric": "sum_scout_input_tokens",
+              "actual": 4707.0,
+              "baseline": 3901.0,
+              "limit": 4291.1,
+              "message": "Scout+confirm input tokens rose more than 10% vs baseline."
+            }
+          ],
+          "detection_f1": 0.8888888888888888,
+          "detection_recall": 0.8888888888888888,
+          "ad_hit_rate": 0.8888888888888888,
+          "token_reduction_pct": 93.3178665118304,
+          "scout_input_tokens": 4707.0
+        }
+      },
+      "notes": "Padding cannot recover an ad the scout never flags. Production CueDetector extras stay off. 2026-09-30: rejected (ε). Storytelling 4338 / midroll-probe 4707 scout tokens vs baseline 3901 (limit 4291). Live skipped. Do not fold. Revisit only with a recovery that stays within +10% scout tokens."
     },
     {
       "id": "H003",
       "statement": "Re-rank pad/threshold/extras sweeps under frozen gate constraints; keep recommended config unless a survivor strictly beats it on detection then cost.",
       "metric_primary": "cost",
-      "status": "open",
+      "status": "measured",
       "rank": 3,
       "predicted_effect": {
         "confidence": "Any config that fails snapshot ε is discarded, even if cheaper.",
@@ -63,14 +119,40 @@
           "extra_configs": ["t=0.4 pad=15/3 extras", "t=0.6 pad=10/2 extras"]
         }
       },
-      "last_result": null,
-      "notes": "Sweep is experiment-package only. Do not change production neighbor window."
+      "last_result": {
+        "run_date": "2026-09-30",
+        "run_dir": "docs/experiments/runs/2026-09-30",
+        "summary_path": "docs/experiments/runs/2026-09-30/summary.md",
+        "hypothesis_result_path": "docs/experiments/runs/2026-09-30/H003.json",
+        "verdict": "no_win",
+        "passed_gates": true,
+        "score": {
+          "name": "extras=True t=0.5 pad=15.0/3",
+          "rejected": false,
+          "gate_failures": [],
+          "detection_f1": 0.8888888888888888,
+          "detection_recall": 0.8888888888888888,
+          "ad_hit_rate": 0.8888888888888888,
+          "token_reduction_pct": 93.3178665118304,
+          "scout_input_tokens": 3901.0,
+          "winner": "extras=True t=0.5 pad=15.0/3 (frozen recommended)",
+          "config": {
+            "threshold": 0.5,
+            "pad_seconds": 15.0,
+            "pad_segments": 3,
+            "merge_gap_seconds": 8.0,
+            "include_scout_extras": true,
+            "include_self_promo": false
+          }
+        }
+      },
+      "notes": "Sweep is experiment-package only. Do not change production neighbor window. 2026-09-30: no_win. Survivor remains frozen recommended extras=True t=0.5 pad=15/3. t=0.4 ties; extras=False fails recall/hit/F1 ε."
     },
     {
       "id": "H004",
       "statement": "Add a secret-safe process for real-transcript goldens in The Daily / Soft Skills style (news briefing + interview host-reads) without leaking API keys into git.",
       "metric_primary": "confidence",
-      "status": "open",
+      "status": "measured",
       "rank": 4,
       "predicted_effect": {
         "confidence": "Ingest refuses .env, gsk_/AIza/sk- blobs, and api_key fields. Corpus v1 hashes unchanged until an explicit baseline update.",
@@ -87,8 +169,27 @@
           "staging_dir": "docs/experiments/golden/staging"
         }
       },
-      "last_result": null,
-      "notes": "Do not commit copyrighted episode text. Staging is gitignored. Never store GROQ_API_KEY or GEMINI_API_KEY next to transcripts."
+      "last_result": {
+        "run_date": "2026-09-30",
+        "run_dir": "docs/experiments/runs/2026-09-30",
+        "summary_path": "docs/experiments/runs/2026-09-30/summary.md",
+        "hypothesis_result_path": "docs/experiments/runs/2026-09-30/H004.json",
+        "verdict": "process_ok",
+        "passed_gates": true,
+        "score": {
+          "name": "H004",
+          "rejected": false,
+          "gate_failures": [],
+          "detection_f1": 0.8888888888888888,
+          "detection_recall": 0.8888888888888888,
+          "ad_hit_rate": 0.8888888888888888,
+          "token_reduction_pct": 93.3178665118304,
+          "scout_input_tokens": 3901.0,
+          "promoted_to_corpus": false,
+          "secret_rejection": true
+        }
+      },
+      "notes": "Do not commit copyrighted episode text. Staging is gitignored. Never store GROQ_API_KEY or GEMINI_API_KEY next to transcripts. 2026-09-30: process_ok. Templates staged (Soft Skills-style + news-briefing-style); secret rejection works (api_key / AIza… refused). promoted_to_corpus: false."
     }
   ]
 }

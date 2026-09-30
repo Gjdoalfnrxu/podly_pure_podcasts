@@ -5,14 +5,14 @@ User priorities (absolute): **confidence** (no regressions) → **detection** (F
 
 The daily runner loads **open** rows in that order, runs offline eval vs the frozen snapshot by default, and never loosens `gates.json`.
 
-Updated at `unspecified` (UTC).
+Updated at `2026-09-30T23:06:19+00:00` (UTC).
 
 | ID | Primary | Status | Statement | Last result |
 | --- | --- | --- | --- | --- |
-| `H001` | confidence | open | Tighten CueDetector promo so bare `code <word>` (tech speech: code review, code path) is not a strong cue, while `use code SAVE20` / `promo CODE` still flag real ads. | — |
-| `H002` | detection | open | Recover cue-sparse host-reads (Away-style brand story, no URL/CTA/phone) without paying a full AdClassifier walk. | — |
-| `H003` | cost | open | Re-rank pad/threshold/extras sweeps under frozen gate constraints; keep recommended config unless a survivor strictly beats it on detection then cost. | — |
-| `H004` | confidence | open | Add a secret-safe process for real-transcript goldens in The Daily / Soft Skills style (news briefing + interview host-reads) without leaking API keys into git. | — |
+| `H001` | confidence | measured | Tighten CueDetector promo so bare `code <word>` (tech speech: code review, code path) is not a strong cue, while `use code SAVE20` / `promo CODE` still flag real ads. | no_win, 2026-09-30 (`docs/experiments/runs/2026-09-30/H001.json`) |
+| `H002` | detection | rejected | Recover cue-sparse host-reads (Away-style brand story, no URL/CTA/phone) without paying a full AdClassifier walk. | failed_gates, 2026-09-30 (`docs/experiments/runs/2026-09-30/H002.json`) |
+| `H003` | cost | measured | Re-rank pad/threshold/extras sweeps under frozen gate constraints; keep recommended config unless a survivor strictly beats it on detection then cost. | no_win, 2026-09-30 (`docs/experiments/runs/2026-09-30/H003.json`) |
+| `H004` | confidence | measured | Add a secret-safe process for real-transcript goldens in The Daily / Soft Skills style (news briefing + interview host-reads) without leaking API keys into git. | process_ok, 2026-09-30 (`docs/experiments/runs/2026-09-30/H004.json`) |
 
 ## Predicted effects
 
@@ -21,48 +21,48 @@ Updated at `unspecified` (UTC).
 Tighten CueDetector promo so bare `code <word>` (tech speech: code review, code path) is not a strong cue, while `use code SAVE20` / `promo CODE` still flag real ads.
 
 - Primary metric: `confidence`
-- Status: `open`
+- Status: `measured`
 - Experiment kind: `cue_pattern`
 - Confidence: Fewer promo false positives on technical discussion; residual strong-cue rate on false_positive_content should not rise.
 - Detection: No labeled-ad recall/hit drop on corpus v1 (ads already say use code / promo).
 - Cost: Slightly fewer confirm windows if tech-speech FPs disappear; token reduction should not fall.
-- Notes: Experiment-only detector. Do not edit production cue_detector.promo_pattern until this is accepted and gates stay green.
+- Notes: Experiment-only detector. Do not edit production cue_detector.promo_pattern until this is accepted and gates stay green. Offline corpus v1: measured/no_win (macros identical to frozen recommended). Live 2026-09-30 confidence win: baseline 26 → TightPromo 15 windows (−42.3%) on 4 real eps (Soft Skills 532/531 drop tech-speech FPs; The Daily window counts unchanged). Keep TightPromoCueDetector in candidates.py; mark accepted after Soft Skills-style goldens land and offline confidence metrics move.
 
 ### `H002`
 
 Recover cue-sparse host-reads (Away-style brand story, no URL/CTA/phone) without paying a full AdClassifier walk.
 
 - Primary metric: `detection`
-- Status: `open`
+- Status: `rejected`
 - Experiment kind: `cheap_recovery`
 - Confidence: Must still pass frozen ε. Ad-free episodes must not grow residual strong cues.
 - Detection: Lift cue_sparse_storytelling ad-block hit/recall from 0 without dropping other fixtures.
 - Cost: At most one extra confirm window per miss, not a 60-segment walk; scout tokens must stay within +10% of snapshot.
-- Notes: Padding cannot recover an ad the scout never flags. Production CueDetector extras stay off.
+- Notes: Padding cannot recover an ad the scout never flags. Production CueDetector extras stay off. 2026-09-30: rejected (ε). Storytelling 4338 / midroll-probe 4707 scout tokens vs baseline 3901 (limit 4291). Live skipped. Do not fold. Revisit only with a recovery that stays within +10% scout tokens.
 
 ### `H003`
 
 Re-rank pad/threshold/extras sweeps under frozen gate constraints; keep recommended config unless a survivor strictly beats it on detection then cost.
 
 - Primary metric: `cost`
-- Status: `open`
+- Status: `measured`
 - Experiment kind: `pad_sweep`
 - Confidence: Any config that fails snapshot ε is discarded, even if cheaper.
 - Detection: Do not trade F1/recall for tokens. Recommended 0.5/15s/3 extras=on should remain best recall on v1.
 - Cost: Among survivors, prefer higher mean_token_reduction_pct / fewer scout tokens.
-- Notes: Sweep is experiment-package only. Do not change production neighbor window.
+- Notes: Sweep is experiment-package only. Do not change production neighbor window. 2026-09-30: no_win. Survivor remains frozen recommended extras=True t=0.5 pad=15/3. t=0.4 ties; extras=False fails recall/hit/F1 ε.
 
 ### `H004`
 
 Add a secret-safe process for real-transcript goldens in The Daily / Soft Skills style (news briefing + interview host-reads) without leaking API keys into git.
 
 - Primary metric: `confidence`
-- Status: `open`
+- Status: `measured`
 - Experiment kind: `golden_ingest`
 - Confidence: Ingest refuses .env, gsk_/AIza/sk- blobs, and api_key fields. Corpus v1 hashes unchanged until an explicit baseline update.
 - Detection: New goldens, once promoted, should cover live host-read FP/FN that synthetic v1 misses.
 - Cost: No live spend during ingest. Promotion still uses --write-corpus --update-baseline together.
-- Notes: Do not commit copyrighted episode text. Staging is gitignored. Never store GROQ_API_KEY or GEMINI_API_KEY next to transcripts.
+- Notes: Do not commit copyrighted episode text. Staging is gitignored. Never store GROQ_API_KEY or GEMINI_API_KEY next to transcripts. 2026-09-30: process_ok. Templates staged (Soft Skills-style + news-briefing-style); secret rejection works (api_key / AIza… refused). promoted_to_corpus: false.
 
 ## Status values
 
@@ -78,4 +78,4 @@ Never loosen `docs/experiments/bow_scout_gemini_confirm/baseline/v1/gates.json`.
 
 ## Ledger notes
 
-Seeded from corpus v1 gaps. Production AdClassifier and enable_bow_scout_gemini_confirm stay off. Frozen gates.json must not be loosened.
+Seeded from corpus v1 gaps. Production AdClassifier and enable_bow_scout_gemini_confirm stay off. Frozen gates.json must not be loosened. 2026-09-30 live: H001 measured (26→15 windows on real eps), H002 rejected, H003 no_win, H004 process_ok.
