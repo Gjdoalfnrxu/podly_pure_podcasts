@@ -7,7 +7,9 @@ or frozen gates.json. Live Groq/Gemini require env flags and PODLY_DAILY_BUDGET.
 from __future__ import annotations
 
 import json
-from collections.abc import Callable
+import os
+from collections.abc import Callable, Iterator
+from contextlib import contextmanager
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, cast
@@ -34,6 +36,8 @@ from podcast_processor.experiments.eval_harness import (
     evaluate_all,
 )
 from podcast_processor.experiments.gemini_confirm import (
+    GEMINI_LIVE_ENV,
+    GROQ_LIVE_ENV,
     any_live_confirm_enabled,
     default_live_confirm_model,
     groq_live_calls_enabled,
@@ -322,6 +326,25 @@ def run_hypothesis_experiment(
     }
 
 
+@contextmanager
+def live_confirm_flags_cleared() -> Iterator[None]:
+    """Drop live confirm flags so oracle baseline cannot spend or cache-poison.
+
+    `GeminiConfirmClient.confirm_window` goes live whenever
+    `PODLY_*_CONFIRM_LIVE` is set, even if the caller asked for oracle mock.
+    Baseline eval must always be mock; `--live` restores the flags afterward.
+    """
+    saved: dict[str, str] = {}
+    for name in (GEMINI_LIVE_ENV, GROQ_LIVE_ENV):
+        value = os.environ.pop(name, None)
+        if value is not None:
+            saved[name] = value
+    try:
+        yield
+    finally:
+        os.environ.update(saved)
+
+
 def _offline_and_block(
     *,
     offline: bool,
@@ -367,17 +390,18 @@ def run_daily_loop(
         )
 
     offline, cap, live_blocked = _offline_and_block(offline=offline, budget=budget)
-    baseline_results = eval_impl(
-        config=RECOMMENDED_CONFIG,
-        **_eval_kwargs(offline=True, cache_dir=cache),
-    )
-    baseline_failures = compare_to_snapshot(baseline_results)
-    if baseline_failures:
-        raise RuntimeError(
-            "Frozen baseline gates failed; fix regressions before experiments.\n"
-            + format_gate_failures(baseline_failures)
+    with live_confirm_flags_cleared():
+        baseline_results = eval_impl(
+            config=RECOMMENDED_CONFIG,
+            **_eval_kwargs(offline=True, cache_dir=cache),
         )
-    baseline_scored = score_candidate("frozen_recommended", baseline_results)
+        baseline_failures = compare_to_snapshot(baseline_results)
+        if baseline_failures:
+            raise RuntimeError(
+                "Frozen baseline gates failed; fix regressions before experiments.\n"
+                + format_gate_failures(baseline_failures)
+            )
+        baseline_scored = score_candidate("frozen_recommended", baseline_results)
 
     if hypothesis_ids:
         wanted = set(hypothesis_ids)
@@ -394,14 +418,25 @@ def run_daily_loop(
     run_root.mkdir(parents=True, exist_ok=True)
 
     hypothesis_rows: list[dict[str, Any]] = []
+    experiment_offline = offline or live_blocked is not None
     for item in picked:
-        row = run_hypothesis_experiment(
-            item,
-            baseline_results,
-            evaluate_fn=eval_impl,
-            offline=offline or live_blocked is not None,
-            cache_dir=cache,
-        )
+        if experiment_offline:
+            with live_confirm_flags_cleared():
+                row = run_hypothesis_experiment(
+                    item,
+                    baseline_results,
+                    evaluate_fn=eval_impl,
+                    offline=True,
+                    cache_dir=cache,
+                )
+        else:
+            row = run_hypothesis_experiment(
+                item,
+                baseline_results,
+                evaluate_fn=eval_impl,
+                offline=False,
+                cache_dir=cache,
+            )
         result_path = run_root / f"{item.id}.json"
         result_path.write_text(json.dumps(row, indent=2) + "\n", encoding="utf-8")
         last = LastResult(

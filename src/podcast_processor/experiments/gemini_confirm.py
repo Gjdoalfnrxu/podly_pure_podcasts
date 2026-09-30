@@ -356,17 +356,33 @@ class GeminiConfirmClient:
         path.write_text(json.dumps(payload), encoding="utf-8")
 
 
+def _empty_confirm(content: str) -> ConfirmResult:
+    return ConfirmResult(
+        is_ad=False,
+        ad_spans=[],
+        content_type="none",
+        confidence=0.0,
+        raw_response=content,
+    )
+
+
+def _payload_dict(payload: object) -> dict[str, Any] | None:
+    """Unwrap litellm/Gemini list-wrap (`[{...}]`) into a JSON object."""
+    if isinstance(payload, list):
+        payload = payload[0] if payload else None
+    if isinstance(payload, dict):
+        return payload
+    return None
+
+
 def _result_from_json(content: str) -> ConfirmResult:
     try:
-        payload = json.loads(content)
+        loaded = json.loads(content)
     except json.JSONDecodeError:
-        return ConfirmResult(
-            is_ad=False,
-            ad_spans=[],
-            content_type="none",
-            confidence=0.0,
-            raw_response=content,
-        )
+        return _empty_confirm(content)
+    payload = _payload_dict(loaded)
+    if payload is None:
+        return _empty_confirm(content)
     spans = [
         AdSpan(
             start=float(span["start"]),
@@ -374,7 +390,7 @@ def _result_from_json(content: str) -> ConfirmResult:
             confidence=float(span.get("confidence", 0.0)),
         )
         for span in payload.get("ad_spans", [])
-        if "start" in span and "end" in span
+        if isinstance(span, dict) and "start" in span and "end" in span
     ]
     return ConfirmResult(
         is_ad=bool(payload.get("is_ad") or spans),

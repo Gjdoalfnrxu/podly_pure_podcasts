@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 from dataclasses import asdict
 from typing import Any
 
@@ -98,6 +99,7 @@ def test_daily_loop_check_does_not_mutate_committed_ledger(
         run_date="2026-09-30",
         offline=True,
         update_ledger=False,
+        hypothesis_ids=["H001", "H004"],
         evaluate_fn=_fake_evaluate,
         cache_dir=tmp_path / "cache",
     )
@@ -106,7 +108,7 @@ def test_daily_loop_check_does_not_mutate_committed_ledger(
     assert summary["offline"] is True
     assert summary["production"]["enable_bow_scout_gemini_confirm"] is False
     assert DEFAULTS.ENABLE_BOW_SCOUT_GEMINI_CONFIRM is False
-    assert summary["hypotheses"]
+    assert [row["id"] for row in summary["hypotheses"]] == ["H001", "H004"]
     run_dir = tmp_path / "runs" / "2026-09-30"
     assert (run_dir / "summary.json").exists()
     assert (run_dir / "H001.json").exists()
@@ -119,7 +121,9 @@ def test_daily_loop_updates_last_result_when_requested(monkeypatch, tmp_path) ->
     monkeypatch.delenv(GROQ_API_KEY_ENV, raising=False)
     monkeypatch.delenv(GROQ_LIVE_ENV, raising=False)
     ledger_copy = tmp_path / "ledger"
-    write_ledger(load_ledger(), ledger_copy)
+    committed = load_ledger()
+    write_ledger(committed, ledger_copy)
+    original_h001 = next(row for row in committed.hypotheses if row.id == "H001")
     summary = run_daily_loop(
         ledger_root=ledger_copy,
         runs_dir=tmp_path / "runs",
@@ -137,12 +141,49 @@ def test_daily_loop_updates_last_result_when_requested(monkeypatch, tmp_path) ->
     assert item.last_result.run_date == "2026-09-30"
     assert item.status == "measured"
     h001 = next(row for row in reloaded.hypotheses if row.id == "H001")
-    assert h001.status == "open"
+    assert h001.status == original_h001.status
+
+
+def test_daily_loop_clears_live_flags_around_offline_baseline(
+    monkeypatch, tmp_path
+) -> None:
+    monkeypatch.setenv(GEMINI_API_KEY_ENV, "sk-test")
+    monkeypatch.setenv(GEMINI_LIVE_ENV, "true")
+    monkeypatch.setenv(GROQ_LIVE_ENV, "true")
+    seen_live: list[bool] = []
+
+    def tracking_evaluate(**kwargs: Any) -> dict[str, Any]:
+        del kwargs
+        seen_live.append(
+            os.environ.get(GEMINI_LIVE_ENV) == "true"
+            or os.environ.get(GROQ_LIVE_ENV) == "true"
+        )
+        return _fake_evaluate()
+
+    ledger_copy = tmp_path / "ledger"
+    write_ledger(load_ledger(), ledger_copy)
+    run_daily_loop(
+        ledger_root=ledger_copy,
+        runs_dir=tmp_path / "runs",
+        run_date="2026-09-30",
+        offline=False,
+        update_ledger=False,
+        hypothesis_ids=["H001"],
+        evaluate_fn=tracking_evaluate,
+        cache_dir=tmp_path / "cache",
+    )
+    assert seen_live[0] is False
+    assert seen_live[1] is True
+    assert os.environ.get(GEMINI_LIVE_ENV) == "true"
+    assert os.environ.get(GROQ_LIVE_ENV) == "true"
 
 
 def test_ranked_open_puts_confidence_first() -> None:
     from podcast_processor.experiments.hypothesis_ledger import rank_open_hypotheses
 
-    ranked = rank_open_hypotheses(load_ledger().hypotheses)
+    ledger = load_ledger()
+    for item in ledger.hypotheses:
+        item.status = "open"
+    ranked = rank_open_hypotheses(ledger.hypotheses)
     assert ranked[0].metric_primary == "confidence"
-    assert ranked[0].id == "H001"
+    assert [item.id for item in ranked] == ["H001", "H004", "H002", "H003"]

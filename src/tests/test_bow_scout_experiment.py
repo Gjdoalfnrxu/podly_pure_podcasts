@@ -35,6 +35,7 @@ from podcast_processor.experiments.gemini_confirm import (
     GeminiConfirmClient,
     groq_live_calls_enabled,
     live_calls_enabled,
+    _result_from_json,
 )
 from podcast_processor.experiments.removal_verifier import (
     ads_to_ms,
@@ -168,6 +169,90 @@ def test_gemini_live_path_uses_injected_completion(monkeypatch) -> None:
     assert result.is_ad
     assert result.ad_spans[0].end == 5.0
     assert "gemini" in result.model or result.model
+
+
+def test_result_from_json_accepts_object() -> None:
+    result = _result_from_json(
+        json.dumps(
+            {
+                "is_ad": True,
+                "ad_spans": [{"start": 1.0, "end": 2.0, "confidence": 0.8}],
+                "content_type": "promotional_external",
+                "confidence": 0.8,
+            }
+        )
+    )
+    assert result.is_ad is True
+    assert result.ad_spans[0].start == 1.0
+    assert result.content_type == "promotional_external"
+    assert result.confidence == 0.8
+
+
+def test_result_from_json_accepts_list_wrap() -> None:
+    """litellm/Gemini sometimes returns a one-element JSON list instead of an object."""
+    wrapped = [
+        {
+            "is_ad": True,
+            "ad_spans": [{"start": 10.0, "end": 20.0, "confidence": 0.9}],
+            "content_type": "promotional_external",
+            "confidence": 0.9,
+        }
+    ]
+    result = _result_from_json(json.dumps(wrapped))
+    assert result.is_ad is True
+    assert result.ad_spans[0].end == 20.0
+    assert result.content_type == "promotional_external"
+
+
+def test_result_from_json_non_object_is_not_ad() -> None:
+    for raw in ("[]", "null", '"nope"', "1"):
+        result = _result_from_json(raw)
+        assert result.is_ad is False
+        assert result.ad_spans == []
+        assert result.content_type == "none"
+
+
+def test_live_path_parses_list_wrapped_completion(monkeypatch) -> None:
+    monkeypatch.setenv(GEMINI_API_KEY_ENV, "sk-test")
+    monkeypatch.setenv(GEMINI_LIVE_ENV, "true")
+    window = ScoutWindow(
+        start_time=0.0,
+        end_time=5.0,
+        start_seq=0,
+        end_seq=0,
+        segment_indices=[0],
+        peak_score=1.0,
+        cue_types=["url"],
+        segments=[ScoutSegment(0, 0.0, 5.0, "Visit example.com today.")],
+    )
+
+    def list_wrapped_completion(**kwargs):
+        del kwargs
+        return SimpleNamespace(
+            choices=[
+                SimpleNamespace(
+                    message=SimpleNamespace(
+                        content=json.dumps(
+                            [
+                                {
+                                    "is_ad": True,
+                                    "ad_spans": [
+                                        {"start": 0.0, "end": 5.0, "confidence": 0.9}
+                                    ],
+                                    "content_type": "promotional_external",
+                                    "confidence": 0.9,
+                                }
+                            ]
+                        )
+                    )
+                )
+            ]
+        )
+
+    client = GeminiConfirmClient(mock_mode="echo", completion_fn=list_wrapped_completion)
+    result = client.confirm_window(window, "t", "topic")
+    assert result.is_ad is True
+    assert result.ad_spans[0].end == 5.0
 
 
 def test_live_flag_alone_is_not_enough(monkeypatch) -> None:
