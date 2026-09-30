@@ -33,9 +33,9 @@ from podcast_processor.experiments.gemini_confirm import (
     GROQ_API_KEY_ENV,
     GROQ_LIVE_ENV,
     GeminiConfirmClient,
+    _result_from_json,
     groq_live_calls_enabled,
     live_calls_enabled,
-    _result_from_json,
 )
 from podcast_processor.experiments.removal_verifier import (
     ads_to_ms,
@@ -249,7 +249,9 @@ def test_live_path_parses_list_wrapped_completion(monkeypatch) -> None:
             ]
         )
 
-    client = GeminiConfirmClient(mock_mode="echo", completion_fn=list_wrapped_completion)
+    client = GeminiConfirmClient(
+        mock_mode="echo", completion_fn=list_wrapped_completion
+    )
     result = client.confirm_window(window, "t", "topic")
     assert result.is_ad is True
     assert result.ad_spans[0].end == 5.0

@@ -368,10 +368,13 @@ def _empty_confirm(content: str) -> ConfirmResult:
 
 def _payload_dict(payload: object) -> dict[str, Any] | None:
     """Unwrap litellm/Gemini list-wrap (`[{...}]`) into a JSON object."""
-    if isinstance(payload, list):
-        payload = payload[0] if payload else None
-    if isinstance(payload, dict):
-        return payload
+    candidate: object = payload
+    if isinstance(candidate, list):
+        if not candidate:
+            return None
+        candidate = candidate[0]
+    if isinstance(candidate, dict):
+        return {str(key): value for key, value in candidate.items()}
     return None
 
 
