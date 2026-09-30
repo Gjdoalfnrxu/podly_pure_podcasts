@@ -2,6 +2,8 @@
 
 Generated at `2026-09-30T23:06:19+00:00`. Mode: **live** (Whisper + Gemini confirm; cache-first). Session spend **$0.0511**.
 
+Full live-session writeup: [`RESULTS.md`](RESULTS.md).
+
 - Daily budget: `$0.50` (hard stop `$0.45`)
 - Production flag `enable_bow_scout_gemini_confirm`: `false`
 - Feed default strategy: `llm`
