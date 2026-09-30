@@ -11,7 +11,7 @@ import json
 from dataclasses import asdict, dataclass
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any, Literal
+from typing import Any, Literal, cast
 
 MetricPrimary = Literal["confidence", "detection", "cost"]
 HypothesisStatus = Literal[
@@ -115,10 +115,11 @@ def _require_str(payload: dict[str, Any], key: str) -> str:
 def _parse_predicted(raw: object) -> PredictedEffect:
     if not isinstance(raw, dict):
         raise TypeError("predicted_effect must be an object")
+    data = cast(dict[str, Any], raw)
     return PredictedEffect(
-        confidence=str(raw.get("confidence") or ""),
-        detection=str(raw.get("detection") or ""),
-        cost=str(raw.get("cost") or ""),
+        confidence=str(data.get("confidence") or ""),
+        detection=str(data.get("detection") or ""),
+        cost=str(data.get("cost") or ""),
     )
 
 
@@ -127,24 +128,25 @@ def _parse_last_result(raw: object) -> LastResult | None:
         return None
     if not isinstance(raw, dict):
         raise TypeError("last_result must be an object or null")
-    score = raw.get("score")
+    data = cast(dict[str, Any], raw)
+    score = data.get("score")
     if score is not None and not isinstance(score, dict):
         raise TypeError("last_result.score must be an object or null")
-    passed = raw.get("passed_gates")
+    passed = data.get("passed_gates")
     if passed is not None and not isinstance(passed, bool):
         raise TypeError("last_result.passed_gates must be a bool or null")
     return LastResult(
-        run_date=str(raw["run_date"]) if raw.get("run_date") is not None else None,
-        run_dir=str(raw["run_dir"]) if raw.get("run_dir") is not None else None,
+        run_date=str(data["run_date"]) if data.get("run_date") is not None else None,
+        run_dir=str(data["run_dir"]) if data.get("run_dir") is not None else None,
         summary_path=(
-            str(raw["summary_path"]) if raw.get("summary_path") is not None else None
+            str(data["summary_path"]) if data.get("summary_path") is not None else None
         ),
         hypothesis_result_path=(
-            str(raw["hypothesis_result_path"])
-            if raw.get("hypothesis_result_path") is not None
+            str(data["hypothesis_result_path"])
+            if data.get("hypothesis_result_path") is not None
             else None
         ),
-        verdict=str(raw["verdict"]) if raw.get("verdict") is not None else None,
+        verdict=str(data["verdict"]) if data.get("verdict") is not None else None,
         passed_gates=passed,
         score=dict(score) if isinstance(score, dict) else None,
     )
@@ -153,20 +155,21 @@ def _parse_last_result(raw: object) -> LastResult | None:
 def _parse_hypothesis(raw: object) -> Hypothesis:
     if not isinstance(raw, dict):
         raise TypeError("hypothesis rows must be objects")
-    metric = _require_str(raw, "metric_primary")
+    data = cast(dict[str, Any], raw)
+    metric = _require_str(data, "metric_primary")
     if metric not in VALID_PRIMARIES:
         raise ValueError(
             f"metric_primary must be one of {sorted(VALID_PRIMARIES)}, got {metric!r}"
         )
-    status = _require_str(raw, "status")
+    status = _require_str(data, "status")
     if status not in VALID_STATUSES:
         raise ValueError(
             f"status must be one of {sorted(VALID_STATUSES)}, got {status!r}"
         )
-    experiment = raw.get("experiment") or {}
+    experiment = data.get("experiment") or {}
     if not isinstance(experiment, dict):
         raise TypeError("experiment must be an object")
-    rank_raw = raw.get("rank")
+    rank_raw = data.get("rank")
     rank: int | None
     if rank_raw is None:
         rank = None
@@ -175,15 +178,15 @@ def _parse_hypothesis(raw: object) -> Hypothesis:
     else:
         raise TypeError("rank must be an int or null")
     return Hypothesis(
-        id=_require_str(raw, "id"),
-        statement=_require_str(raw, "statement"),
-        metric_primary=metric,  # type: ignore[arg-type]
-        status=status,  # type: ignore[arg-type]
-        predicted_effect=_parse_predicted(raw.get("predicted_effect") or {}),
-        experiment=dict(experiment),
+        id=_require_str(data, "id"),
+        statement=_require_str(data, "statement"),
+        metric_primary=cast(MetricPrimary, metric),
+        status=cast(HypothesisStatus, status),
+        predicted_effect=_parse_predicted(data.get("predicted_effect") or {}),
+        experiment=dict(cast(dict[str, Any], experiment)),
         rank=rank,
-        last_result=_parse_last_result(raw.get("last_result")),
-        notes=str(raw.get("notes") or ""),
+        last_result=_parse_last_result(data.get("last_result")),
+        notes=str(data.get("notes") or ""),
     )
 
 

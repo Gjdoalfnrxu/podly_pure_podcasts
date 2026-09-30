@@ -10,7 +10,7 @@ import json
 from collections.abc import Callable
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 from podcast_processor.experiments.baseline import (
     compare_to_snapshot,
@@ -45,7 +45,9 @@ from podcast_processor.experiments.golden_ingest import (
     validate_golden_payload,
 )
 from podcast_processor.experiments.hypothesis_ledger import (
+    VALID_STATUSES,
     Hypothesis,
+    HypothesisStatus,
     LastResult,
     Ledger,
     load_ledger,
@@ -412,10 +414,13 @@ def run_daily_loop(
             score=row["scored"],
         )
         if update_ledger:
+            next_status = str(row["status"])
+            if next_status not in VALID_STATUSES:
+                raise ValueError(f"invalid status {next_status!r}")
             update_hypothesis(
                 ledger,
                 item.id,
-                status=row["status"],  # type: ignore[arg-type]
+                status=cast(HypothesisStatus, next_status),
                 last_result=last,
             )
         hypothesis_rows.append(
