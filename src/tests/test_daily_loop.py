@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import os
 from dataclasses import asdict
 from typing import Any
@@ -186,4 +187,50 @@ def test_ranked_open_puts_confidence_first() -> None:
         item.status = "open"
     ranked = rank_open_hypotheses(ledger.hypotheses)
     assert ranked[0].metric_primary == "confidence"
-    assert [item.id for item in ranked] == ["H001", "H004", "H002", "H003"]
+    assert [item.id for item in ranked] == [
+        "H001",
+        "H004",
+        "H005",
+        "H006",
+        "H002",
+        "H007",
+        "H003",
+        "H008",
+    ]
+
+
+def test_daily_loop_h005_style_golden_promo_records_window_drop(
+    monkeypatch, tmp_path
+) -> None:
+    monkeypatch.delenv(GEMINI_API_KEY_ENV, raising=False)
+    monkeypatch.delenv(GEMINI_LIVE_ENV, raising=False)
+    monkeypatch.delenv(GROQ_API_KEY_ENV, raising=False)
+    monkeypatch.delenv(GROQ_LIVE_ENV, raising=False)
+    ledger_copy = tmp_path / "ledger"
+    write_ledger(load_ledger(), ledger_copy)
+    summary = run_daily_loop(
+        ledger_root=ledger_copy,
+        runs_dir=tmp_path / "runs",
+        run_date="2026-10-01",
+        offline=True,
+        update_ledger=True,
+        hypothesis_ids=["H005"],
+        evaluate_fn=_fake_evaluate,
+        cache_dir=tmp_path / "cache",
+    )
+    assert summary["hypotheses"][0]["id"] == "H005"
+    payload = json.loads(
+        (tmp_path / "runs" / "2026-10-01" / "H005.json").read_text(encoding="utf-8")
+    )
+    assert payload["extras"]["kind"] == "style_golden_promo"
+    comparison = payload["extras"]["style_comparison"]
+    assert comparison
+    assert comparison[0]["fixture_id"] == "soft_skills_style_interview"
+    assert comparison[0]["windows_dropped"] >= 1
+    assert payload["extras"]["style_confidence_win"] is True
+    assert payload["extras"]["production_promo_pattern_unchanged"] is True
+    reloaded = load_ledger(ledger_copy)
+    item = next(row for row in reloaded.hypotheses if row.id == "H005")
+    assert item.status == "accepted"
+    assert item.last_result is not None
+    assert item.last_result.verdict == "fold_eligible"

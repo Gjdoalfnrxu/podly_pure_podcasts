@@ -46,4 +46,7 @@ Synthetic skeletons (not real shows) are produced by
 `example_the_daily_style_payload()` and
 `example_soft_skills_style_payload()` in
 `src/podcast_processor/experiments/golden_ingest.py`. Hypothesis `H004`
-runs those validators on every daily loop.
+runs those validators on every daily loop. `H005` / `H006` expand the
+same skeletons into `soft_skills_style_interview()` and
+`news_briefing_style_code_cta()` in `fixtures.py` (still synthetic; not
+in corpus v1 until an explicit `--write-corpus --update-baseline`).

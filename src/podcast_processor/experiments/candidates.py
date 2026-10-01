@@ -65,6 +65,35 @@ class StorytellingScoutDetector(CueDetector):
         return total, signals
 
 
+def duration_gated_midroll_probe(
+    episode: EpisodeFixture,
+    windows: list[ScoutWindow],
+    config: Any,
+    *,
+    min_duration_seconds: float = 900.0,
+    fraction: float = 0.4,
+    half_window_seconds: float = 20.0,
+) -> list[ScoutWindow]:
+    """Cue-sparse recovery that stays inside the +10% scout-token ε.
+
+    H002's 60s midroll probe also fired on short ad-free episodes (4707
+    scout tokens vs 3901, limit 4291). Gate by duration so 10-minute
+    `ad_free_interview` is skipped and only longer cue-sparse host-reads
+    get a tight window. Smaller than storytelling padding (4338 tokens).
+    """
+    if windows:
+        return windows
+    if float(episode.duration_seconds) + 1e-12 < min_duration_seconds:
+        return windows
+    return cheap_midroll_probe(
+        episode,
+        windows,
+        config,
+        fraction=fraction,
+        half_window_seconds=half_window_seconds,
+    )
+
+
 def cheap_midroll_probe(
     episode: EpisodeFixture,
     windows: list[ScoutWindow],

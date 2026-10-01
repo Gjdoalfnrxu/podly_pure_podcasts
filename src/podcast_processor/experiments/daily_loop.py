@@ -29,12 +29,15 @@ from podcast_processor.experiments.candidates import (
     StorytellingScoutDetector,
     TightPromoCueDetector,
     cheap_midroll_probe,
+    duration_gated_midroll_probe,
 )
 from podcast_processor.experiments.eval_harness import (
     DEFAULT_SWEEP,
     RECOMMENDED_CONFIG,
     evaluate_all,
+    evaluate_episode,
 )
+from podcast_processor.experiments.fixtures import style_golden_fixtures
 from podcast_processor.experiments.gemini_confirm import (
     GEMINI_LIVE_ENV,
     GROQ_LIVE_ENV,
@@ -166,6 +169,53 @@ def _live_provider(offline: bool) -> str:
     return "mock"
 
 
+def _style_row_summary(row: dict[str, Any]) -> dict[str, Any]:
+    confirm = row["paths"]["scout_confirm"]
+    return {
+        "fixture_id": row["fixture_id"],
+        "n_windows": row["n_windows"],
+        "ad_hit_rate": row["ad_hit_rate"],
+        "time_recall": confirm["time_recall"],
+        "time_precision": confirm["time_precision"],
+        "residual_strong_cue_rate": confirm["residual_strong_cue_rate"],
+        "scout_input_tokens": row["scout_confirm"]["input_tokens"],
+        "scout_precision": row["scout_precision"],
+    }
+
+
+def _style_confidence_win(recommended: dict[str, Any], tight: dict[str, Any]) -> bool:
+    """TightPromo drops tech-speech windows without labeled-ad recall loss."""
+    return (
+        int(tight["n_windows"]) < int(recommended["n_windows"])
+        and float(tight["time_recall"]) + 1e-12 >= float(recommended["time_recall"])
+        and float(tight["ad_hit_rate"]) + 1e-12 >= float(recommended["ad_hit_rate"])
+    )
+
+
+def _cheap_recovery_eval_kwargs(
+    variant: str, *, offline: bool, cache_dir: Path
+) -> dict[str, Any]:
+    if variant == "storytelling_phrase":
+        return _eval_kwargs(
+            offline=offline,
+            cache_dir=cache_dir,
+            detector=StorytellingScoutDetector(include_scout_extras=True),
+        )
+    if variant == "cheap_midroll_probe":
+        return _eval_kwargs(
+            offline=offline,
+            cache_dir=cache_dir,
+            window_postprocess=cheap_midroll_probe,
+        )
+    if variant == "duration_gated_midroll_probe":
+        return _eval_kwargs(
+            offline=offline,
+            cache_dir=cache_dir,
+            window_postprocess=duration_gated_midroll_probe,
+        )
+    raise ValueError(f"unknown cheap_recovery variant {variant!r}")
+
+
 def _eval_kwargs(
     *,
     offline: bool,
@@ -198,6 +248,10 @@ def run_hypothesis_experiment(
     candidates: list[RankedCandidate] = []
     extras: dict[str, Any] = {"kind": kind}
 
+    params = item.experiment.get("params") or {}
+    if not isinstance(params, dict):
+        params = {}
+
     if kind == "cue_pattern":
         detector = TightPromoCueDetector(include_scout_extras=True)
         results = evaluate_fn(
@@ -207,31 +261,79 @@ def run_hypothesis_experiment(
         scored = score_candidate(item.id, results)
         candidates.append(scored)
         extras["detector"] = "TightPromoCueDetector"
+    elif kind == "style_golden_promo":
+        detector = TightPromoCueDetector(include_scout_extras=True)
+        results = evaluate_fn(
+            config=RECOMMENDED_CONFIG,
+            **_eval_kwargs(offline=offline, cache_dir=cache_dir, detector=detector),
+        )
+        scored = score_candidate(item.id, results)
+        candidates.append(scored)
+        extras["detector"] = "TightPromoCueDetector"
+        fixture_names = params.get("fixtures")
+        names = (
+            [str(name) for name in fixture_names]
+            if isinstance(fixture_names, list)
+            else None
+        )
+        style_eps = style_golden_fixtures(names)
+        eval_episode_kwargs: dict[str, Any] = {
+            "cache_dir": cache_dir,
+            "confirm_mock_mode": "oracle",
+        }
+        style_rows: list[dict[str, Any]] = []
+        wins: list[bool] = []
+        for episode in style_eps:
+            rec_row = evaluate_episode(
+                episode, RECOMMENDED_CONFIG, **eval_episode_kwargs
+            )
+            tight_row = evaluate_episode(
+                episode,
+                RECOMMENDED_CONFIG,
+                detector=detector,
+                **eval_episode_kwargs,
+            )
+            rec_summary = _style_row_summary(rec_row)
+            tight_summary = _style_row_summary(tight_row)
+            win = _style_confidence_win(rec_summary, tight_summary)
+            wins.append(win)
+            style_rows.append(
+                {
+                    "fixture_id": episode.fixture_id,
+                    "recommended": rec_summary,
+                    "tight_promo": tight_summary,
+                    "confidence_win": win,
+                    "windows_dropped": int(rec_summary["n_windows"])
+                    - int(tight_summary["n_windows"]),
+                }
+            )
+        extras["style_comparison"] = style_rows
+        extras["style_confidence_win"] = bool(wins) and all(wins)
+        extras["promotes_to_corpus"] = False
+        extras["production_promo_pattern_unchanged"] = True
     elif kind == "cheap_recovery":
-        story = evaluate_fn(
+        raw_variants = params.get("variants")
+        variants = (
+            [str(name) for name in raw_variants]
+            if isinstance(raw_variants, list) and raw_variants
+            else ["storytelling_phrase", "cheap_midroll_probe"]
+        )
+        first_results: dict[str, Any] | None = None
+        for variant in variants:
+            variant_results = evaluate_fn(
+                config=RECOMMENDED_CONFIG,
+                **_cheap_recovery_eval_kwargs(
+                    variant, offline=offline, cache_dir=cache_dir
+                ),
+            )
+            if first_results is None:
+                first_results = variant_results
+            candidates.append(score_candidate(f"{item.id}-{variant}", variant_results))
+        extras["variants"] = variants
+        results = first_results or evaluate_fn(
             config=RECOMMENDED_CONFIG,
-            **_eval_kwargs(
-                offline=offline,
-                cache_dir=cache_dir,
-                detector=StorytellingScoutDetector(include_scout_extras=True),
-            ),
+            **_eval_kwargs(offline=offline, cache_dir=cache_dir),
         )
-        probe = evaluate_fn(
-            config=RECOMMENDED_CONFIG,
-            **_eval_kwargs(
-                offline=offline,
-                cache_dir=cache_dir,
-                window_postprocess=cheap_midroll_probe,
-            ),
-        )
-        candidates.extend(
-            [
-                score_candidate(f"{item.id}-storytelling", story),
-                score_candidate(f"{item.id}-midroll-probe", probe),
-            ]
-        )
-        extras["variants"] = ["storytelling_phrase", "cheap_midroll_probe"]
-        results = story
     elif kind == "pad_sweep":
         extra_cfgs = list(DEFAULT_SWEEP)
         extra_cfgs.extend(
@@ -250,6 +352,17 @@ def run_hypothesis_experiment(
                 ),
             ]
         )
+        for spec in params.get("extra_configs") or []:
+            if not isinstance(spec, dict):
+                continue
+            extra_cfgs.append(
+                ScoutConfig(
+                    threshold=float(spec.get("threshold", 0.5)),
+                    pad_seconds=float(spec.get("pad_seconds", 15.0)),
+                    pad_segments=int(spec.get("pad_segments", 3)),
+                    include_scout_extras=bool(spec.get("include_scout_extras", True)),
+                )
+            )
         sweep_eval = evaluate_fn(
             config=RECOMMENDED_CONFIG,
             sweep=extra_cfgs,
@@ -297,7 +410,11 @@ def run_hypothesis_experiment(
     winner = next((row for row in ranked if not row.rejected), None)
     process_only = kind == "golden_ingest"
     improved = False
-    if winner is not None and not process_only:
+    if kind == "style_golden_promo":
+        improved = bool(extras.get("style_confidence_win")) and (
+            winner is not None and not winner.rejected
+        )
+    elif winner is not None and not process_only:
         improved = _improved_for_primary(item.metric_primary, winner, baseline_macro)
     # Multiple variants: accepted only if a survivor improved the primary.
     representative = winner or (
@@ -314,11 +431,16 @@ def run_hypothesis_experiment(
     extras["improved_primary"] = improved
     extras["fold_eligible"] = status == "accepted"
     extras["production_flag"] = bool(DEFAULTS.ENABLE_BOW_SCOUT_GEMINI_CONFIRM)
+    scored_json = representative.to_json()
+    if kind == "style_golden_promo":
+        scored_json["style_confidence_win"] = extras.get("style_confidence_win")
+        scored_json["style_comparison"] = extras.get("style_comparison")
+        scored_json["promotes_to_corpus"] = extras.get("promotes_to_corpus")
     return {
         "hypothesis_id": item.id,
         "status": status,
         "verdict": verdict,
-        "scored": representative.to_json(),
+        "scored": scored_json,
         "candidates": [row.to_json() for row in ranked],
         "extras": extras,
         "live_llm": bool(results.get("live_llm") or results.get("live_gemini")),

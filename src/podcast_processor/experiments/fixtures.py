@@ -364,6 +364,117 @@ def chapter_style_ad_break() -> EpisodeFixture:
     )
 
 
+def soft_skills_style_interview() -> EpisodeFixture:
+    """Workplace-interview golden: labeled `use code` + unlabeled `code <word>`.
+
+    Extends the H004 `example_soft_skills_style_payload` skeleton into a
+    12-minute synthetic episode. Not a real Soft Skills transcript.
+    """
+    segments = _segments_for_duration(12 * 60)
+    preroll = [
+        "Welcome back to the workplace interview.",
+        "Go to examplesponsor.com/show and use code SOFT20.",
+        "That is examplesponsor.com/show for ten percent off.",
+    ]
+    tech_speech = [
+        "The guest described a one-on-one that went sideways.",
+        "During the code review the team found a race.",
+        "The code path for retries is too hot in production.",
+        "We walked through a code sample on the whiteboard.",
+        "I want to pause on that idea of backpressure.",
+    ]
+    _overlay(segments, 0.0, preroll)
+    _overlay(segments, 6 * 60, tech_speech)
+    return EpisodeFixture(
+        fixture_id="soft_skills_style_interview",
+        title="Synthetic interview-style golden (tech-speech FPs)",
+        podcast_title="Example Workplace Show",
+        podcast_topic="management interviews",
+        duration_seconds=12 * 60,
+        segments=segments,
+        labeled_ads=[
+            LabeledAd(
+                5.0,
+                15.0,
+                "preroll",
+                "synthetic sponsor; use code SOFT20",
+            )
+        ],
+        notes=(
+            "Soft Skills-style synthetic interview from H004 templates. "
+            "Labeled preroll uses `use code SOFT20`. Unlabeled mid-episode "
+            "`code review` / `code path` / `code sample` are tech-speech "
+            "promo FPs for TightPromo vs production CueDetector. Not a "
+            "real show; not copyrighted episode text."
+        ),
+    )
+
+
+def news_briefing_style_code_cta() -> EpisodeFixture:
+    """News-briefing golden: unlabeled `code <word>` beside labeled `use code SAVE`.
+
+    Extends the H004 `example_the_daily_style_payload` skeleton. Not The Daily.
+    """
+    segments = _segments_for_duration(10 * 60)
+    intro = [
+        "From the example newsroom, this is the morning briefing.",
+        "Today the team walks through a public policy hearing.",
+    ]
+    tech_speech = [
+        "Reporters described a code review of the leaked draft.",
+        "The code path in the filing system was the bottleneck.",
+    ]
+    sponsor = [
+        "This episode is sponsored by Example Bank.",
+        "Visit examplebank.com/brief and use code SAVE50.",
+        "Promo SAVE50 works through Friday.",
+    ]
+    _overlay(segments, 0.0, intro)
+    _overlay(segments, 3 * 60, tech_speech)
+    _overlay(segments, 7 * 60, sponsor)
+    return EpisodeFixture(
+        fixture_id="news_briefing_style_code_cta",
+        title="Synthetic news-briefing golden (code speech vs SAVE CTA)",
+        podcast_title="Example Morning Briefing",
+        podcast_topic="news",
+        duration_seconds=10 * 60,
+        segments=segments,
+        labeled_ads=[
+            LabeledAd(
+                420.0,
+                435.0,
+                "midroll",
+                "synthetic sponsor; use code SAVE50",
+            )
+        ],
+        notes=(
+            "News-briefing-style synthetic from H004 templates. Unlabeled "
+            "`code review` / `code path` sit beside a labeled `use code "
+            "SAVE50` midroll so TightPromo can be scored offline. Not NYT "
+            "text; not a real show."
+        ),
+    )
+
+
+def style_golden_fixtures(names: list[str] | None = None) -> list[EpisodeFixture]:
+    """Soft Skills / news-briefing style goldens used by H005/H006.
+
+    Not in builder_fixtures() until an explicit corpus promotion.
+    """
+    rows = [
+        soft_skills_style_interview(),
+        news_briefing_style_code_cta(),
+    ]
+    if names:
+        wanted = set(names)
+        selected = [episode for episode in rows if episode.fixture_id in wanted]
+        missing = wanted - {episode.fixture_id for episode in selected}
+        if missing:
+            raise KeyError(f"unknown style golden fixture ids: {sorted(missing)}")
+        return selected
+    return rows
+
+
 def builder_fixtures() -> list[EpisodeFixture]:
     """Python generators for the golden corpus (used by --write-corpus)."""
     return [

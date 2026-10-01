@@ -276,11 +276,12 @@ def evaluate_all(
     window_postprocess: Any | None = None,
     confirm_model: str | None = None,
     confirm_mock_mode: str = "oracle",
+    episodes: list[EpisodeFixture] | None = None,
 ) -> dict[str, Any]:
     recommended = config or RECOMMENDED_CONFIG
     # `sweep=[]` skips the extra configs; only `None` means the default sweep.
     configs = DEFAULT_SWEEP if sweep is None else sweep
-    episodes = all_fixtures()
+    episodes = list(episodes) if episodes is not None else all_fixtures()
     eval_kwargs: dict[str, Any] = {
         "cache_dir": cache_dir,
         "detector": detector,

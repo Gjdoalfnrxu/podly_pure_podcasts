@@ -112,7 +112,10 @@ Absolute priorities: **confidence** (no regressions) → **detection**
    confidence win 26→15 windows; offline corpus `no_win`), `H002`
    rejected (scout-token ε), `H003` measured/`no_win` (keep recommended
    pad), `H004` measured/`process_ok` (ingest process; no corpus
-   promote). Next open: none until Soft Skills-style goldens land.
+   promote). Next open (2026-10-01): `H005` (Soft Skills-style goldens
+   + TightPromo offline confidence), then `H006` (news-briefing code vs
+   SAVE CTA), `H007` (duration-gated cue-sparse recovery), `H008`
+   (pad/threshold micro-sweep).
 
 ### Run
 

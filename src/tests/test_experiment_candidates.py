@@ -10,12 +10,17 @@ from podcast_processor.experiments.candidates import (
     StorytellingScoutDetector,
     TightPromoCueDetector,
     cheap_midroll_probe,
+    duration_gated_midroll_probe,
 )
 from podcast_processor.experiments.eval_harness import RECOMMENDED_CONFIG
 from podcast_processor.experiments.fixtures import (
+    ad_free_interview,
     cue_sparse_storytelling,
+    news_briefing_style_code_cta,
     self_promo_vs_sponsor,
     short_preroll_only,
+    soft_skills_style_interview,
+    style_golden_fixtures,
 )
 
 
@@ -67,3 +72,67 @@ def test_cheap_midroll_probe_covers_cue_sparse_ad() -> None:
     assert window.start_time < 515.0
     # Do not add a second probe when scout already fired.
     assert cheap_midroll_probe(episode, probed, RECOMMENDED_CONFIG) == probed
+
+
+def test_duration_gated_probe_recovers_cue_sparse_skips_ad_free() -> None:
+    sparse = cue_sparse_storytelling()
+    recovered = duration_gated_midroll_probe(sparse, [], RECOMMENDED_CONFIG)
+    assert len(recovered) == 1
+    ad = sparse.labeled_ads[0]
+    assert overlap_seconds(
+        recovered[0].start_time, recovered[0].end_time, ad.start, ad.end
+    ) > 0.5
+    short = ad_free_interview()
+    assert short.duration_seconds < 900
+    assert duration_gated_midroll_probe(short, [], RECOMMENDED_CONFIG) == []
+    already = duration_gated_midroll_probe(sparse, recovered, RECOMMENDED_CONFIG)
+    assert already == recovered
+
+
+def test_soft_skills_style_tight_promo_drops_tech_speech_keeps_use_code() -> None:
+    episode = soft_skills_style_interview()
+    production = CueDetector(include_scout_extras=True)
+    tight = TightPromoCueDetector(include_scout_extras=True)
+    joined_tech = "During the code review the team found a race."
+    assert production.promo_pattern.search(joined_tech)
+    assert not tight.promo_pattern.search(joined_tech)
+    assert tight.promo_pattern.search("use code SOFT20")
+    rec_windows = BowScout(RECOMMENDED_CONFIG).scout(episode.segments)
+    tight_windows = BowScout(RECOMMENDED_CONFIG, detector=tight).scout(episode.segments)
+    assert len(tight_windows) < len(rec_windows)
+    ad = episode.labeled_ads[0]
+    assert any(
+        overlap_seconds(w.start_time, w.end_time, ad.start, ad.end) > 0.5
+        for w in rec_windows
+    )
+    assert any(
+        overlap_seconds(w.start_time, w.end_time, ad.start, ad.end) > 0.5
+        for w in tight_windows
+    )
+
+
+def test_news_briefing_style_has_code_speech_and_save_cta() -> None:
+    episode = news_briefing_style_code_cta()
+    texts = " ".join(seg.text for seg in episode.segments)
+    assert "code review" in texts
+    assert "use code SAVE50" in texts
+    tight = TightPromoCueDetector(include_scout_extras=True)
+    rec_windows = BowScout(RECOMMENDED_CONFIG).scout(episode.segments)
+    tight_windows = BowScout(RECOMMENDED_CONFIG, detector=tight).scout(episode.segments)
+    assert len(tight_windows) < len(rec_windows)
+    ad = episode.labeled_ads[0]
+    assert any(
+        overlap_seconds(w.start_time, w.end_time, ad.start, ad.end) > 0.5
+        for w in tight_windows
+    )
+
+
+def test_style_golden_fixtures_not_in_frozen_builders() -> None:
+    from podcast_processor.experiments.fixtures import builder_fixtures
+
+    builder_ids = {episode.fixture_id for episode in builder_fixtures()}
+    style_ids = {episode.fixture_id for episode in style_golden_fixtures()}
+    assert style_ids.isdisjoint(builder_ids)
+    assert style_golden_fixtures(["soft_skills_style_interview"])[0].fixture_id == (
+        "soft_skills_style_interview"
+    )
