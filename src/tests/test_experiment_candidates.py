@@ -79,9 +79,12 @@ def test_duration_gated_probe_recovers_cue_sparse_skips_ad_free() -> None:
     recovered = duration_gated_midroll_probe(sparse, [], RECOMMENDED_CONFIG)
     assert len(recovered) == 1
     ad = sparse.labeled_ads[0]
-    assert overlap_seconds(
-        recovered[0].start_time, recovered[0].end_time, ad.start, ad.end
-    ) > 0.5
+    assert (
+        overlap_seconds(
+            recovered[0].start_time, recovered[0].end_time, ad.start, ad.end
+        )
+        > 0.5
+    )
     short = ad_free_interview()
     assert short.duration_seconds < 900
     assert duration_gated_midroll_probe(short, [], RECOMMENDED_CONFIG) == []

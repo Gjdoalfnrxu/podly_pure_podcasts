@@ -235,6 +235,198 @@ def _eval_kwargs(
     return kwargs
 
 
+def _experiment_params(item: Hypothesis) -> dict[str, Any]:
+    params = item.experiment.get("params") or {}
+    return dict(params) if isinstance(params, dict) else {}
+
+
+def _run_cue_pattern(
+    item: Hypothesis,
+    *,
+    evaluate_fn: EvaluateFn,
+    offline: bool,
+    cache_dir: Path,
+) -> tuple[dict[str, Any], list[RankedCandidate], dict[str, Any]]:
+    detector = TightPromoCueDetector(include_scout_extras=True)
+    results = evaluate_fn(
+        config=RECOMMENDED_CONFIG,
+        **_eval_kwargs(offline=offline, cache_dir=cache_dir, detector=detector),
+    )
+    return (
+        results,
+        [score_candidate(item.id, results)],
+        {"detector": "TightPromoCueDetector"},
+    )
+
+
+def _run_style_golden_promo(
+    item: Hypothesis,
+    *,
+    evaluate_fn: EvaluateFn,
+    offline: bool,
+    cache_dir: Path,
+) -> tuple[dict[str, Any], list[RankedCandidate], dict[str, Any]]:
+    params = _experiment_params(item)
+    detector = TightPromoCueDetector(include_scout_extras=True)
+    results = evaluate_fn(
+        config=RECOMMENDED_CONFIG,
+        **_eval_kwargs(offline=offline, cache_dir=cache_dir, detector=detector),
+    )
+    fixture_names = params.get("fixtures")
+    names = (
+        [str(name) for name in fixture_names]
+        if isinstance(fixture_names, list)
+        else None
+    )
+    eval_episode_kwargs: dict[str, Any] = {
+        "cache_dir": cache_dir,
+        "confirm_mock_mode": "oracle",
+    }
+    style_rows: list[dict[str, Any]] = []
+    wins: list[bool] = []
+    for episode in style_golden_fixtures(names):
+        rec_row = evaluate_episode(episode, RECOMMENDED_CONFIG, **eval_episode_kwargs)
+        tight_row = evaluate_episode(
+            episode,
+            RECOMMENDED_CONFIG,
+            detector=detector,
+            **eval_episode_kwargs,
+        )
+        rec_summary = _style_row_summary(rec_row)
+        tight_summary = _style_row_summary(tight_row)
+        win = _style_confidence_win(rec_summary, tight_summary)
+        wins.append(win)
+        style_rows.append(
+            {
+                "fixture_id": episode.fixture_id,
+                "recommended": rec_summary,
+                "tight_promo": tight_summary,
+                "confidence_win": win,
+                "windows_dropped": int(rec_summary["n_windows"])
+                - int(tight_summary["n_windows"]),
+            }
+        )
+    extras = {
+        "detector": "TightPromoCueDetector",
+        "style_comparison": style_rows,
+        "style_confidence_win": bool(wins) and all(wins),
+        "promotes_to_corpus": False,
+        "production_promo_pattern_unchanged": True,
+    }
+    return results, [score_candidate(item.id, results)], extras
+
+
+def _run_cheap_recovery(
+    item: Hypothesis,
+    *,
+    evaluate_fn: EvaluateFn,
+    offline: bool,
+    cache_dir: Path,
+) -> tuple[dict[str, Any], list[RankedCandidate], dict[str, Any]]:
+    params = _experiment_params(item)
+    raw_variants = params.get("variants")
+    variants = (
+        [str(name) for name in raw_variants]
+        if isinstance(raw_variants, list) and raw_variants
+        else ["storytelling_phrase", "cheap_midroll_probe"]
+    )
+    candidates: list[RankedCandidate] = []
+    first_results: dict[str, Any] | None = None
+    for variant in variants:
+        variant_results = evaluate_fn(
+            config=RECOMMENDED_CONFIG,
+            **_cheap_recovery_eval_kwargs(
+                variant, offline=offline, cache_dir=cache_dir
+            ),
+        )
+        if first_results is None:
+            first_results = variant_results
+        candidates.append(score_candidate(f"{item.id}-{variant}", variant_results))
+    results = first_results or evaluate_fn(
+        config=RECOMMENDED_CONFIG,
+        **_eval_kwargs(offline=offline, cache_dir=cache_dir),
+    )
+    return results, candidates, {"variants": variants}
+
+
+def _run_pad_sweep(
+    item: Hypothesis,
+    *,
+    evaluate_fn: EvaluateFn,
+    cache_dir: Path,
+) -> tuple[dict[str, Any], list[RankedCandidate], dict[str, Any]]:
+    params = _experiment_params(item)
+    extra_cfgs = list(DEFAULT_SWEEP)
+    extra_cfgs.extend(
+        [
+            ScoutConfig(
+                threshold=0.4,
+                pad_seconds=15.0,
+                pad_segments=3,
+                include_scout_extras=True,
+            ),
+            ScoutConfig(
+                threshold=0.6,
+                pad_seconds=10.0,
+                pad_segments=2,
+                include_scout_extras=True,
+            ),
+        ]
+    )
+    for spec in params.get("extra_configs") or []:
+        if not isinstance(spec, dict):
+            continue
+        extra_cfgs.append(
+            ScoutConfig(
+                threshold=float(spec.get("threshold", 0.5)),
+                pad_seconds=float(spec.get("pad_seconds", 15.0)),
+                pad_segments=int(spec.get("pad_segments", 3)),
+                include_scout_extras=bool(spec.get("include_scout_extras", True)),
+            )
+        )
+    sweep_eval = evaluate_fn(
+        config=RECOMMENDED_CONFIG,
+        sweep=extra_cfgs,
+        cache_dir=cache_dir,
+        confirm_mock_mode="oracle",
+    )
+    candidates: list[RankedCandidate] = []
+    for row in sweep_eval.get("sweep", []):
+        wrapped = results_with_macro(sweep_eval, row["config"], row["macro"])
+        label = (
+            "extras={include_scout_extras} t={threshold} pad={pad_seconds}/"
+            "{pad_segments}".format(**row["config"])
+        )
+        candidates.append(score_candidate(label, wrapped))
+    return sweep_eval, candidates, {}
+
+
+def _run_golden_ingest(
+    item: Hypothesis,
+    baseline_results: dict[str, Any],
+) -> tuple[dict[str, Any], list[RankedCandidate], dict[str, Any]]:
+    templates = [
+        example_soft_skills_style_payload(),
+        example_the_daily_style_payload(),
+    ]
+    checked = []
+    for payload in templates:
+        episode = validate_golden_payload(payload)
+        checked.append(
+            {
+                "id": episode.fixture_id,
+                "n_segments": len(episode.segments),
+                "n_labeled_ads": len(episode.labeled_ads),
+            }
+        )
+    scored = score_candidate(item.id, baseline_results)
+    extras = {
+        "templates_validated": checked,
+        "promotes_to_corpus": False,
+    }
+    return baseline_results, [scored], extras
+
+
 def run_hypothesis_experiment(
     item: Hypothesis,
     baseline_results: dict[str, Any],
@@ -245,166 +437,34 @@ def run_hypothesis_experiment(
 ) -> dict[str, Any]:
     kind = str(item.experiment.get("kind") or "offline_eval")
     baseline_macro = baseline_results["recommended"]["macro"]
-    candidates: list[RankedCandidate] = []
     extras: dict[str, Any] = {"kind": kind}
 
-    params = item.experiment.get("params") or {}
-    if not isinstance(params, dict):
-        params = {}
-
     if kind == "cue_pattern":
-        detector = TightPromoCueDetector(include_scout_extras=True)
-        results = evaluate_fn(
-            config=RECOMMENDED_CONFIG,
-            **_eval_kwargs(offline=offline, cache_dir=cache_dir, detector=detector),
+        results, candidates, extra = _run_cue_pattern(
+            item, evaluate_fn=evaluate_fn, offline=offline, cache_dir=cache_dir
         )
-        scored = score_candidate(item.id, results)
-        candidates.append(scored)
-        extras["detector"] = "TightPromoCueDetector"
     elif kind == "style_golden_promo":
-        detector = TightPromoCueDetector(include_scout_extras=True)
-        results = evaluate_fn(
-            config=RECOMMENDED_CONFIG,
-            **_eval_kwargs(offline=offline, cache_dir=cache_dir, detector=detector),
+        results, candidates, extra = _run_style_golden_promo(
+            item, evaluate_fn=evaluate_fn, offline=offline, cache_dir=cache_dir
         )
-        scored = score_candidate(item.id, results)
-        candidates.append(scored)
-        extras["detector"] = "TightPromoCueDetector"
-        fixture_names = params.get("fixtures")
-        names = (
-            [str(name) for name in fixture_names]
-            if isinstance(fixture_names, list)
-            else None
-        )
-        style_eps = style_golden_fixtures(names)
-        eval_episode_kwargs: dict[str, Any] = {
-            "cache_dir": cache_dir,
-            "confirm_mock_mode": "oracle",
-        }
-        style_rows: list[dict[str, Any]] = []
-        wins: list[bool] = []
-        for episode in style_eps:
-            rec_row = evaluate_episode(
-                episode, RECOMMENDED_CONFIG, **eval_episode_kwargs
-            )
-            tight_row = evaluate_episode(
-                episode,
-                RECOMMENDED_CONFIG,
-                detector=detector,
-                **eval_episode_kwargs,
-            )
-            rec_summary = _style_row_summary(rec_row)
-            tight_summary = _style_row_summary(tight_row)
-            win = _style_confidence_win(rec_summary, tight_summary)
-            wins.append(win)
-            style_rows.append(
-                {
-                    "fixture_id": episode.fixture_id,
-                    "recommended": rec_summary,
-                    "tight_promo": tight_summary,
-                    "confidence_win": win,
-                    "windows_dropped": int(rec_summary["n_windows"])
-                    - int(tight_summary["n_windows"]),
-                }
-            )
-        extras["style_comparison"] = style_rows
-        extras["style_confidence_win"] = bool(wins) and all(wins)
-        extras["promotes_to_corpus"] = False
-        extras["production_promo_pattern_unchanged"] = True
     elif kind == "cheap_recovery":
-        raw_variants = params.get("variants")
-        variants = (
-            [str(name) for name in raw_variants]
-            if isinstance(raw_variants, list) and raw_variants
-            else ["storytelling_phrase", "cheap_midroll_probe"]
-        )
-        first_results: dict[str, Any] | None = None
-        for variant in variants:
-            variant_results = evaluate_fn(
-                config=RECOMMENDED_CONFIG,
-                **_cheap_recovery_eval_kwargs(
-                    variant, offline=offline, cache_dir=cache_dir
-                ),
-            )
-            if first_results is None:
-                first_results = variant_results
-            candidates.append(score_candidate(f"{item.id}-{variant}", variant_results))
-        extras["variants"] = variants
-        results = first_results or evaluate_fn(
-            config=RECOMMENDED_CONFIG,
-            **_eval_kwargs(offline=offline, cache_dir=cache_dir),
+        results, candidates, extra = _run_cheap_recovery(
+            item, evaluate_fn=evaluate_fn, offline=offline, cache_dir=cache_dir
         )
     elif kind == "pad_sweep":
-        extra_cfgs = list(DEFAULT_SWEEP)
-        extra_cfgs.extend(
-            [
-                ScoutConfig(
-                    threshold=0.4,
-                    pad_seconds=15.0,
-                    pad_segments=3,
-                    include_scout_extras=True,
-                ),
-                ScoutConfig(
-                    threshold=0.6,
-                    pad_seconds=10.0,
-                    pad_segments=2,
-                    include_scout_extras=True,
-                ),
-            ]
+        results, candidates, extra = _run_pad_sweep(
+            item, evaluate_fn=evaluate_fn, cache_dir=cache_dir
         )
-        for spec in params.get("extra_configs") or []:
-            if not isinstance(spec, dict):
-                continue
-            extra_cfgs.append(
-                ScoutConfig(
-                    threshold=float(spec.get("threshold", 0.5)),
-                    pad_seconds=float(spec.get("pad_seconds", 15.0)),
-                    pad_segments=int(spec.get("pad_segments", 3)),
-                    include_scout_extras=bool(spec.get("include_scout_extras", True)),
-                )
-            )
-        sweep_eval = evaluate_fn(
-            config=RECOMMENDED_CONFIG,
-            sweep=extra_cfgs,
-            cache_dir=cache_dir,
-            confirm_mock_mode="oracle",
-        )
-        for row in sweep_eval.get("sweep", []):
-            wrapped = results_with_macro(sweep_eval, row["config"], row["macro"])
-            label = (
-                "extras={include_scout_extras} t={threshold} pad={pad_seconds}/"
-                "{pad_segments}".format(**row["config"])
-            )
-            candidates.append(score_candidate(label, wrapped))
-        results = sweep_eval
     elif kind == "golden_ingest":
-        templates = [
-            example_soft_skills_style_payload(),
-            example_the_daily_style_payload(),
-        ]
-        checked = []
-        for payload in templates:
-            episode = validate_golden_payload(payload)
-            checked.append(
-                {
-                    "id": episode.fixture_id,
-                    "n_segments": len(episode.segments),
-                    "n_labeled_ads": len(episode.labeled_ads),
-                }
-            )
-        # Process check uses the frozen eval as the gate: ingest must not
-        # require live keys and must not change production defaults.
-        scored = score_candidate(item.id, baseline_results)
-        candidates.append(scored)
-        extras["templates_validated"] = checked
-        extras["promotes_to_corpus"] = False
-        results = baseline_results
+        results, candidates, extra = _run_golden_ingest(item, baseline_results)
     else:
         results = evaluate_fn(
             config=RECOMMENDED_CONFIG,
             **_eval_kwargs(offline=offline, cache_dir=cache_dir),
         )
-        candidates.append(score_candidate(item.id, results))
+        candidates = [score_candidate(item.id, results)]
+        extra = {}
+    extras.update(extra)
 
     ranked = rank_candidates(candidates)
     winner = next((row for row in ranked if not row.rejected), None)
