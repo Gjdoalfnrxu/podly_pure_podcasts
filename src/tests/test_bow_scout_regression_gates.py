@@ -28,6 +28,7 @@ from podcast_processor.experiments.gemini_confirm import (
     GROQ_API_KEY_ENV,
     GROQ_LIVE_ENV,
 )
+from shared.env import GROQ_KEY_ENV
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 PRODUCTION_SUITE_FILES = DEFAULT_GATES["required_production_test_modules"]
@@ -38,6 +39,7 @@ def _no_live_gemini(monkeypatch) -> None:
     monkeypatch.delenv(GEMINI_API_KEY_ENV, raising=False)
     monkeypatch.delenv(GEMINI_LIVE_ENV, raising=False)
     monkeypatch.delenv(GROQ_API_KEY_ENV, raising=False)
+    monkeypatch.delenv(GROQ_KEY_ENV, raising=False)
     monkeypatch.delenv(GROQ_LIVE_ENV, raising=False)
 
 

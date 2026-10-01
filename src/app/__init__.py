@@ -32,6 +32,7 @@ from app.routes import register_routes
 from app.runtime_config import config, is_test
 from app.writer.client import writer_client as writer_client
 from shared import defaults as DEFAULTS
+from shared.env import groq_api_key
 from shared.processing_paths import get_in_root, get_srv_root
 
 setup_logger("global_logger", "src/instance/logs/app.log")
@@ -237,7 +238,7 @@ def _validate_env_key_conflicts() -> None:
       set but differ -> error
     """
     llm_key = os.environ.get("LLM_API_KEY")
-    groq_key = os.environ.get("GROQ_API_KEY")
+    groq_key = groq_api_key() or None
     llm_model = os.environ.get("LLM_MODEL") or DEFAULTS.LLM_DEFAULT_MODEL
     llm_model_norm = llm_model.strip().lower() if isinstance(llm_model, str) else ""
     groq_llm_selected = llm_model_norm.startswith("groq/")

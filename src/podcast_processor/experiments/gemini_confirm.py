@@ -26,12 +26,12 @@ from podcast_processor.experiments.types import (
     LabeledAd,
     ScoutWindow,
 )
+from shared.env import GROQ_API_KEY_ENV, groq_api_key
 
 GEMINI_API_KEY_ENV = "GEMINI_API_KEY"
 GEMINI_MODEL_ENV = "GEMINI_CONFIRM_MODEL"
 GEMINI_LIVE_ENV = "PODLY_GEMINI_CONFIRM_LIVE"
 DEFAULT_GEMINI_MODEL = "gemini/gemini-2.5-flash"
-GROQ_API_KEY_ENV = "GROQ_API_KEY"
 GROQ_MODEL_ENV = "GROQ_CONFIRM_MODEL"
 GROQ_LIVE_ENV = "PODLY_GROQ_CONFIRM_LIVE"
 DEFAULT_GROQ_CONFIRM_MODEL = "groq/openai/gpt-oss-120b"
@@ -65,8 +65,8 @@ def live_calls_enabled() -> bool:
 
 
 def groq_live_calls_enabled() -> bool:
-    """Groq live confirm. Requires GROQ_API_KEY and PODLY_GROQ_CONFIRM_LIVE."""
-    has_key = bool(os.environ.get(GROQ_API_KEY_ENV, "").strip())
+    """Groq live confirm. Requires GROQ_API_KEY (or GROQ_KEY) and PODLY_GROQ_CONFIRM_LIVE."""
+    has_key = bool(groq_api_key())
     return has_key and _flag_enabled(GROQ_LIVE_ENV)
 
 
@@ -298,8 +298,8 @@ class GeminiConfirmClient:
             )
         else:
             if groq_live_calls_enabled() and not live_calls_enabled():
-                groq_key = os.environ.get(GROQ_API_KEY_ENV, "").strip()
-                os.environ.setdefault("GROQ_API_KEY", groq_key)
+                groq_key = groq_api_key()
+                os.environ.setdefault(GROQ_API_KEY_ENV, groq_key)
             else:
                 api_key = os.environ.get(GEMINI_API_KEY_ENV, "").strip()
                 os.environ.setdefault("GEMINI_API_KEY", api_key)

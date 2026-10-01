@@ -18,6 +18,7 @@ from podcast_processor.experiments.gemini_confirm import (
 )
 from podcast_processor.experiments.hypothesis_ledger import load_ledger, write_ledger
 from shared import defaults as DEFAULTS
+from shared.env import GROQ_KEY_ENV
 
 
 def _results_from_snapshot() -> dict[str, Any]:
@@ -89,6 +90,7 @@ def test_daily_loop_check_does_not_mutate_committed_ledger(
     monkeypatch.delenv(GEMINI_API_KEY_ENV, raising=False)
     monkeypatch.delenv(GEMINI_LIVE_ENV, raising=False)
     monkeypatch.delenv(GROQ_API_KEY_ENV, raising=False)
+    monkeypatch.delenv(GROQ_KEY_ENV, raising=False)
     monkeypatch.delenv(GROQ_LIVE_ENV, raising=False)
     committed = load_ledger()
     ledger_copy = tmp_path / "ledger"
@@ -120,6 +122,7 @@ def test_daily_loop_updates_last_result_when_requested(monkeypatch, tmp_path) ->
     monkeypatch.delenv(GEMINI_API_KEY_ENV, raising=False)
     monkeypatch.delenv(GEMINI_LIVE_ENV, raising=False)
     monkeypatch.delenv(GROQ_API_KEY_ENV, raising=False)
+    monkeypatch.delenv(GROQ_KEY_ENV, raising=False)
     monkeypatch.delenv(GROQ_LIVE_ENV, raising=False)
     ledger_copy = tmp_path / "ledger"
     committed = load_ledger()
@@ -205,6 +208,7 @@ def test_daily_loop_h005_style_golden_promo_records_window_drop(
     monkeypatch.delenv(GEMINI_API_KEY_ENV, raising=False)
     monkeypatch.delenv(GEMINI_LIVE_ENV, raising=False)
     monkeypatch.delenv(GROQ_API_KEY_ENV, raising=False)
+    monkeypatch.delenv(GROQ_KEY_ENV, raising=False)
     monkeypatch.delenv(GROQ_LIVE_ENV, raising=False)
     ledger_copy = tmp_path / "ledger"
     write_ledger(load_ledger(), ledger_copy)

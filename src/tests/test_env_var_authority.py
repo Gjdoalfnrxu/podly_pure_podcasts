@@ -151,7 +151,13 @@ class TestEnvVarAuthority:
     ) -> None:
         """Verify that DB values are used when no env var is set."""
         # Clear any LLM env vars
-        for key in ["LLM_API_KEY", "OPENAI_API_KEY", "GROQ_API_KEY", "LLM_MODEL"]:
+        for key in [
+            "LLM_API_KEY",
+            "OPENAI_API_KEY",
+            "GROQ_API_KEY",
+            "GROQ_KEY",
+            "LLM_MODEL",
+        ]:
             monkeypatch.delenv(key, raising=False)
 
         with app.app_context():
@@ -291,7 +297,13 @@ class TestEnvOverriddenFieldStripping:
 
     def test_no_stripping_when_no_env_vars(self, monkeypatch: Any) -> None:
         """Verify that fields are kept when no env vars are set."""
-        for key in ["LLM_API_KEY", "OPENAI_API_KEY", "GROQ_API_KEY", "LLM_MODEL"]:
+        for key in [
+            "LLM_API_KEY",
+            "OPENAI_API_KEY",
+            "GROQ_API_KEY",
+            "GROQ_KEY",
+            "LLM_MODEL",
+        ]:
             monkeypatch.delenv(key, raising=False)
 
         from app.routes.config_routes import _strip_env_overridden_fields

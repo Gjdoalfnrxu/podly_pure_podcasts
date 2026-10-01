@@ -14,6 +14,9 @@ Live confirm (spends money, cache-first):
 
   export PODLY_DAILY_BUDGET=0.50
   export GEMINI_API_KEY=...          # and/or GROQ_API_KEY
+  # Cloud Agents live runs: GROQ_KEY is accepted as an alias of GROQ_API_KEY
+  # (canonical GROQ_API_KEY wins if both are set).
+  export GROQ_KEY=...                # optional alias for GROQ_API_KEY
   export PODLY_GEMINI_CONFIRM_LIVE=true   # and/or PODLY_GROQ_CONFIRM_LIVE=true
   PYTHONPATH=src uv run python scripts/experiments/run_daily_loop.py --live
 """

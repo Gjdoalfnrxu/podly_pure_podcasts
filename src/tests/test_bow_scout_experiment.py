@@ -44,6 +44,7 @@ from podcast_processor.experiments.removal_verifier import (
 )
 from podcast_processor.experiments.types import LabeledAd, ScoutSegment, ScoutWindow
 from shared import defaults as DEFAULTS
+from shared.env import GROQ_KEY_ENV
 
 MINI_FIXTURE = DATA_DIR / "mini_preroll.json"
 
@@ -97,6 +98,7 @@ def test_gemini_mock_does_not_need_api_key(monkeypatch, tmp_path: Path) -> None:
     monkeypatch.delenv(GEMINI_API_KEY_ENV, raising=False)
     monkeypatch.delenv(GEMINI_LIVE_ENV, raising=False)
     monkeypatch.delenv(GROQ_API_KEY_ENV, raising=False)
+    monkeypatch.delenv(GROQ_KEY_ENV, raising=False)
     monkeypatch.delenv(GROQ_LIVE_ENV, raising=False)
     assert live_calls_enabled() is False
     assert groq_live_calls_enabled() is False
@@ -265,8 +267,16 @@ def test_live_flag_alone_is_not_enough(monkeypatch) -> None:
 
 def test_groq_live_flag_alone_is_not_enough(monkeypatch) -> None:
     monkeypatch.delenv(GROQ_API_KEY_ENV, raising=False)
+    monkeypatch.delenv(GROQ_KEY_ENV, raising=False)
     monkeypatch.setenv(GROQ_LIVE_ENV, "true")
     assert groq_live_calls_enabled() is False
+
+
+def test_groq_live_calls_enabled_accepts_groq_key_alias(monkeypatch) -> None:
+    monkeypatch.delenv(GROQ_API_KEY_ENV, raising=False)
+    monkeypatch.setenv(GROQ_KEY_ENV, "gsk_test_alias_only")
+    monkeypatch.setenv(GROQ_LIVE_ENV, "true")
+    assert groq_live_calls_enabled() is True
 
 
 def test_adclassifier_chunk_plan_matches_no_ad_walk() -> None:
