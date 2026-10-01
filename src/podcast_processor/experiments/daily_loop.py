@@ -30,6 +30,7 @@ from podcast_processor.experiments.candidates import (
     TightPromoCueDetector,
     cheap_midroll_probe,
     duration_gated_midroll_probe,
+    wider_duration_gated_midroll_probe,
 )
 from podcast_processor.experiments.eval_harness import (
     DEFAULT_SWEEP,
@@ -212,6 +213,12 @@ def _cheap_recovery_eval_kwargs(
             offline=offline,
             cache_dir=cache_dir,
             window_postprocess=duration_gated_midroll_probe,
+        )
+    if variant == "wider_duration_gated_midroll_probe":
+        return _eval_kwargs(
+            offline=offline,
+            cache_dir=cache_dir,
+            window_postprocess=wider_duration_gated_midroll_probe,
         )
     raise ValueError(f"unknown cheap_recovery variant {variant!r}")
 

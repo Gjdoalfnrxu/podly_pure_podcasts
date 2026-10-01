@@ -30,6 +30,8 @@ def test_committed_ledger_seeds_and_priority_order() -> None:
         "H006",
         "H007",
         "H008",
+        "H009",
+        "H010",
     ]
     by_id = {item.id: item for item in ledger.hypotheses}
     assert by_id["H001"].status == "measured"
@@ -40,12 +42,14 @@ def test_committed_ledger_seeds_and_priority_order() -> None:
     assert by_id["H006"].status == "accepted"
     assert by_id["H007"].status == "accepted"
     assert by_id["H008"].status == "accepted"
+    assert by_id["H009"].status == "open"
+    assert by_id["H010"].status == "open"
     assert by_id["H001"].last_result is not None
     assert by_id["H001"].last_result.score is not None
     assert by_id["H001"].last_result.score.get("live_baseline_windows") == 26
     assert by_id["H001"].last_result.score.get("live_tight_windows") == 15
     ranked = rank_open_hypotheses(ledger.hypotheses)
-    assert [item.id for item in ranked] == []
+    assert [item.id for item in ranked] == ["H010", "H009"]
     assert {item.metric_primary for item in ledger.hypotheses} <= set(METRIC_PRIORITY)
 
 
@@ -84,7 +88,7 @@ def test_update_last_result_roundtrip(tmp_path: Path) -> None:
     assert "H001" in md_file.read_text(encoding="utf-8")
     open_ids = [row.id for row in rank_open_hypotheses(reloaded.hypotheses)]
     assert "H001" not in open_ids
-    assert "H008" not in open_ids
+    assert "H010" in open_ids
 
 
 def test_rejects_bad_primary() -> None:

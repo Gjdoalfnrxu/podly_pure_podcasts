@@ -94,6 +94,32 @@ def duration_gated_midroll_probe(
     )
 
 
+def wider_duration_gated_midroll_probe(
+    episode: EpisodeFixture,
+    windows: list[ScoutWindow],
+    config: Any,
+    *,
+    min_duration_seconds: float = 900.0,
+    fraction: float = 0.4,
+    half_window_seconds: float = 35.0,
+) -> list[ScoutWindow]:
+    """H009 candidate: 70s duration-gated window to lift cue-sparse time recall.
+
+    H007's 40s window (half=20) hits the Away host-read but only covers
+    480-500s of the 480-515s label (time recall 0.571). A 70s window
+    centered at 40% duration should cover the full labeled span while
+    still skipping short ad-free interviews.
+    """
+    return duration_gated_midroll_probe(
+        episode,
+        windows,
+        config,
+        min_duration_seconds=min_duration_seconds,
+        fraction=fraction,
+        half_window_seconds=half_window_seconds,
+    )
+
+
 def cheap_midroll_probe(
     episode: EpisodeFixture,
     windows: list[ScoutWindow],

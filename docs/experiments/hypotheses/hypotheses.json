@@ -5,8 +5,8 @@
     "detection",
     "cost"
   ],
-  "updated_at": "2026-10-01T17:12:45.647559+00:00",
-  "notes": "2026-10-01 afternoon: H006 folded (news-briefing golden; n=11), H007 folded (duration-gated probe; hit 1.0, F1 0.9752), H008 folded (pad 12/2; scout tok 5337, token\u2193 92.05%). Live catch-up on tip ade7344 for H006 (Gemini $0.0049 on box). Production AdClassifier and enable_bow_scout_gemini_confirm stay off. Frozen gates.json not loosened. TightPromo stays experiment-only. Open queue empty until follow-ups are seeded. 2026-10-01 morning: H005 accepted. 2026-09-30 live: H001 measured (26\u219215), H002 rejected, H003 no_win, H004 process_ok.",
+  "updated_at": "2026-10-01T17:16:50.810939+00:00",
+  "notes": "2026-10-01 afternoon wrap-up: H006/H007/H008 folded. Seeded H010 (TightPromo as eval detector; confidence) and H009 (wider duration-gated probe; detection). Production AdClassifier and enable_bow_scout_gemini_confirm stay off. Frozen gates.json not loosened. TightPromo stays experiment-only until H010. Live catch-up tip ade7344; box Gemini $0.0049. 2026-10-01 morning: H005 accepted. 2026-09-30 live: H001 measured (26\u219215), H002 rejected, H003 no_win, H004 process_ok.",
   "hypotheses": [
     {
       "id": "H001",
@@ -471,6 +471,49 @@
         }
       },
       "notes": "2026-10-01 afternoon: accepted. extras=True t=0.5 pad=12/2 ties confirm F1/recall/hit vs pad=15/3 after H007 (F1 0.9752, recall 0.9610, hit 1.0) and cuts scout tokens 5698\u21925337. Folded into RECOMMENDED_CONFIG; snapshot updated; gates.json \u03b5 unchanged. Production neighbor window unchanged."
+    },
+    {
+      "id": "H009",
+      "statement": "Widen the duration-gated midroll probe from 40s (H007 half_window=20) to 70s (half_window=35) so cue_sparse_storytelling time recall rises from 0.571 toward 1.0 without exceeding +10% of snapshot scout tokens (5337, limit ~5871), still skipping short ad-free interviews.",
+      "metric_primary": "detection",
+      "status": "open",
+      "predicted_effect": {
+        "confidence": "Must still pass frozen \u03b5. Short ad-free episodes must not gain a probe window.",
+        "detection": "Lift cue_sparse time recall from 0.571 toward 1.0 without dropping other fixtures' F1/hit.",
+        "cost": "One wider confirm window on long empty-scout episodes. Scout tokens must stay \u22645871."
+      },
+      "experiment": {
+        "kind": "cheap_recovery",
+        "params": {
+          "variants": [
+            "wider_duration_gated_midroll_probe"
+          ]
+        }
+      },
+      "rank": 9,
+      "last_result": null,
+      "notes": "Follow-up to H007. 2026-10-01 --check (ledger not updated): fold_eligible on post-H008 snapshot \u2014 confirm F1/recall/hit 1.0, scout tokens 5429 vs 5337 (limit ~5871). Do not fold from --check; next loop should fold if gates stay green. Production CueDetector extras stay off."
+    },
+    {
+      "id": "H010",
+      "statement": "Use TightPromoCueDetector as the experiment-package recommended scout detector now that both Soft Skills-style and news-briefing-style goldens are in corpus v1, so unlabeled `code <word>` tech-speech FPs drop offline while labeled use-code ads stay hits.",
+      "metric_primary": "confidence",
+      "status": "open",
+      "predicted_effect": {
+        "confidence": "Fewer scout windows on unlabeled code-review/path speech on the two style goldens; residual/recall on labeled use-code ads stay green.",
+        "detection": "Labeled-ad F1/recall/hit on frozen v1 must still pass gates.",
+        "cost": "Fewer confirm tokens on tech-speech FPs; scout tokens should not rise."
+      },
+      "experiment": {
+        "kind": "cue_pattern",
+        "params": {
+          "candidate": "TightPromoCueDetector",
+          "production_change": false
+        }
+      },
+      "rank": 10,
+      "last_result": null,
+      "notes": "H001/H005/H006 follow-up. 2026-10-01 --check (ledger not updated): measured/no_win on confidence (residual/precision unchanged) even though TightPromo scout tokens 4652 vs recommended 5337. Fold would set eval recommended detector only. Do not copy TIGHT_PROMO_PATTERN into production CueDetector.promo_pattern. Do not flip enable_bow_scout_gemini_confirm."
     }
   ]
 }

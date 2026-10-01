@@ -119,8 +119,8 @@ Absolute priorities: **confidence** (no regressions) → **detection**
    afternoon — duration-gated midroll probe folded into eval
    `DEFAULT_WINDOW_POSTPROCESS` (cue-sparse block hit 0→1; time recall
    0.961). `H008` accepted 2026-10-01 afternoon — recommended pad 12s/2
-   segments (ties detection, scout tokens 5698→5337). Next open: seed
-   follow-ups after this wrap-up (`H009`+).
+   segments (ties detection, scout tokens 5698→5337). Next open: `H010`
+   (TightPromo as eval detector), then `H009` (wider duration-gated probe).
 
 ### Run
 

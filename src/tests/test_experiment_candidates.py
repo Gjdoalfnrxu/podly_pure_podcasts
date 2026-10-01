@@ -11,6 +11,7 @@ from podcast_processor.experiments.candidates import (
     TightPromoCueDetector,
     cheap_midroll_probe,
     duration_gated_midroll_probe,
+    wider_duration_gated_midroll_probe,
 )
 from podcast_processor.experiments.eval_harness import RECOMMENDED_CONFIG
 from podcast_processor.experiments.fixtures import (
@@ -90,6 +91,20 @@ def test_duration_gated_probe_recovers_cue_sparse_skips_ad_free() -> None:
     assert duration_gated_midroll_probe(short, [], RECOMMENDED_CONFIG) == []
     already = duration_gated_midroll_probe(sparse, recovered, RECOMMENDED_CONFIG)
     assert already == recovered
+
+
+def test_wider_duration_gated_probe_covers_full_cue_sparse_ad() -> None:
+    sparse = cue_sparse_storytelling()
+    recovered = wider_duration_gated_midroll_probe(sparse, [], RECOMMENDED_CONFIG)
+    assert len(recovered) == 1
+    ad = sparse.labeled_ads[0]
+    assert recovered[0].start_time <= ad.start + 1e-9
+    assert recovered[0].end_time >= ad.end - 1e-9
+    assert duration_gated_midroll_probe(sparse, [], RECOMMENDED_CONFIG)[0].end_time < (
+        ad.end - 1e-9
+    )
+    short = ad_free_interview()
+    assert wider_duration_gated_midroll_probe(short, [], RECOMMENDED_CONFIG) == []
 
 
 def test_evaluate_all_default_applies_duration_gated_probe() -> None:
