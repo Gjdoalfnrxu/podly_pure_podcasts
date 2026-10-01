@@ -1,7 +1,7 @@
 {
   "version": "v1",
   "corpus_id": "bow_scout_gemini_confirm",
-  "n_fixtures": 10,
+  "n_fixtures": 11,
   "fixtures": [
     {
       "id": "classic_host_reads",
@@ -161,6 +161,21 @@
           "end": 15.0,
           "kind": "preroll",
           "notes": "synthetic sponsor; use code SOFT20"
+        }
+      ]
+    },
+    {
+      "id": "news_briefing_style_code_cta",
+      "sha256": "36bd41bd242b2c0afbec6ce5d6f554808620f81e5fb7c353501a3ef504dc4ed9",
+      "n_segments": 120,
+      "n_labeled_ads": 1,
+      "duration_seconds": 600,
+      "labeled_ads": [
+        {
+          "start": 420.0,
+          "end": 435.0,
+          "kind": "midroll",
+          "notes": "synthetic sponsor; use code SAVE50"
         }
       ]
     }

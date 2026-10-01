@@ -1,0 +1,131 @@
+{
+  "hypothesis_id": "H006",
+  "status": "accepted",
+  "verdict": "fold_eligible",
+  "scored": {
+    "name": "H006",
+    "rejected": false,
+    "gate_failures": [],
+    "detection_f1": 0.9090909090909091,
+    "detection_recall": 0.9090909090909091,
+    "ad_hit_rate": 0.9090909090909091,
+    "token_reduction_pct": 93.20887087038837,
+    "scout_input_tokens": 4608.0,
+    "config": {
+      "threshold": 0.5,
+      "pad_seconds": 15.0,
+      "pad_segments": 3,
+      "merge_gap_seconds": 8.0,
+      "include_scout_extras": true,
+      "include_self_promo": false
+    },
+    "style_confidence_win": true,
+    "style_comparison": [
+      {
+        "fixture_id": "news_briefing_style_code_cta",
+        "recommended": {
+          "fixture_id": "news_briefing_style_code_cta",
+          "n_windows": 2,
+          "ad_hit_rate": 1.0,
+          "time_recall": 1.0,
+          "time_precision": 1.0,
+          "residual_strong_cue_rate": 0.016666666666666666,
+          "scout_input_tokens": 746,
+          "scout_precision": 0.14285714285714285
+        },
+        "tight_promo": {
+          "fixture_id": "news_briefing_style_code_cta",
+          "n_windows": 1,
+          "ad_hit_rate": 1.0,
+          "time_recall": 1.0,
+          "time_precision": 1.0,
+          "residual_strong_cue_rate": 0.016666666666666666,
+          "scout_input_tokens": 382,
+          "scout_precision": 0.2727272727272727
+        },
+        "confidence_win": true,
+        "windows_dropped": 1
+      }
+    ],
+    "promotes_to_corpus": true,
+    "live_confidence_win": true,
+    "live_baseline_windows": 2,
+    "live_tight_windows": 1,
+    "live_windows_dropped": 1,
+    "live_real_eps_baseline_windows": 26,
+    "live_real_eps_tight_windows": 15,
+    "live_window_reduction_pct": 42.3,
+    "live_dropped_window_class": "technical_discussion",
+    "live_tip_sha": "ade73440e24f18bba300eb5a860910cb494f0936"
+  },
+  "candidates": [
+    {
+      "name": "H006",
+      "rejected": false,
+      "gate_failures": [],
+      "detection_f1": 0.9090909090909091,
+      "detection_recall": 0.9090909090909091,
+      "ad_hit_rate": 0.9090909090909091,
+      "token_reduction_pct": 93.20887087038837,
+      "scout_input_tokens": 4608.0,
+      "config": {
+        "threshold": 0.5,
+        "pad_seconds": 15.0,
+        "pad_segments": 3,
+        "merge_gap_seconds": 8.0,
+        "include_scout_extras": true,
+        "include_self_promo": false
+      }
+    }
+  ],
+  "extras": {
+    "kind": "style_golden_promo",
+    "detector": "TightPromoCueDetector",
+    "style_comparison": [
+      {
+        "fixture_id": "news_briefing_style_code_cta",
+        "recommended": {
+          "fixture_id": "news_briefing_style_code_cta",
+          "n_windows": 2,
+          "ad_hit_rate": 1.0,
+          "time_recall": 1.0,
+          "time_precision": 1.0,
+          "residual_strong_cue_rate": 0.016666666666666666,
+          "scout_input_tokens": 746,
+          "scout_precision": 0.14285714285714285
+        },
+        "tight_promo": {
+          "fixture_id": "news_briefing_style_code_cta",
+          "n_windows": 1,
+          "ad_hit_rate": 1.0,
+          "time_recall": 1.0,
+          "time_precision": 1.0,
+          "residual_strong_cue_rate": 0.016666666666666666,
+          "scout_input_tokens": 382,
+          "scout_precision": 0.2727272727272727
+        },
+        "confidence_win": true,
+        "windows_dropped": 1
+      }
+    ],
+    "style_confidence_win": true,
+    "promotes_to_corpus": true,
+    "production_promo_pattern_unchanged": true,
+    "ranking": "Confidence-first ranking (survivors only are fold-eligible):\n- #1 H006: F1=0.9091 recall=0.9091 hit=0.9091 tok\u2193=93.21% scout_tok=4608\nFold-eligible winner: H006",
+    "improved_primary": true,
+    "fold_eligible": true,
+    "production_flag": false,
+    "fold_note": "Promoted news_briefing_style_code_cta into builder_fixtures / corpus v1 and snapshot.json. gates.json unchanged. TightPromo not copied to production.",
+    "live_confidence_win": true,
+    "live_baseline_windows": 2,
+    "live_tight_windows": 1,
+    "live_windows_dropped": 1,
+    "live_real_eps_baseline_windows": 26,
+    "live_real_eps_tight_windows": 15,
+    "live_window_reduction_pct": 42.3,
+    "live_dropped_window_class": "technical_discussion",
+    "live_tip_sha": "ade73440e24f18bba300eb5a860910cb494f0936"
+  },
+  "live_llm": false,
+  "corpus_version": "v1"
+}

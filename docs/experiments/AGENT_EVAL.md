@@ -112,10 +112,12 @@ Absolute priorities: **confidence** (no regressions) → **detection**
    confidence win 26→15 windows; offline corpus `no_win`), `H002`
    rejected (scout-token ε), `H003` measured/`no_win` (keep recommended
    pad), `H004` measured/`process_ok` (ingest process; no corpus
-   promote). Next open (2026-10-01 after H005 fold): `H006` (news-briefing
-   code vs SAVE CTA), then `H007` (duration-gated cue-sparse recovery),
-   `H008` (pad/threshold micro-sweep). `H005` accepted — Soft Skills-style
-   synthetic golden promoted to corpus v1; TightPromo stays experiment-only.
+   promote). `H005` accepted — Soft Skills-style synthetic golden promoted
+   to corpus v1. `H006` accepted 2026-10-01 afternoon — news-briefing-style
+   synthetic golden (`news_briefing_style_code_cta`) promoted to corpus v1
+   (n=11); TightPromo stays experiment-only. Next open after H006 fold:
+   `H007` (duration-gated cue-sparse recovery), then `H008` (pad/threshold
+   micro-sweep).
 
 ### Run
 

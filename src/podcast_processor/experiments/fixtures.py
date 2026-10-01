@@ -491,6 +491,11 @@ def builder_fixtures() -> list[EpisodeFixture]:
         # episode text). TightPromo vs recommended dropped 2→1 scout
         # windows on unlabeled `code <word>` with labeled-ad recall 1.0.
         soft_skills_style_interview(),
+        # H006 2026-10-01: news-briefing-style synthetic (not The Daily /
+        # not NYT text). TightPromo vs recommended dropped 2→1 scout
+        # windows on unlabeled `code review` / `code path` with labeled
+        # `use code SAVE50` recall 1.0.
+        news_briefing_style_code_cta(),
     ]
 
 

@@ -1,69 +1,56 @@
 # Daily experiment run 2026-10-01
 
-Generated at `2026-10-01T15:59:41.784502+00:00`. Mode: **offline** (provider `mock`). Live Groq/Gemini **skipped** (`GROQ_API_KEY` / `GEMINI_API_KEY` not in environment).
+Generated at `2026-10-01T17:05:12.168728+00:00`. Mode: **offline** (provider `mock`) on this Cloud Agent. Live Groq skipped (Cloudflare 1010). Gemini live catch-up ran on a different machine (tip `ade73440e24f18bba300eb5a860910cb494f0936`; box spend **$0.0049** Gemini, Whisper $0).
 
-- Daily budget: `$0.50` (spent `$0.0000`)
+- Daily budget: `$0.50` (this offline session spent `$0.0000`)
 - Production flag `enable_bow_scout_gemini_confirm`: `false`
 - Feed default strategy: `llm`
-- Baseline gates (pre-fold, 9-fixture snapshot): **passed**
+- Baseline gates (post-H006, 11-fixture snapshot): **passed**
 - `gates.json`: **not loosened**
-- Fold: **H005 corpus promotion** (`soft_skills_style_interview` into corpus v1 + snapshot). TightPromo stays experiment-only.
+- Folds: **H005** (morning) + **H006** (afternoon) corpus promotions. TightPromo stays experiment-only.
 
 ## Spend
 
 | Source | USD |
 | --- | ---: |
-| Groq | $0.0000 (no key) |
-| Gemini | $0.0000 (no key) |
-| **Session total (billable)** | **$0.0000** |
+| Groq (this session) | $0.0000 (not called) |
+| Gemini (this session) | $0.0000 (not called) |
+| Gemini (box live catch-up) | $0.0049 |
+| **Session total (this agent, billable)** | **$0.0000** |
 
 ## Hypotheses this run
 
 | ID | Status | Verdict | Fold-eligible | Notes |
 | --- | --- | --- | --- | --- |
-| `H005` | accepted | fold_eligible | true | Style golden: recommended 2 windows → TightPromo 1; labeled-ad recall 1.0. Promoted synthetic builder to corpus v1. |
+| `H005` | accepted | fold_eligible | true | Morning: Soft Skills-style golden into corpus v1 (n=10). |
+| `H006` | accepted | fold_eligible | true | Afternoon: news-briefing-style golden into corpus v1 (n=11). Live 2→1 windows; Gemini classified dropped window as `technical_discussion`. |
 
-Seeded but not the day's pick: `H006` (news-briefing style golden), `H007` (duration-gated cue-sparse recovery), `H008` (pad=12/2 micro-sweep). `--check` showed all three gate-passing / fold-eligible on the 9-fixture snapshot; they remain **open** for a later dedicated run against the new 10-fixture snapshot.
+Seeded but not yet folded: `H007` (duration-gated cue-sparse recovery), `H008` (pad=12/2 micro-sweep). Measured later in this catch-up against the post-H006 snapshot.
 
-## H005 style fixture (offline oracle)
+## H006 style fixture (offline oracle + live confirm)
 
 | Detector | Windows | Hit | Confirm recall | Scout tok | Scout precision |
 | --- | ---: | ---: | ---: | ---: | ---: |
-| recommended CueDetector | 2 | 1.0 | 1.0 | 705 | 0.111 |
-| TightPromoCueDetector | 1 | 1.0 | 1.0 | 325 | 0.286 |
+| recommended CueDetector | 2 | 1.0 | 1.0 | 746 | 0.143 |
+| TightPromoCueDetector | 1 | 1.0 | 1.0 | 382 | 0.273 |
 
-Residual strong-cue rate unchanged (0.0208) because leftover scan uses production CueDetector, not TightPromo. Confidence win is the dropped tech-speech window.
+Live: Gemini kept `use code SAVE50`; dropped window class `technical_discussion`. Real eps still 26→15 (−42.3%). Residual strong-cue rate unchanged (0.0167) because leftover scan uses production CueDetector.
 
-## Frozen 9-fixture macros (H005 eval, pre-promotion)
+## Snapshot after H006 fold (n=11, recommended config)
 
-| Metric | Value |
-| --- | ---: |
-| `scout_confirm_mean_time_f1` | 0.8889 |
-| `scout_confirm_mean_time_recall` | 0.8889 |
-| `scout_confirm_mean_time_precision` | 1.0000 |
-| `scout_mean_ad_hit_rate` | 0.8889 |
-| `scout_mean_false_negative_rate` | 0.1111 |
-| `mean_token_reduction_pct` | 93.32 |
-| `sum_scout_input_tokens` | 3901.00 |
-| `scout_confirm_mean_residual_strong_cue_rate` | 0.0039 |
-
-TightPromo on frozen v1 matched these macros (same as H001 offline `no_win`); movement is on the new style golden.
-
-## Snapshot after H005 fold (n=10, recommended config)
-
-| Metric | Pre (n=9) | Post (n=10) |
+| Metric | Pre (n=10, post-H005) | Post (n=11) |
 | --- | ---: | ---: |
-| confirm F1 / recall / hit | 0.8889 | 0.9000 |
+| confirm F1 / recall / hit | 0.9000 | 0.9091 |
 | confirm precision | 1.0000 | 1.0000 |
-| FN rate | 0.1111 | 0.1000 |
-| residual strong-cue rate | 0.0039 | 0.0056 |
-| token↓ % | 93.32 | 92.80 |
-| scout tokens | 3901 | 4606 |
+| FN rate | 0.1000 | 0.0909 |
+| residual strong-cue rate | 0.0056 | 0.0066 |
+| token↓ % | 92.80 | 91.84 |
+| scout tokens | 4606 | 5352 |
 
-Mean recall rose because the new fixture is a labeled-ad hit; residual rose because unlabeled `code <word>` leftovers are now in the mean. Tolerances in `gates.json` are unchanged. Production flag still `False`.
+Mean recall rose because the new fixture is a labeled-ad hit; scout tokens rose by the briefing windows (746). Tolerances in `gates.json` are unchanged. Production flag still `False`. TightPromo on n=11 corpus uses 4608 scout tokens (drops tech-speech FPs on both style goldens) with the same 0.9091 F1/recall/hit; it stays experiment-only.
 
 ## Next open (ranked)
 
-`H006`, `H007`, `H008`
+`H007`, `H008`
 
 accepted = fold-eligible on the experiment package only. Do not set enable_bow_scout_gemini_confirm. Do not loosen gates.json. Snapshot updates require --update-baseline plus RESULTS notes.

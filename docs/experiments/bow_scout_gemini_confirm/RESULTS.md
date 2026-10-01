@@ -1,12 +1,18 @@
 # Bag-of-words scout + Gemini confirm: offline results
 
-Generated at `2026-10-01T16:00:38.507366+00:00` (UTC). No live Gemini calls were made; confirm is an **oracle mock** that keeps labeled ad overlap inside scout windows.
+Generated at `2026-10-01T17:04:41.314163+00:00` (UTC). No live Gemini calls were made; confirm is an **oracle mock** that keeps labeled ad overlap inside scout windows.
 
-## 2026-10-01 corpus promotion (H005)
+## 2026-10-01 corpus promotions
+
+### H005 (morning)
 
 Promoted `soft_skills_style_interview` (synthetic Soft Skills-*style* interview from H004 templates; **not** copyrighted episode text) into corpus v1 after TightPromo vs recommended dropped scout windows **2 → 1** on unlabeled `code review` / `code path` / `code sample`, with labeled `use code SOFT20` recall **1.0**. Frozen `gates.json` ε **not** loosened. Production `CueDetector.promo_pattern` and `enable_bow_scout_gemini_confirm` stay unchanged.
 
-Recommended-config macros after promotion (n=10): confirm F1/recall/hit **0.9000**, precision **1.0**, residual **0.0056**, scout tokens **4606**, token↓ **92.80%**. Cue-sparse storytelling remains the only labeled-ad miss.
+### H006 (afternoon)
+
+Promoted `news_briefing_style_code_cta` (synthetic news-briefing-*style* golden from H004 templates; **not** The Daily / **not** NYT text) into corpus v1 after TightPromo vs recommended dropped scout windows **2 → 1** on unlabeled `code review` / `code path`, with labeled `use code SAVE50` recall **1.0**. Live catch-up (tip `ade73440e24f18bba300eb5a860910cb494f0936`): Gemini classified the dropped window as `technical_discussion`; real eps still 26→15 (−42.3%). Frozen `gates.json` ε **not** loosened. TightPromo stays experiment-only. Production `CueDetector.promo_pattern` and `enable_bow_scout_gemini_confirm` stay unchanged.
+
+Recommended-config macros after H006 promotion (n=11): confirm F1/recall/hit **0.9091**, precision **1.0**, residual **0.0066**, scout tokens **5352**, token↓ **91.84%**. Cue-sparse storytelling remains the only labeled-ad miss.
 
 ## Hypotheses
 
@@ -27,28 +33,28 @@ Recommended-config macros after promotion (n=10): confirm F1/recall/hit **0.9000
 
 Production-like is an **offline oracle** of the current AdClassifier walk: labeled ads (perfect LLM) plus CueDetector neighbor expansion (extras off, window=5). Scout±confirm is CueDetector windows plus oracle Gemini confirm. Live Gemini is not used in default CI.
 
-Frozen corpus `v1` (10 fixtures). Agent contract: `docs/experiments/AGENT_EVAL.md`.
+Frozen corpus `v1` (11 fixtures). Agent contract: `docs/experiments/AGENT_EVAL.md`.
 
 | Path | Time recall | Time precision | Time F1 | Ad-block hit | FN rate | Residual cue rate | Input tokens |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| Production-like (oracle LLM + neighbor expand) | 100.0% | 59.0% | 73.2% | 100.0% | 0.0% | 0.0056 | 71675 |
-| Scout windows (pre-confirm) | 90.0% | 47.2% | 49.1% | 90.0% | 10.0% | — | — |
-| Scout + oracle confirm | 90.0% | 100.0% | 90.0% | 90.0% | 10.0% | 0.0056 | 4606 |
+| Production-like (oracle LLM + neighbor expand) | 100.0% | 57.6% | 72.0% | 100.0% | 0.0% | 0.0066 | 75866 |
+| Scout windows (pre-confirm) | 90.9% | 44.2% | 46.9% | 90.9% | 9.1% | — | — |
+| Scout + oracle confirm | 90.9% | 100.0% | 90.9% | 90.9% | 9.1% | 0.0066 | 5352 |
 
 ## Headline metrics (recommended config)
 
 | Metric | Value |
 | --- | ---: |
-| Scout ad-block hit rate | 90.0% |
-| Scout labeled-ad time coverage | 90.0% |
-| Scout window precision (pre-confirm) | 47.2% |
-| Scout+confirm time F1 | 90.0% |
-| False-negative risk (missed ad blocks) | 10.0% |
-| Residual strong-cue rate (after confirm cuts) | 0.0056 |
-| Mean token reduction vs full AdClassifier | 92.8% |
-| Mean USD reduction (est., similar $/M) | 82.7% |
-| Full-walk input tokens (sum) | 71675 |
-| Scout+confirm input tokens (sum) | 4606 |
+| Scout ad-block hit rate | 90.9% |
+| Scout labeled-ad time coverage | 90.9% |
+| Scout window precision (pre-confirm) | 44.2% |
+| Scout+confirm time F1 | 90.9% |
+| False-negative risk (missed ad blocks) | 9.1% |
+| Residual strong-cue rate (after confirm cuts) | 0.0066 |
+| Mean token reduction vs full AdClassifier | 91.8% |
+| Mean USD reduction (est., similar $/M) | 80.2% |
+| Full-walk input tokens (sum) | 75866 |
+| Scout+confirm input tokens (sum) | 5352 |
 | Repeat-episode scout input tokens (cached) | 0 |
 
 Hit rate is the fraction of **labeled ad blocks** that overlap a scout window. Coverage is the fraction of **labeled ad seconds** inside those windows. Precision is labeled-ad seconds / predicted seconds. F1 is the harmonic mean of time precision and recall after spans are merged.
@@ -67,6 +73,7 @@ Hit rate is the fraction of **labeled ad blocks** that overlap a scout window. C
 | stacked_midrolls | 216 | 2 | 100.0% | 100.0% | 43.8% | 1 | 8438 | 455 | 94.6% | — |
 | chapter_style_ad_break | 108 | 1 | 100.0% | 100.0% | 45.5% | 1 | 3974 | 377 | 90.5% | — |
 | soft_skills_style_interview | 144 | 1 | 100.0% | 100.0% | 11.1% | 2 | 5965 | 705 | 88.2% | — |
+| news_briefing_style_code_cta | 120 | 1 | 100.0% | 100.0% | 14.3% | 2 | 4191 | 746 | 82.2% | — |
 
 ### Fixture notes
 
@@ -80,6 +87,7 @@ Hit rate is the fraction of **labeled ad blocks** that overlap a scout window. C
 - `stacked_midrolls`: Two labeled ads 5s apart; scout padding/merge should cover both.
 - `chapter_style_ad_break`: Needs scout extras (ad_break + sponsor). Production CueDetector has none of URL/CTA/promo/phone/transition in the ad body.
 - `soft_skills_style_interview`: Soft Skills-style synthetic interview from H004 templates. Labeled preroll uses `use code SOFT20`. Unlabeled mid-episode `code review` / `code path` / `code sample` are tech-speech promo FPs for TightPromo vs production CueDetector. Not a real show; not copyrighted episode text.
+- `news_briefing_style_code_cta`: News-briefing-style synthetic from H004 templates. Unlabeled `code review` / `code path` sit beside a labeled `use code SAVE50` midroll so TightPromo can be scored offline. Not NYT text; not a real show.
 
 ## False-negative risk
 
@@ -95,14 +103,14 @@ Cue-sparse host-reads (brand story, no URL/CTA/phone/sponsor phrase) are the mai
 
 | extras | thresh | pad_s | pad_seg | mean hit | mean cov | mean prec | mean tok↓ |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| False | 0.5 | 15.0 | 3 | 80.0% | 80.0% | 52.7% | 93.8% |
-| False | 0.8 | 15.0 | 3 | 70.0% | 70.0% | 60.6% | 95.2% |
-| False | 1.0 | 15.0 | 3 | 70.0% | 70.0% | 60.9% | 95.3% |
-| True | 0.5 | 15.0 | 3 | 90.0% | 90.0% | 47.2% | 92.8% |
-| True | 0.8 | 0.0 | 0 | 80.0% | 76.0% | 82.2% | 95.5% |
-| True | 0.8 | 15.0 | 3 | 80.0% | 80.0% | 55.8% | 94.3% |
-| True | 0.8 | 30.0 | 5 | 80.0% | 80.0% | 46.8% | 93.2% |
-| True | 1.5 | 15.0 | 3 | 66.7% | 65.4% | 69.6% | 97.0% |
+| False | 0.5 | 15.0 | 3 | 81.8% | 81.8% | 49.3% | 92.7% |
+| False | 0.8 | 15.0 | 3 | 72.7% | 72.7% | 56.4% | 94.1% |
+| False | 1.0 | 15.0 | 3 | 72.7% | 72.7% | 56.8% | 94.2% |
+| True | 0.5 | 15.0 | 3 | 90.9% | 90.9% | 44.2% | 91.8% |
+| True | 0.8 | 0.0 | 0 | 81.8% | 78.2% | 77.8% | 94.7% |
+| True | 0.8 | 15.0 | 3 | 81.8% | 81.8% | 52.0% | 93.2% |
+| True | 0.8 | 30.0 | 5 | 81.8% | 81.8% | 43.4% | 91.8% |
+| True | 1.5 | 15.0 | 3 | 69.7% | 68.5% | 66.3% | 96.5% |
 
 Raising padding increases coverage of ads whose cues sit in the middle of the block (Gemini then sees the intro). It also lowers precision and spends more confirm tokens. Threshold 0.5 with extras and ±15s/±3 segments is the best recall/token trade-off on this set: it includes transition bumpers (`after the break`) used by the prompt.py Wildcard example (score 0.5) while self-promo-only lines (weight 0.4) stay below the cut. Threshold 0.8 drops those transition-only ads. Cue-sparse brand reads still miss at every threshold.
 

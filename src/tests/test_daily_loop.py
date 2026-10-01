@@ -202,6 +202,44 @@ def test_ranked_open_puts_confidence_first() -> None:
     ]
 
 
+def test_daily_loop_h006_style_golden_promo_records_window_drop(
+    monkeypatch, tmp_path
+) -> None:
+    monkeypatch.delenv(GEMINI_API_KEY_ENV, raising=False)
+    monkeypatch.delenv(GEMINI_LIVE_ENV, raising=False)
+    monkeypatch.delenv(GROQ_API_KEY_ENV, raising=False)
+    monkeypatch.delenv(GROQ_KEY_ENV, raising=False)
+    monkeypatch.delenv(GROQ_LIVE_ENV, raising=False)
+    ledger_copy = tmp_path / "ledger"
+    write_ledger(load_ledger(), ledger_copy)
+    summary = run_daily_loop(
+        ledger_root=ledger_copy,
+        runs_dir=tmp_path / "runs",
+        run_date="2026-10-01",
+        offline=True,
+        update_ledger=True,
+        hypothesis_ids=["H006"],
+        evaluate_fn=_fake_evaluate,
+        cache_dir=tmp_path / "cache",
+    )
+    assert summary["hypotheses"][0]["id"] == "H006"
+    payload = json.loads(
+        (tmp_path / "runs" / "2026-10-01" / "H006.json").read_text(encoding="utf-8")
+    )
+    assert payload["extras"]["kind"] == "style_golden_promo"
+    comparison = payload["extras"]["style_comparison"]
+    assert comparison
+    assert comparison[0]["fixture_id"] == "news_briefing_style_code_cta"
+    assert comparison[0]["windows_dropped"] >= 1
+    assert payload["extras"]["style_confidence_win"] is True
+    assert payload["extras"]["production_promo_pattern_unchanged"] is True
+    reloaded = load_ledger(ledger_copy)
+    item = next(row for row in reloaded.hypotheses if row.id == "H006")
+    assert item.status == "accepted"
+    assert item.last_result is not None
+    assert item.last_result.verdict == "fold_eligible"
+
+
 def test_daily_loop_h005_style_golden_promo_records_window_drop(
     monkeypatch, tmp_path
 ) -> None:

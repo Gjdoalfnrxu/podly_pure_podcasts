@@ -50,4 +50,6 @@ runs those validators on every daily loop. `H005` / `H006` expand the
 same skeletons into `soft_skills_style_interview()` and
 `news_briefing_style_code_cta()` in `fixtures.py` (still synthetic).
 `H005` promoted `soft_skills_style_interview` into corpus v1 on
-2026-10-01. `H006` remains experiment-only until that hypothesis runs.
+2026-10-01 (morning). `H006` promoted `news_briefing_style_code_cta`
+into corpus v1 on 2026-10-01 (afternoon). TightPromo stays
+experiment-only; production `CueDetector.promo_pattern` is unchanged.
