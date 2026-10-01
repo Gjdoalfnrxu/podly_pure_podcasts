@@ -1,7 +1,7 @@
 {
   "version": "v1",
   "corpus_id": "bow_scout_gemini_confirm",
-  "n_fixtures": 9,
+  "n_fixtures": 10,
   "fixtures": [
     {
       "id": "classic_host_reads",
@@ -146,6 +146,21 @@
           "end": 265.0,
           "kind": "midroll",
           "notes": "advertisement / after these messages / sponsored by"
+        }
+      ]
+    },
+    {
+      "id": "soft_skills_style_interview",
+      "sha256": "af498baf71dc4ed85b5291fb69e1028961b3409850ec20ea43c7f48250a92e52",
+      "n_segments": 144,
+      "n_labeled_ads": 1,
+      "duration_seconds": 720,
+      "labeled_ads": [
+        {
+          "start": 5.0,
+          "end": 15.0,
+          "kind": "preroll",
+          "notes": "synthetic sponsor; use code SOFT20"
         }
       ]
     }

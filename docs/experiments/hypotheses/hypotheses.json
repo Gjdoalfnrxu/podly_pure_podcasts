@@ -5,8 +5,8 @@
     "detection",
     "cost"
   ],
-  "updated_at": "2026-10-01T15:56:44.322209+00:00",
-  "notes": "Seeded from corpus v1 gaps plus 2026-10-01 style-golden follow-ups. Production AdClassifier and enable_bow_scout_gemini_confirm stay off. Frozen gates.json must not be loosened. 2026-09-30 live: H001 measured (26\u219215 windows on real eps), H002 rejected, H003 no_win, H004 process_ok. Next open: H005, H006, H007, H008.",
+  "updated_at": "2026-10-01T16:01:27.157998+00:00",
+  "notes": "2026-10-01: H005 accepted and folded (Soft Skills-style synthetic golden promoted to corpus v1; n=10). Production AdClassifier and enable_bow_scout_gemini_confirm stay off. Frozen gates.json not loosened. Next open: H006, H007, H008. Live skipped (no API keys). 2026-09-30 live: H001 measured (26\u219215 windows), H002 rejected, H003 no_win, H004 process_ok.",
   "hypotheses": [
     {
       "id": "H001",
@@ -205,7 +205,7 @@
       "id": "H005",
       "statement": "Promote Soft Skills-style synthetic goldens (H004 templates, not copyrighted episode text) into corpus builders so TightPromo vs recommended shows offline confidence movement: fewer promo FPs on unlabeled `code <word>` tech speech, no labeled-ad recall drop.",
       "metric_primary": "confidence",
-      "status": "open",
+      "status": "accepted",
       "predicted_effect": {
         "confidence": "On soft_skills_style_interview, TightPromo drops scout windows on unlabeled code review/path/sample vs production CueDetector, while residual/recall on the labeled use-code preroll stay green.",
         "detection": "Labeled `use code SOFT20` preroll remains a scout hit for both detectors. Frozen corpus v1 recall/hit/F1 must still pass gates.",
@@ -222,8 +222,62 @@
         }
       },
       "rank": 5,
-      "last_result": null,
-      "notes": "Experiment-only detector. Keep production CueDetector.promo_pattern untouched. Do not commit Soft Skills episode text. Fold for this hypothesis means adding the synthetic builder to corpus v1 after a style confidence win plus frozen-gate pass, not enabling the production scout flag."
+      "last_result": {
+        "run_date": "2026-10-01",
+        "run_dir": "docs/experiments/runs/2026-10-01",
+        "summary_path": "docs/experiments/runs/2026-10-01/summary.json",
+        "hypothesis_result_path": "docs/experiments/runs/2026-10-01/H005.json",
+        "verdict": "fold_eligible",
+        "passed_gates": true,
+        "score": {
+          "name": "H005",
+          "rejected": false,
+          "gate_failures": [],
+          "detection_f1": 0.8888888888888888,
+          "detection_recall": 0.8888888888888888,
+          "ad_hit_rate": 0.8888888888888888,
+          "token_reduction_pct": 93.3178665118304,
+          "scout_input_tokens": 3901.0,
+          "config": {
+            "threshold": 0.5,
+            "pad_seconds": 15.0,
+            "pad_segments": 3,
+            "merge_gap_seconds": 8.0,
+            "include_scout_extras": true,
+            "include_self_promo": false
+          },
+          "style_confidence_win": true,
+          "style_comparison": [
+            {
+              "fixture_id": "soft_skills_style_interview",
+              "recommended": {
+                "fixture_id": "soft_skills_style_interview",
+                "n_windows": 2,
+                "ad_hit_rate": 1.0,
+                "time_recall": 1.0,
+                "time_precision": 1.0,
+                "residual_strong_cue_rate": 0.020833333333333332,
+                "scout_input_tokens": 705,
+                "scout_precision": 0.1111111111111111
+              },
+              "tight_promo": {
+                "fixture_id": "soft_skills_style_interview",
+                "n_windows": 1,
+                "ad_hit_rate": 1.0,
+                "time_recall": 1.0,
+                "time_precision": 1.0,
+                "residual_strong_cue_rate": 0.020833333333333332,
+                "scout_input_tokens": 325,
+                "scout_precision": 0.2857142857142857
+              },
+              "confidence_win": true,
+              "windows_dropped": 1
+            }
+          ],
+          "promotes_to_corpus": true
+        }
+      },
+      "notes": "2026-10-01: accepted. TightPromo 2\u21921 windows on synthetic soft_skills_style_interview (use code SOFT20 recall 1.0). Folded the synthetic builder into corpus v1 + snapshot; gates.json \u03b5 unchanged. Production CueDetector.promo_pattern and enable_bow_scout_gemini_confirm stay off. TightPromo remains experiment-only."
     },
     {
       "id": "H006",

@@ -5,7 +5,7 @@ User priorities (absolute): **confidence** (no regressions) → **detection** (F
 
 The daily runner loads **open** rows in that order, runs offline eval vs the frozen snapshot by default, and never loosens `gates.json`.
 
-Updated at `2026-10-01T15:56:44.322209+00:00` (UTC).
+Updated at `2026-10-01T16:01:27.157998+00:00` (UTC).
 
 | ID | Primary | Status | Statement | Last result |
 | --- | --- | --- | --- | --- |
@@ -13,7 +13,7 @@ Updated at `2026-10-01T15:56:44.322209+00:00` (UTC).
 | `H002` | detection | rejected | Recover cue-sparse host-reads (Away-style brand story, no URL/CTA/phone) without paying a full AdClassifier walk. | failed_gates, 2026-09-30 (`docs/experiments/runs/2026-09-30/H002.json`) |
 | `H003` | cost | measured | Re-rank pad/threshold/extras sweeps under frozen gate constraints; keep recommended config unless a survivor strictly beats it on detection then cost. | no_win, 2026-09-30 (`docs/experiments/runs/2026-09-30/H003.json`) |
 | `H004` | confidence | measured | Add a secret-safe process for real-transcript goldens in The Daily / Soft Skills style (news briefing + interview host-reads) without leaking API keys into git. | process_ok, 2026-09-30 (`docs/experiments/runs/2026-09-30/H004.json`) |
-| `H005` | confidence | open | Promote Soft Skills-style synthetic goldens (H004 templates, not copyrighted episode text) into corpus builders so TightPromo vs recommended shows offline confidence movement: fewer promo FPs on unlabeled `code <word>` tech speech, no labeled-ad recall drop. | — |
+| `H005` | confidence | accepted | Promote Soft Skills-style synthetic goldens (H004 templates, not copyrighted episode text) into corpus builders so TightPromo vs recommended shows offline confidence movement: fewer promo FPs on unlabeled `code <word>` tech speech, no labeled-ad recall drop. | fold_eligible, 2026-10-01 (`docs/experiments/runs/2026-10-01/H005.json`) |
 | `H006` | confidence | open | Add a news-briefing-style golden with side-by-side unlabeled bare `code <word>` tech speech and a labeled `use code SAVE…` / promo CTA so the H001 TightPromo detector can be measured offline on Daily-style structure. | — |
 | `H007` | detection | open | Recover cue-sparse host-reads with a duration-gated midroll probe that stays within +10% of snapshot scout tokens=3901 (limit ~4291), cheaper than H002 storytelling/midroll-probe. | — |
 | `H008` | cost | open | Micro-variant pad/threshold sweep (t=0.45 pad=15/3 extras; t=0.5 pad=12/2 extras) under frozen gates; keep recommended unless a survivor strictly beats F1 then recall then tokens. | — |
@@ -73,12 +73,12 @@ Add a secret-safe process for real-transcript goldens in The Daily / Soft Skills
 Promote Soft Skills-style synthetic goldens (H004 templates, not copyrighted episode text) into corpus builders so TightPromo vs recommended shows offline confidence movement: fewer promo FPs on unlabeled `code <word>` tech speech, no labeled-ad recall drop.
 
 - Primary metric: `confidence`
-- Status: `open`
+- Status: `accepted`
 - Experiment kind: `style_golden_promo`
 - Confidence: On soft_skills_style_interview, TightPromo drops scout windows on unlabeled code review/path/sample vs production CueDetector, while residual/recall on the labeled use-code preroll stay green.
 - Detection: Labeled `use code SOFT20` preroll remains a scout hit for both detectors. Frozen corpus v1 recall/hit/F1 must still pass gates.
 - Cost: Fewer confirm windows on tech-speech FPs; scout tokens on frozen v1 should not rise. Corpus promotion is explicit --write-corpus --update-baseline, not an automatic snapshot rewrite.
-- Notes: Experiment-only detector. Keep production CueDetector.promo_pattern untouched. Do not commit Soft Skills episode text. Fold for this hypothesis means adding the synthetic builder to corpus v1 after a style confidence win plus frozen-gate pass, not enabling the production scout flag.
+- Notes: 2026-10-01: accepted. TightPromo 2→1 windows on synthetic soft_skills_style_interview (use code SOFT20 recall 1.0). Folded the synthetic builder into corpus v1 + snapshot; gates.json ε unchanged. Production CueDetector.promo_pattern and enable_bow_scout_gemini_confirm stay off. TightPromo remains experiment-only.
 
 ### `H006`
 
@@ -130,4 +130,4 @@ Never loosen `docs/experiments/bow_scout_gemini_confirm/baseline/v1/gates.json`.
 
 ## Ledger notes
 
-Seeded from corpus v1 gaps plus 2026-10-01 style-golden follow-ups. Production AdClassifier and enable_bow_scout_gemini_confirm stay off. Frozen gates.json must not be loosened. 2026-09-30 live: H001 measured (26→15 windows on real eps), H002 rejected, H003 no_win, H004 process_ok. Next open: H005, H006, H007, H008.
+2026-10-01: H005 accepted and folded (Soft Skills-style synthetic golden promoted to corpus v1; n=10). Production AdClassifier and enable_bow_scout_gemini_confirm stay off. Frozen gates.json not loosened. Next open: H006, H007, H008. Live skipped (no API keys). 2026-09-30 live: H001 measured (26→15 windows), H002 rejected, H003 no_win, H004 process_ok.

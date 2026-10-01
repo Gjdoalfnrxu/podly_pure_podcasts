@@ -1,0 +1,113 @@
+{
+  "hypothesis_id": "H005",
+  "status": "accepted",
+  "verdict": "fold_eligible",
+  "scored": {
+    "name": "H005",
+    "rejected": false,
+    "gate_failures": [],
+    "detection_f1": 0.8888888888888888,
+    "detection_recall": 0.8888888888888888,
+    "ad_hit_rate": 0.8888888888888888,
+    "token_reduction_pct": 93.3178665118304,
+    "scout_input_tokens": 3901.0,
+    "config": {
+      "threshold": 0.5,
+      "pad_seconds": 15.0,
+      "pad_segments": 3,
+      "merge_gap_seconds": 8.0,
+      "include_scout_extras": true,
+      "include_self_promo": false
+    },
+    "style_confidence_win": true,
+    "style_comparison": [
+      {
+        "fixture_id": "soft_skills_style_interview",
+        "recommended": {
+          "fixture_id": "soft_skills_style_interview",
+          "n_windows": 2,
+          "ad_hit_rate": 1.0,
+          "time_recall": 1.0,
+          "time_precision": 1.0,
+          "residual_strong_cue_rate": 0.020833333333333332,
+          "scout_input_tokens": 705,
+          "scout_precision": 0.1111111111111111
+        },
+        "tight_promo": {
+          "fixture_id": "soft_skills_style_interview",
+          "n_windows": 1,
+          "ad_hit_rate": 1.0,
+          "time_recall": 1.0,
+          "time_precision": 1.0,
+          "residual_strong_cue_rate": 0.020833333333333332,
+          "scout_input_tokens": 325,
+          "scout_precision": 0.2857142857142857
+        },
+        "confidence_win": true,
+        "windows_dropped": 1
+      }
+    ],
+    "promotes_to_corpus": true
+  },
+  "candidates": [
+    {
+      "name": "H005",
+      "rejected": false,
+      "gate_failures": [],
+      "detection_f1": 0.8888888888888888,
+      "detection_recall": 0.8888888888888888,
+      "ad_hit_rate": 0.8888888888888888,
+      "token_reduction_pct": 93.3178665118304,
+      "scout_input_tokens": 3901.0,
+      "config": {
+        "threshold": 0.5,
+        "pad_seconds": 15.0,
+        "pad_segments": 3,
+        "merge_gap_seconds": 8.0,
+        "include_scout_extras": true,
+        "include_self_promo": false
+      }
+    }
+  ],
+  "extras": {
+    "kind": "style_golden_promo",
+    "detector": "TightPromoCueDetector",
+    "style_comparison": [
+      {
+        "fixture_id": "soft_skills_style_interview",
+        "recommended": {
+          "fixture_id": "soft_skills_style_interview",
+          "n_windows": 2,
+          "ad_hit_rate": 1.0,
+          "time_recall": 1.0,
+          "time_precision": 1.0,
+          "residual_strong_cue_rate": 0.020833333333333332,
+          "scout_input_tokens": 705,
+          "scout_precision": 0.1111111111111111
+        },
+        "tight_promo": {
+          "fixture_id": "soft_skills_style_interview",
+          "n_windows": 1,
+          "ad_hit_rate": 1.0,
+          "time_recall": 1.0,
+          "time_precision": 1.0,
+          "residual_strong_cue_rate": 0.020833333333333332,
+          "scout_input_tokens": 325,
+          "scout_precision": 0.2857142857142857
+        },
+        "confidence_win": true,
+        "windows_dropped": 1
+      }
+    ],
+    "style_confidence_win": true,
+    "promotes_to_corpus": true,
+    "production_promo_pattern_unchanged": true,
+    "ranking": "Confidence-first ranking (survivors only are fold-eligible):\n- #1 H005: F1=0.8889 recall=0.8889 hit=0.8889 tok\u2193=93.32% scout_tok=3901\nFold-eligible winner: H005",
+    "improved_primary": true,
+    "fold_eligible": true,
+    "production_flag": false,
+    "fold_note": "Promoted soft_skills_style_interview into builder_fixtures / corpus v1 and snapshot.json. gates.json unchanged. TightPromo not copied to production."
+  },
+  "live_llm": false,
+  "corpus_version": "v1"
+}

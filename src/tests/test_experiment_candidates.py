@@ -130,12 +130,13 @@ def test_news_briefing_style_has_code_speech_and_save_cta() -> None:
     )
 
 
-def test_style_golden_fixtures_not_in_frozen_builders() -> None:
+def test_style_golden_fixtures_builders_after_h005_promotion() -> None:
     from podcast_processor.experiments.fixtures import builder_fixtures
 
     builder_ids = {episode.fixture_id for episode in builder_fixtures()}
-    style_ids = {episode.fixture_id for episode in style_golden_fixtures()}
-    assert style_ids.isdisjoint(builder_ids)
+    assert "soft_skills_style_interview" in builder_ids
+    # H006 news-briefing golden stays experiment-only until that hypothesis runs.
+    assert "news_briefing_style_code_cta" not in builder_ids
     assert style_golden_fixtures(["soft_skills_style_interview"])[0].fixture_id == (
         "soft_skills_style_interview"
     )

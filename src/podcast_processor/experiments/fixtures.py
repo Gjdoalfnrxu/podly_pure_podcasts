@@ -487,6 +487,10 @@ def builder_fixtures() -> list[EpisodeFixture]:
         ad_free_interview(),
         stacked_midrolls(),
         chapter_style_ad_break(),
+        # H005 2026-10-01: Soft Skills-style synthetic (not copyrighted
+        # episode text). TightPromo vs recommended dropped 2→1 scout
+        # windows on unlabeled `code <word>` with labeled-ad recall 1.0.
+        soft_skills_style_interview(),
     ]
 
 
