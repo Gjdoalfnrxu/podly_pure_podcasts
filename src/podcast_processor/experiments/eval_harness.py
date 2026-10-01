@@ -18,6 +18,7 @@ from podcast_processor.experiments.bow_scout import (
     BowScout,
     ScoutConfig,
 )
+from podcast_processor.experiments.candidates import duration_gated_midroll_probe
 from podcast_processor.experiments.cost_model import (
     DEFAULT_CLASSIFIER_PRICES,
     DEFAULT_GEMINI_PRICES,
@@ -106,6 +107,12 @@ RECOMMENDED_CONFIG = ScoutConfig(
     pad_segments=3,
     include_scout_extras=True,
 )
+
+# H007 2026-10-01: duration-gated 40s midroll probe on long empty-scout
+# episodes. Recovers cue_sparse_storytelling without probing short
+# ad_free_interview. Experiment-package only — production CueDetector
+# extras stay off.
+DEFAULT_WINDOW_POSTPROCESS = duration_gated_midroll_probe
 
 
 def labeled_ad_duration(ads: list[Any]) -> float:
@@ -282,10 +289,15 @@ def evaluate_all(
     # `sweep=[]` skips the extra configs; only `None` means the default sweep.
     configs = DEFAULT_SWEEP if sweep is None else sweep
     episodes = list(episodes) if episodes is not None else all_fixtures()
+    postprocess = (
+        window_postprocess
+        if window_postprocess is not None
+        else DEFAULT_WINDOW_POSTPROCESS
+    )
     eval_kwargs: dict[str, Any] = {
         "cache_dir": cache_dir,
         "detector": detector,
-        "window_postprocess": window_postprocess,
+        "window_postprocess": postprocess,
         "confirm_model": confirm_model,
         "confirm_mock_mode": confirm_mock_mode,
     }
@@ -577,8 +589,10 @@ def render_results_markdown(results: dict[str, Any]) -> str:
             "it includes transition bumpers (`after the break`) used by the "
             "prompt.py Wildcard example (score 0.5) while self-promo-only lines "
             "(weight 0.4) stay below the cut. Threshold 0.8 drops those "
-            "transition-only ads. Cue-sparse brand reads still miss at every "
-            "threshold.",
+            "transition-only ads. H007's duration-gated probe recovers "
+            "cue-sparse host-reads as a block hit on every sweep config that "
+            "would otherwise return empty windows on long episodes; short "
+            "ad-free interviews stay unprobed.",
             "",
             "## Caching",
             "",

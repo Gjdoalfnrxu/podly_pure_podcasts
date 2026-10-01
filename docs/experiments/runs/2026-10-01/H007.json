@@ -1,0 +1,56 @@
+{
+  "hypothesis_id": "H007",
+  "status": "accepted",
+  "verdict": "fold_eligible",
+  "scored": {
+    "name": "H007-duration_gated_midroll_probe",
+    "rejected": false,
+    "gate_failures": [],
+    "detection_f1": 0.9752066115702479,
+    "detection_recall": 0.961038961038961,
+    "ad_hit_rate": 1.0,
+    "token_reduction_pct": 91.48470551938054,
+    "scout_input_tokens": 5698.0,
+    "config": {
+      "threshold": 0.5,
+      "pad_seconds": 15.0,
+      "pad_segments": 3,
+      "merge_gap_seconds": 8.0,
+      "include_scout_extras": true,
+      "include_self_promo": false
+    }
+  },
+  "candidates": [
+    {
+      "name": "H007-duration_gated_midroll_probe",
+      "rejected": false,
+      "gate_failures": [],
+      "detection_f1": 0.9752066115702479,
+      "detection_recall": 0.961038961038961,
+      "ad_hit_rate": 1.0,
+      "token_reduction_pct": 91.48470551938054,
+      "scout_input_tokens": 5698.0,
+      "config": {
+        "threshold": 0.5,
+        "pad_seconds": 15.0,
+        "pad_segments": 3,
+        "merge_gap_seconds": 8.0,
+        "include_scout_extras": true,
+        "include_self_promo": false
+      }
+    }
+  ],
+  "extras": {
+    "kind": "cheap_recovery",
+    "variants": [
+      "duration_gated_midroll_probe"
+    ],
+    "ranking": "Confidence-first ranking (survivors only are fold-eligible):\n- #1 H007-duration_gated_midroll_probe: F1=0.9752 recall=0.9610 hit=1.0000 tok\u2193=91.48% scout_tok=5698\nFold-eligible winner: H007-duration_gated_midroll_probe",
+    "improved_primary": true,
+    "fold_eligible": true,
+    "production_flag": false,
+    "fold_note": "Folded duration_gated_midroll_probe into eval_harness DEFAULT_WINDOW_POSTPROCESS. Snapshot updated; gates.json unchanged. Production CueDetector extras stay off."
+  },
+  "live_llm": false,
+  "corpus_version": "v1"
+}

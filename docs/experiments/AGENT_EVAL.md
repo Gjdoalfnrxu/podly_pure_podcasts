@@ -115,9 +115,10 @@ Absolute priorities: **confidence** (no regressions) → **detection**
    promote). `H005` accepted — Soft Skills-style synthetic golden promoted
    to corpus v1. `H006` accepted 2026-10-01 afternoon — news-briefing-style
    synthetic golden (`news_briefing_style_code_cta`) promoted to corpus v1
-   (n=11); TightPromo stays experiment-only. Next open after H006 fold:
-   `H007` (duration-gated cue-sparse recovery), then `H008` (pad/threshold
-   micro-sweep).
+   (n=11); TightPromo stays experiment-only. `H007` accepted 2026-10-01
+   afternoon — duration-gated midroll probe folded into eval
+   `DEFAULT_WINDOW_POSTPROCESS` (cue-sparse block hit 0→1; time recall
+   0.961). Next open after H007 fold: `H008` (pad/threshold micro-sweep).
 
 ### Run
 

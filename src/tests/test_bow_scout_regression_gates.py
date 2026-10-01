@@ -82,10 +82,17 @@ def test_eval_gates_fail_on_recall_drop() -> None:
 def test_eval_gates_fail_on_fn_or_residual_rise() -> None:
     results = evaluate_all()
     snapshot = extract_snapshot(results)
-    snapshot["macro"]["scout_mean_false_negative_rate"] = 0.0
-    snapshot["macro"]["scout_confirm_mean_residual_strong_cue_rate"] = 0.0
+    # FN can already be 0.0 after H007; inject a synthetic rise beyond ε.
+    results["recommended"]["macro"]["scout_mean_false_negative_rate"] = (
+        float(snapshot["macro"]["scout_mean_false_negative_rate"]) + 0.05
+    )
+    results["recommended"]["macro"]["scout_confirm_mean_residual_strong_cue_rate"] = (
+        float(snapshot["macro"]["scout_confirm_mean_residual_strong_cue_rate"]) + 0.05
+    )
     failures = compare_to_snapshot(results, snapshot=snapshot)
-    assert any(item.metric == "scout_mean_false_negative_rate" for item in failures)
+    metrics = {item.metric for item in failures}
+    assert "scout_mean_false_negative_rate" in metrics
+    assert "scout_confirm_mean_residual_strong_cue_rate" in metrics
 
 
 def test_eval_gates_fail_on_token_blowup() -> None:

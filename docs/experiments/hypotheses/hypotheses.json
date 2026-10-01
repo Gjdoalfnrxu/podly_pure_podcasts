@@ -5,8 +5,8 @@
     "detection",
     "cost"
   ],
-  "updated_at": "2026-10-01T17:05:41.175895+00:00",
-  "notes": "2026-10-01 afternoon: H006 accepted and folded (news-briefing-style synthetic golden promoted to corpus v1; n=11). Live catch-up on tip ade7344: synthetic 2\u21921 windows, Gemini technical_discussion on dropped window, real eps 26\u219215. Box Gemini spend $0.0049. Production AdClassifier and enable_bow_scout_gemini_confirm stay off. Frozen gates.json not loosened. TightPromo stays experiment-only. Next open: H007, H008. 2026-10-01 morning: H005 accepted (Soft Skills-style golden; n=10). 2026-09-30 live: H001 measured (26\u219215 windows), H002 rejected, H003 no_win, H004 process_ok.",
+  "updated_at": "2026-10-01T17:09:05.778238+00:00",
+  "notes": "2026-10-01 afternoon: H006 folded (news-briefing golden; n=11) then H007 folded (duration-gated probe in eval recommended path; confirm F1 0.9752, hit 1.0, scout tok 5698). Live catch-up on tip ade7344 for H006. Box Gemini spend $0.0049. Production AdClassifier and enable_bow_scout_gemini_confirm stay off. Frozen gates.json not loosened. TightPromo stays experiment-only. Next open: H008. 2026-10-01 morning: H005 accepted (Soft Skills-style golden). 2026-09-30 live: H001 measured (26\u219215 windows), H002 rejected, H003 no_win, H004 process_ok.",
   "hypotheses": [
     {
       "id": "H001",
@@ -370,7 +370,7 @@
       "id": "H007",
       "statement": "Recover cue-sparse host-reads with a duration-gated midroll probe that stays within +10% of snapshot scout tokens=3901 (limit ~4291), cheaper than H002 storytelling/midroll-probe.",
       "metric_primary": "detection",
-      "status": "open",
+      "status": "accepted",
       "predicted_effect": {
         "confidence": "Must still pass frozen \u03b5. Short ad-free episodes must not gain a probe window.",
         "detection": "Lift cue_sparse_storytelling ad-block hit/recall from 0 without dropping other fixtures.",
@@ -385,8 +385,33 @@
         }
       },
       "rank": 7,
-      "last_result": null,
-      "notes": "Revisit of H002 with a cheaper recovery only. Do not fold if sum_scout_input_tokens > 4291. Production CueDetector extras stay off."
+      "last_result": {
+        "run_date": "2026-10-01",
+        "run_dir": "docs/experiments/runs/2026-10-01",
+        "summary_path": "docs/experiments/runs/2026-10-01/summary.json",
+        "hypothesis_result_path": "docs/experiments/runs/2026-10-01/H007.json",
+        "verdict": "fold_eligible",
+        "passed_gates": true,
+        "score": {
+          "name": "H007-duration_gated_midroll_probe",
+          "rejected": false,
+          "gate_failures": [],
+          "detection_f1": 0.9752066115702479,
+          "detection_recall": 0.961038961038961,
+          "ad_hit_rate": 1.0,
+          "token_reduction_pct": 91.48470551938054,
+          "scout_input_tokens": 5698.0,
+          "config": {
+            "threshold": 0.5,
+            "pad_seconds": 15.0,
+            "pad_segments": 3,
+            "merge_gap_seconds": 8.0,
+            "include_scout_extras": true,
+            "include_self_promo": false
+          }
+        }
+      },
+      "notes": "2026-10-01 afternoon: accepted. duration_gated_midroll_probe recovered cue_sparse_storytelling ad-block hit 0\u21921 (time recall 0.571 on that fixture; macro confirm F1 0.9091\u21920.9752, hit 0.9091\u21921.0). Scout tokens 5352\u21925698 vs post-H006 snapshot (limit 5887; the 4291 figure was the pre-H005 n=9 cap). Folded into eval DEFAULT_WINDOW_POSTPROCESS; snapshot updated; gates.json \u03b5 unchanged. Production CueDetector extras stay off."
     },
     {
       "id": "H008",

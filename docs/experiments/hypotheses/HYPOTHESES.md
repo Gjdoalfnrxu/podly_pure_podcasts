@@ -5,7 +5,7 @@ User priorities (absolute): **confidence** (no regressions) → **detection** (F
 
 The daily runner loads **open** rows in that order, runs offline eval vs the frozen snapshot by default, and never loosens `gates.json`.
 
-Updated at `2026-10-01T17:05:41.175895+00:00` (UTC).
+Updated at `2026-10-01T17:09:05.778238+00:00` (UTC).
 
 | ID | Primary | Status | Statement | Last result |
 | --- | --- | --- | --- | --- |
@@ -15,7 +15,7 @@ Updated at `2026-10-01T17:05:41.175895+00:00` (UTC).
 | `H004` | confidence | measured | Add a secret-safe process for real-transcript goldens in The Daily / Soft Skills style (news briefing + interview host-reads) without leaking API keys into git. | process_ok, 2026-09-30 (`docs/experiments/runs/2026-09-30/H004.json`) |
 | `H005` | confidence | accepted | Promote Soft Skills-style synthetic goldens (H004 templates, not copyrighted episode text) into corpus builders so TightPromo vs recommended shows offline confidence movement: fewer promo FPs on unlabeled `code <word>` tech speech, no labeled-ad recall drop. | fold_eligible, 2026-10-01 (`docs/experiments/runs/2026-10-01/H005.json`) |
 | `H006` | confidence | accepted | Add a news-briefing-style golden with side-by-side unlabeled bare `code <word>` tech speech and a labeled `use code SAVE…` / promo CTA so the H001 TightPromo detector can be measured offline on Daily-style structure. | fold_eligible, 2026-10-01 (`docs/experiments/runs/2026-10-01/H006.json`) |
-| `H007` | detection | open | Recover cue-sparse host-reads with a duration-gated midroll probe that stays within +10% of snapshot scout tokens=3901 (limit ~4291), cheaper than H002 storytelling/midroll-probe. | — |
+| `H007` | detection | accepted | Recover cue-sparse host-reads with a duration-gated midroll probe that stays within +10% of snapshot scout tokens=3901 (limit ~4291), cheaper than H002 storytelling/midroll-probe. | fold_eligible, 2026-10-01 (`docs/experiments/runs/2026-10-01/H007.json`) |
 | `H008` | cost | open | Micro-variant pad/threshold sweep (t=0.45 pad=15/3 extras; t=0.5 pad=12/2 extras) under frozen gates; keep recommended unless a survivor strictly beats F1 then recall then tokens. | — |
 
 ## Predicted effects
@@ -97,12 +97,12 @@ Add a news-briefing-style golden with side-by-side unlabeled bare `code <word>` 
 Recover cue-sparse host-reads with a duration-gated midroll probe that stays within +10% of snapshot scout tokens=3901 (limit ~4291), cheaper than H002 storytelling/midroll-probe.
 
 - Primary metric: `detection`
-- Status: `open`
+- Status: `accepted`
 - Experiment kind: `cheap_recovery`
 - Confidence: Must still pass frozen ε. Short ad-free episodes must not gain a probe window.
 - Detection: Lift cue_sparse_storytelling ad-block hit/recall from 0 without dropping other fixtures.
 - Cost: Skip 10-minute ad_free_interview; use a 40s window on longer empty-scout episodes. Scout tokens must stay ≤4291.
-- Notes: Revisit of H002 with a cheaper recovery only. Do not fold if sum_scout_input_tokens > 4291. Production CueDetector extras stay off.
+- Notes: 2026-10-01 afternoon: accepted. duration_gated_midroll_probe recovered cue_sparse_storytelling ad-block hit 0→1 (time recall 0.571 on that fixture; macro confirm F1 0.9091→0.9752, hit 0.9091→1.0). Scout tokens 5352→5698 vs post-H006 snapshot (limit 5887; the 4291 figure was the pre-H005 n=9 cap). Folded into eval DEFAULT_WINDOW_POSTPROCESS; snapshot updated; gates.json ε unchanged. Production CueDetector extras stay off.
 
 ### `H008`
 
@@ -130,4 +130,4 @@ Never loosen `docs/experiments/bow_scout_gemini_confirm/baseline/v1/gates.json`.
 
 ## Ledger notes
 
-2026-10-01 afternoon: H006 accepted and folded (news-briefing-style synthetic golden promoted to corpus v1; n=11). Live catch-up on tip ade7344: synthetic 2→1 windows, Gemini technical_discussion on dropped window, real eps 26→15. Box Gemini spend $0.0049. Production AdClassifier and enable_bow_scout_gemini_confirm stay off. Frozen gates.json not loosened. TightPromo stays experiment-only. Next open: H007, H008. 2026-10-01 morning: H005 accepted (Soft Skills-style golden; n=10). 2026-09-30 live: H001 measured (26→15 windows), H002 rejected, H003 no_win, H004 process_ok.
+2026-10-01 afternoon: H006 folded (news-briefing golden; n=11) then H007 folded (duration-gated probe in eval recommended path; confirm F1 0.9752, hit 1.0, scout tok 5698). Live catch-up on tip ade7344 for H006. Box Gemini spend $0.0049. Production AdClassifier and enable_bow_scout_gemini_confirm stay off. Frozen gates.json not loosened. TightPromo stays experiment-only. Next open: H008. 2026-10-01 morning: H005 accepted (Soft Skills-style golden). 2026-09-30 live: H001 measured (26→15 windows), H002 rejected, H003 no_win, H004 process_ok.

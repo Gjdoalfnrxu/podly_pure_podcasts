@@ -92,6 +92,20 @@ def test_duration_gated_probe_recovers_cue_sparse_skips_ad_free() -> None:
     assert already == recovered
 
 
+def test_evaluate_all_default_applies_duration_gated_probe() -> None:
+    from podcast_processor.experiments.eval_harness import evaluate_all
+
+    results = evaluate_all(sweep=[])
+    by_id = {row["fixture_id"]: row for row in results["recommended"]["per_fixture"]}
+    sparse = by_id["cue_sparse_storytelling"]
+    assert sparse["ad_hit_rate"] == 1.0
+    assert sparse["n_windows"] == 1
+    free = by_id["ad_free_interview"]
+    assert free["n_windows"] == 0
+    assert ad_free_interview().duration_seconds < 900
+    assert results["recommended"]["macro"]["scout_mean_ad_hit_rate"] == 1.0
+
+
 def test_soft_skills_style_tight_promo_drops_tech_speech_keeps_use_code() -> None:
     episode = soft_skills_style_interview()
     production = CueDetector(include_scout_extras=True)
