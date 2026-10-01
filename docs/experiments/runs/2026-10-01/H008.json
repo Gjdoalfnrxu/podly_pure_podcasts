@@ -1,0 +1,483 @@
+{
+  "hypothesis_id": "H008",
+  "status": "accepted",
+  "verdict": "fold_eligible",
+  "scored": {
+    "name": "extras=True t=0.5 pad=12.0/2",
+    "rejected": false,
+    "gate_failures": [],
+    "detection_f1": 0.9752066115702479,
+    "detection_recall": 0.961038961038961,
+    "ad_hit_rate": 1.0,
+    "token_reduction_pct": 92.04568649364559,
+    "scout_input_tokens": 5337.0,
+    "config": {
+      "threshold": 0.5,
+      "pad_seconds": 12.0,
+      "pad_segments": 2,
+      "merge_gap_seconds": 8.0,
+      "include_scout_extras": true,
+      "include_self_promo": false
+    }
+  },
+  "candidates": [
+    {
+      "name": "extras=True t=0.5 pad=12.0/2",
+      "rejected": false,
+      "gate_failures": [],
+      "detection_f1": 0.9752066115702479,
+      "detection_recall": 0.961038961038961,
+      "ad_hit_rate": 1.0,
+      "token_reduction_pct": 92.04568649364559,
+      "scout_input_tokens": 5337.0,
+      "config": {
+        "threshold": 0.5,
+        "pad_seconds": 12.0,
+        "pad_segments": 2,
+        "merge_gap_seconds": 8.0,
+        "include_scout_extras": true,
+        "include_self_promo": false
+      }
+    },
+    {
+      "name": "extras=True t=0.5 pad=15.0/3",
+      "rejected": false,
+      "gate_failures": [],
+      "detection_f1": 0.9752066115702479,
+      "detection_recall": 0.961038961038961,
+      "ad_hit_rate": 1.0,
+      "token_reduction_pct": 91.48470551938054,
+      "scout_input_tokens": 5698.0,
+      "config": {
+        "threshold": 0.5,
+        "pad_seconds": 15.0,
+        "pad_segments": 3,
+        "merge_gap_seconds": 8.0,
+        "include_scout_extras": true,
+        "include_self_promo": false
+      }
+    },
+    {
+      "name": "extras=True t=0.4 pad=15.0/3",
+      "rejected": false,
+      "gate_failures": [],
+      "detection_f1": 0.9752066115702479,
+      "detection_recall": 0.961038961038961,
+      "ad_hit_rate": 1.0,
+      "token_reduction_pct": 91.48470551938054,
+      "scout_input_tokens": 5698.0,
+      "config": {
+        "threshold": 0.4,
+        "pad_seconds": 15.0,
+        "pad_segments": 3,
+        "merge_gap_seconds": 8.0,
+        "include_scout_extras": true,
+        "include_self_promo": false
+      }
+    },
+    {
+      "name": "extras=True t=0.45 pad=15.0/3",
+      "rejected": false,
+      "gate_failures": [],
+      "detection_f1": 0.9752066115702479,
+      "detection_recall": 0.961038961038961,
+      "ad_hit_rate": 1.0,
+      "token_reduction_pct": 91.48470551938054,
+      "scout_input_tokens": 5698.0,
+      "config": {
+        "threshold": 0.45,
+        "pad_seconds": 15.0,
+        "pad_segments": 3,
+        "merge_gap_seconds": 8.0,
+        "include_scout_extras": true,
+        "include_self_promo": false
+      }
+    },
+    {
+      "name": "extras=False t=0.5 pad=15.0/3",
+      "rejected": true,
+      "gate_failures": [
+        {
+          "metric": "scout_confirm_mean_time_recall",
+          "actual": 0.8701298701298701,
+          "baseline": 0.961038961038961,
+          "limit": 0.941038961038961,
+          "message": "scout_confirm_mean_time_recall 0.870130 dropped below baseline 0.961039 \u2212 0.02"
+        },
+        {
+          "metric": "scout_mean_ad_hit_rate",
+          "actual": 0.9090909090909091,
+          "baseline": 1.0,
+          "limit": 0.98,
+          "message": "scout_mean_ad_hit_rate 0.909091 dropped below baseline 1.000000 \u2212 0.02"
+        },
+        {
+          "metric": "scout_confirm_mean_time_f1",
+          "actual": 0.884297520661157,
+          "baseline": 0.9752066115702479,
+          "limit": 0.9452066115702479,
+          "message": "scout_confirm_mean_time_f1 0.884298 dropped below baseline 0.975207 \u2212 0.03"
+        },
+        {
+          "metric": "scout_mean_false_negative_rate",
+          "actual": 0.09090909090909091,
+          "baseline": 0.0,
+          "limit": 0.02,
+          "message": "scout_mean_false_negative_rate 0.090909 rose above baseline 0.000000 + 0.02"
+        }
+      ],
+      "detection_f1": 0.884297520661157,
+      "detection_recall": 0.8701298701298701,
+      "ad_hit_rate": 0.9090909090909091,
+      "token_reduction_pct": 92.3879333434748,
+      "scout_input_tokens": 5298.0,
+      "config": {
+        "threshold": 0.5,
+        "pad_seconds": 15.0,
+        "pad_segments": 3,
+        "merge_gap_seconds": 8.0,
+        "include_scout_extras": false,
+        "include_self_promo": false
+      }
+    },
+    {
+      "name": "extras=False t=0.8 pad=15.0/3",
+      "rejected": true,
+      "gate_failures": [
+        {
+          "metric": "scout_confirm_mean_time_recall",
+          "actual": 0.7792207792207791,
+          "baseline": 0.961038961038961,
+          "limit": 0.941038961038961,
+          "message": "scout_confirm_mean_time_recall 0.779221 dropped below baseline 0.961039 \u2212 0.02"
+        },
+        {
+          "metric": "scout_mean_ad_hit_rate",
+          "actual": 0.8181818181818182,
+          "baseline": 1.0,
+          "limit": 0.98,
+          "message": "scout_mean_ad_hit_rate 0.818182 dropped below baseline 1.000000 \u2212 0.02"
+        },
+        {
+          "metric": "scout_confirm_mean_time_f1",
+          "actual": 0.793388429752066,
+          "baseline": 0.9752066115702479,
+          "limit": 0.9452066115702479,
+          "message": "scout_confirm_mean_time_f1 0.793388 dropped below baseline 0.975207 \u2212 0.03"
+        },
+        {
+          "metric": "scout_mean_false_negative_rate",
+          "actual": 0.18181818181818182,
+          "baseline": 0.0,
+          "limit": 0.02,
+          "message": "scout_mean_false_negative_rate 0.181818 rose above baseline 0.000000 + 0.02"
+        }
+      ],
+      "detection_f1": 0.793388429752066,
+      "detection_recall": 0.7792207792207791,
+      "ad_hit_rate": 0.8181818181818182,
+      "token_reduction_pct": 93.71687400834384,
+      "scout_input_tokens": 4708.0,
+      "config": {
+        "threshold": 0.8,
+        "pad_seconds": 15.0,
+        "pad_segments": 3,
+        "merge_gap_seconds": 8.0,
+        "include_scout_extras": false,
+        "include_self_promo": false
+      }
+    },
+    {
+      "name": "extras=False t=1.0 pad=15.0/3",
+      "rejected": true,
+      "gate_failures": [
+        {
+          "metric": "scout_confirm_mean_time_recall",
+          "actual": 0.7792207792207791,
+          "baseline": 0.961038961038961,
+          "limit": 0.941038961038961,
+          "message": "scout_confirm_mean_time_recall 0.779221 dropped below baseline 0.961039 \u2212 0.02"
+        },
+        {
+          "metric": "scout_mean_ad_hit_rate",
+          "actual": 0.8181818181818182,
+          "baseline": 1.0,
+          "limit": 0.98,
+          "message": "scout_mean_ad_hit_rate 0.818182 dropped below baseline 1.000000 \u2212 0.02"
+        },
+        {
+          "metric": "scout_confirm_mean_time_f1",
+          "actual": 0.793388429752066,
+          "baseline": 0.9752066115702479,
+          "limit": 0.9452066115702479,
+          "message": "scout_confirm_mean_time_f1 0.793388 dropped below baseline 0.975207 \u2212 0.03"
+        },
+        {
+          "metric": "scout_mean_false_negative_rate",
+          "actual": 0.18181818181818182,
+          "baseline": 0.0,
+          "limit": 0.02,
+          "message": "scout_mean_false_negative_rate 0.181818 rose above baseline 0.000000 + 0.02"
+        }
+      ],
+      "detection_f1": 0.793388429752066,
+      "detection_recall": 0.7792207792207791,
+      "ad_hit_rate": 0.8181818181818182,
+      "token_reduction_pct": 93.83576919766156,
+      "scout_input_tokens": 4630.0,
+      "config": {
+        "threshold": 1.0,
+        "pad_seconds": 15.0,
+        "pad_segments": 3,
+        "merge_gap_seconds": 8.0,
+        "include_scout_extras": false,
+        "include_self_promo": false
+      }
+    },
+    {
+      "name": "extras=True t=0.6 pad=10.0/2",
+      "rejected": true,
+      "gate_failures": [
+        {
+          "metric": "scout_confirm_mean_time_recall",
+          "actual": 0.8701298701298701,
+          "baseline": 0.961038961038961,
+          "limit": 0.941038961038961,
+          "message": "scout_confirm_mean_time_recall 0.870130 dropped below baseline 0.961039 \u2212 0.02"
+        },
+        {
+          "metric": "scout_mean_ad_hit_rate",
+          "actual": 0.9090909090909091,
+          "baseline": 1.0,
+          "limit": 0.98,
+          "message": "scout_mean_ad_hit_rate 0.909091 dropped below baseline 1.000000 \u2212 0.02"
+        },
+        {
+          "metric": "scout_confirm_mean_time_f1",
+          "actual": 0.884297520661157,
+          "baseline": 0.9752066115702479,
+          "limit": 0.9452066115702479,
+          "message": "scout_confirm_mean_time_f1 0.884298 dropped below baseline 0.975207 \u2212 0.03"
+        },
+        {
+          "metric": "scout_mean_false_negative_rate",
+          "actual": 0.09090909090909091,
+          "baseline": 0.0,
+          "limit": 0.02,
+          "message": "scout_mean_false_negative_rate 0.090909 rose above baseline 0.000000 + 0.02"
+        }
+      ],
+      "detection_f1": 0.884297520661157,
+      "detection_recall": 0.8701298701298701,
+      "ad_hit_rate": 0.9090909090909091,
+      "token_reduction_pct": 93.2848446627232,
+      "scout_input_tokens": 4804.0,
+      "config": {
+        "threshold": 0.6,
+        "pad_seconds": 10.0,
+        "pad_segments": 2,
+        "merge_gap_seconds": 8.0,
+        "include_scout_extras": true,
+        "include_self_promo": false
+      }
+    },
+    {
+      "name": "extras=True t=0.8 pad=0.0/0",
+      "rejected": true,
+      "gate_failures": [
+        {
+          "metric": "scout_confirm_mean_time_recall",
+          "actual": 0.8337662337662337,
+          "baseline": 0.961038961038961,
+          "limit": 0.941038961038961,
+          "message": "scout_confirm_mean_time_recall 0.833766 dropped below baseline 0.961039 \u2212 0.02"
+        },
+        {
+          "metric": "scout_mean_ad_hit_rate",
+          "actual": 0.9090909090909091,
+          "baseline": 1.0,
+          "limit": 0.98,
+          "message": "scout_mean_ad_hit_rate 0.909091 dropped below baseline 1.000000 \u2212 0.02"
+        },
+        {
+          "metric": "scout_confirm_mean_time_f1",
+          "actual": 0.8615702479338843,
+          "baseline": 0.9752066115702479,
+          "limit": 0.9452066115702479,
+          "message": "scout_confirm_mean_time_f1 0.861570 dropped below baseline 0.975207 \u2212 0.03"
+        },
+        {
+          "metric": "scout_mean_false_negative_rate",
+          "actual": 0.09090909090909091,
+          "baseline": 0.0,
+          "limit": 0.02,
+          "message": "scout_mean_false_negative_rate 0.090909 rose above baseline 0.000000 + 0.02"
+        }
+      ],
+      "detection_f1": 0.8615702479338843,
+      "detection_recall": 0.8337662337662337,
+      "ad_hit_rate": 0.9090909090909091,
+      "token_reduction_pct": 94.32098206721015,
+      "scout_input_tokens": 4105.0,
+      "config": {
+        "threshold": 0.8,
+        "pad_seconds": 0.0,
+        "pad_segments": 0,
+        "merge_gap_seconds": 8.0,
+        "include_scout_extras": true,
+        "include_self_promo": false
+      }
+    },
+    {
+      "name": "extras=True t=0.8 pad=15.0/3",
+      "rejected": true,
+      "gate_failures": [
+        {
+          "metric": "scout_confirm_mean_time_recall",
+          "actual": 0.8701298701298701,
+          "baseline": 0.961038961038961,
+          "limit": 0.941038961038961,
+          "message": "scout_confirm_mean_time_recall 0.870130 dropped below baseline 0.961039 \u2212 0.02"
+        },
+        {
+          "metric": "scout_mean_ad_hit_rate",
+          "actual": 0.9090909090909091,
+          "baseline": 1.0,
+          "limit": 0.98,
+          "message": "scout_mean_ad_hit_rate 0.909091 dropped below baseline 1.000000 \u2212 0.02"
+        },
+        {
+          "metric": "scout_confirm_mean_time_f1",
+          "actual": 0.884297520661157,
+          "baseline": 0.9752066115702479,
+          "limit": 0.9452066115702479,
+          "message": "scout_confirm_mean_time_f1 0.884298 dropped below baseline 0.975207 \u2212 0.03"
+        },
+        {
+          "metric": "scout_mean_false_negative_rate",
+          "actual": 0.09090909090909091,
+          "baseline": 0.0,
+          "limit": 0.02,
+          "message": "scout_mean_false_negative_rate 0.090909 rose above baseline 0.000000 + 0.02"
+        }
+      ],
+      "detection_f1": 0.884297520661157,
+      "detection_recall": 0.8701298701298701,
+      "ad_hit_rate": 0.9090909090909091,
+      "token_reduction_pct": 92.87247007705425,
+      "scout_input_tokens": 5107.0,
+      "config": {
+        "threshold": 0.8,
+        "pad_seconds": 15.0,
+        "pad_segments": 3,
+        "merge_gap_seconds": 8.0,
+        "include_scout_extras": true,
+        "include_self_promo": false
+      }
+    },
+    {
+      "name": "extras=True t=0.8 pad=30.0/5",
+      "rejected": true,
+      "gate_failures": [
+        {
+          "metric": "scout_confirm_mean_time_recall",
+          "actual": 0.8701298701298701,
+          "baseline": 0.961038961038961,
+          "limit": 0.941038961038961,
+          "message": "scout_confirm_mean_time_recall 0.870130 dropped below baseline 0.961039 \u2212 0.02"
+        },
+        {
+          "metric": "scout_mean_ad_hit_rate",
+          "actual": 0.9090909090909091,
+          "baseline": 1.0,
+          "limit": 0.98,
+          "message": "scout_mean_ad_hit_rate 0.909091 dropped below baseline 1.000000 \u2212 0.02"
+        },
+        {
+          "metric": "scout_confirm_mean_time_f1",
+          "actual": 0.884297520661157,
+          "baseline": 0.9752066115702479,
+          "limit": 0.9452066115702479,
+          "message": "scout_confirm_mean_time_f1 0.884298 dropped below baseline 0.975207 \u2212 0.03"
+        },
+        {
+          "metric": "scout_mean_false_negative_rate",
+          "actual": 0.09090909090909091,
+          "baseline": 0.0,
+          "limit": 0.02,
+          "message": "scout_mean_false_negative_rate 0.090909 rose above baseline 0.000000 + 0.02"
+        }
+      ],
+      "detection_f1": 0.884297520661157,
+      "detection_recall": 0.8701298701298701,
+      "ad_hit_rate": 0.9090909090909091,
+      "token_reduction_pct": 91.43095389535496,
+      "scout_input_tokens": 6089.0,
+      "config": {
+        "threshold": 0.8,
+        "pad_seconds": 30.0,
+        "pad_segments": 5,
+        "merge_gap_seconds": 8.0,
+        "include_scout_extras": true,
+        "include_self_promo": false
+      }
+    },
+    {
+      "name": "extras=True t=1.5 pad=15.0/3",
+      "rejected": true,
+      "gate_failures": [
+        {
+          "metric": "scout_confirm_mean_time_recall",
+          "actual": 0.7372039724980901,
+          "baseline": 0.961038961038961,
+          "limit": 0.941038961038961,
+          "message": "scout_confirm_mean_time_recall 0.737204 dropped below baseline 0.961039 \u2212 0.02"
+        },
+        {
+          "metric": "scout_mean_ad_hit_rate",
+          "actual": 0.7878787878787878,
+          "baseline": 1.0,
+          "limit": 0.98,
+          "message": "scout_mean_ad_hit_rate 0.787879 dropped below baseline 1.000000 \u2212 0.02"
+        },
+        {
+          "metric": "scout_confirm_mean_time_f1",
+          "actual": 0.7694392606416067,
+          "baseline": 0.9752066115702479,
+          "limit": 0.9452066115702479,
+          "message": "scout_confirm_mean_time_f1 0.769439 dropped below baseline 0.975207 \u2212 0.03"
+        },
+        {
+          "metric": "scout_mean_false_negative_rate",
+          "actual": 0.21212121212121213,
+          "baseline": 0.0,
+          "limit": 0.02,
+          "message": "scout_mean_false_negative_rate 0.212121 rose above baseline 0.000000 + 0.02"
+        }
+      ],
+      "detection_f1": 0.7694392606416067,
+      "detection_recall": 0.7372039724980901,
+      "ad_hit_rate": 0.7878787878787878,
+      "token_reduction_pct": 96.1220837358285,
+      "scout_input_tokens": 2967.0,
+      "config": {
+        "threshold": 1.5,
+        "pad_seconds": 15.0,
+        "pad_segments": 3,
+        "merge_gap_seconds": 8.0,
+        "include_scout_extras": true,
+        "include_self_promo": false
+      }
+    }
+  ],
+  "extras": {
+    "kind": "pad_sweep",
+    "ranking": "Confidence-first ranking (survivors only are fold-eligible):\n- #1 extras=True t=0.5 pad=12.0/2: F1=0.9752 recall=0.9610 hit=1.0000 tok\u2193=92.05% scout_tok=5337\n- #2 extras=True t=0.5 pad=15.0/3: F1=0.9752 recall=0.9610 hit=1.0000 tok\u2193=91.48% scout_tok=5698\n- #3 extras=True t=0.4 pad=15.0/3: F1=0.9752 recall=0.9610 hit=1.0000 tok\u2193=91.48% scout_tok=5698\n- #4 extras=True t=0.45 pad=15.0/3: F1=0.9752 recall=0.9610 hit=1.0000 tok\u2193=91.48% scout_tok=5698\n- REJECT extras=False t=0.5 pad=15.0/3: Eval gates failed vs frozen baseline:\n- scout_confirm_mean_time_recall 0.870130 dropped below baseline 0.961039 \u2212 0.02\n- scout_mean_ad_hit_rate 0.909091 dropped below baseline 1.000000 \u2212 0.02\n- scout_confirm_mean_time_f1 0.884298 dropped below baseline 0.975207 \u2212 0.03\n- scout_mean_false_negative_rate 0.090909 rose above baseline 0.000000 + 0.02\n- REJECT extras=False t=0.8 pad=15.0/3: Eval gates failed vs frozen baseline:\n- scout_confirm_mean_time_recall 0.779221 dropped below baseline 0.961039 \u2212 0.02\n- scout_mean_ad_hit_rate 0.818182 dropped below baseline 1.000000 \u2212 0.02\n- scout_confirm_mean_time_f1 0.793388 dropped below baseline 0.975207 \u2212 0.03\n- scout_mean_false_negative_rate 0.181818 rose above baseline 0.000000 + 0.02\n- REJECT extras=False t=1.0 pad=15.0/3: Eval gates failed vs frozen baseline:\n- scout_confirm_mean_time_recall 0.779221 dropped below baseline 0.961039 \u2212 0.02\n- scout_mean_ad_hit_rate 0.818182 dropped below baseline 1.000000 \u2212 0.02\n- scout_confirm_mean_time_f1 0.793388 dropped below baseline 0.975207 \u2212 0.03\n- scout_mean_false_negative_rate 0.181818 rose above baseline 0.000000 + 0.02\n- REJECT extras=True t=0.6 pad=10.0/2: Eval gates failed vs frozen baseline:\n- scout_confirm_mean_time_recall 0.870130 dropped below baseline 0.961039 \u2212 0.02\n- scout_mean_ad_hit_rate 0.909091 dropped below baseline 1.000000 \u2212 0.02\n- scout_confirm_mean_time_f1 0.884298 dropped below baseline 0.975207 \u2212 0.03\n- scout_mean_false_negative_rate 0.090909 rose above baseline 0.000000 + 0.02\n- REJECT extras=True t=0.8 pad=0.0/0: Eval gates failed vs frozen baseline:\n- scout_confirm_mean_time_recall 0.833766 dropped below baseline 0.961039 \u2212 0.02\n- scout_mean_ad_hit_rate 0.909091 dropped below baseline 1.000000 \u2212 0.02\n- scout_confirm_mean_time_f1 0.861570 dropped below baseline 0.975207 \u2212 0.03\n- scout_mean_false_negative_rate 0.090909 rose above baseline 0.000000 + 0.02\n- REJECT extras=True t=0.8 pad=15.0/3: Eval gates failed vs frozen baseline:\n- scout_confirm_mean_time_recall 0.870130 dropped below baseline 0.961039 \u2212 0.02\n- scout_mean_ad_hit_rate 0.909091 dropped below baseline 1.000000 \u2212 0.02\n- scout_confirm_mean_time_f1 0.884298 dropped below baseline 0.975207 \u2212 0.03\n- scout_mean_false_negative_rate 0.090909 rose above baseline 0.000000 + 0.02\n- REJECT extras=True t=0.8 pad=30.0/5: Eval gates failed vs frozen baseline:\n- scout_confirm_mean_time_recall 0.870130 dropped below baseline 0.961039 \u2212 0.02\n- scout_mean_ad_hit_rate 0.909091 dropped below baseline 1.000000 \u2212 0.02\n- scout_confirm_mean_time_f1 0.884298 dropped below baseline 0.975207 \u2212 0.03\n- scout_mean_false_negative_rate 0.090909 rose above baseline 0.000000 + 0.02\n- REJECT extras=True t=1.5 pad=15.0/3: Eval gates failed vs frozen baseline:\n- scout_confirm_mean_time_recall 0.737204 dropped below baseline 0.961039 \u2212 0.02\n- scout_mean_ad_hit_rate 0.787879 dropped below baseline 1.000000 \u2212 0.02\n- scout_confirm_mean_time_f1 0.769439 dropped below baseline 0.975207 \u2212 0.03\n- scout_mean_false_negative_rate 0.212121 rose above baseline 0.000000 + 0.02\nFold-eligible winner: extras=True t=0.5 pad=12.0/2",
+    "improved_primary": true,
+    "fold_eligible": true,
+    "production_flag": false,
+    "fold_note": "Folded RECOMMENDED_CONFIG pad to 12s/2 segments. Snapshot updated; gates.json unchanged. Production CueDetector neighbor window unchanged."
+  },
+  "live_llm": false,
+  "corpus_version": "v1"
+}

@@ -5,7 +5,7 @@ User priorities (absolute): **confidence** (no regressions) → **detection** (F
 
 The daily runner loads **open** rows in that order, runs offline eval vs the frozen snapshot by default, and never loosens `gates.json`.
 
-Updated at `2026-10-01T17:09:05.778238+00:00` (UTC).
+Updated at `2026-10-01T17:12:45.647559+00:00` (UTC).
 
 | ID | Primary | Status | Statement | Last result |
 | --- | --- | --- | --- | --- |
@@ -16,7 +16,7 @@ Updated at `2026-10-01T17:09:05.778238+00:00` (UTC).
 | `H005` | confidence | accepted | Promote Soft Skills-style synthetic goldens (H004 templates, not copyrighted episode text) into corpus builders so TightPromo vs recommended shows offline confidence movement: fewer promo FPs on unlabeled `code <word>` tech speech, no labeled-ad recall drop. | fold_eligible, 2026-10-01 (`docs/experiments/runs/2026-10-01/H005.json`) |
 | `H006` | confidence | accepted | Add a news-briefing-style golden with side-by-side unlabeled bare `code <word>` tech speech and a labeled `use code SAVE…` / promo CTA so the H001 TightPromo detector can be measured offline on Daily-style structure. | fold_eligible, 2026-10-01 (`docs/experiments/runs/2026-10-01/H006.json`) |
 | `H007` | detection | accepted | Recover cue-sparse host-reads with a duration-gated midroll probe that stays within +10% of snapshot scout tokens=3901 (limit ~4291), cheaper than H002 storytelling/midroll-probe. | fold_eligible, 2026-10-01 (`docs/experiments/runs/2026-10-01/H007.json`) |
-| `H008` | cost | open | Micro-variant pad/threshold sweep (t=0.45 pad=15/3 extras; t=0.5 pad=12/2 extras) under frozen gates; keep recommended unless a survivor strictly beats F1 then recall then tokens. | — |
+| `H008` | cost | accepted | Micro-variant pad/threshold sweep (t=0.45 pad=15/3 extras; t=0.5 pad=12/2 extras) under frozen gates; keep recommended unless a survivor strictly beats F1 then recall then tokens. | fold_eligible, 2026-10-01 (`docs/experiments/runs/2026-10-01/H008.json`) |
 
 ## Predicted effects
 
@@ -109,12 +109,12 @@ Recover cue-sparse host-reads with a duration-gated midroll probe that stays wit
 Micro-variant pad/threshold sweep (t=0.45 pad=15/3 extras; t=0.5 pad=12/2 extras) under frozen gates; keep recommended unless a survivor strictly beats F1 then recall then tokens.
 
 - Primary metric: `cost`
-- Status: `open`
+- Status: `accepted`
 - Experiment kind: `pad_sweep`
 - Confidence: Any config that fails snapshot ε is discarded, even if cheaper.
 - Detection: Do not trade F1/recall/hit for tokens. Recommended 0.5/15s/3 extras=on should remain best recall on v1 unless a micro-variant ties detection and spends less.
 - Cost: Among survivors, prefer higher mean_token_reduction_pct / fewer scout tokens than 3901.
-- Notes: H003 follow-up. Experiment-package only. Do not change production neighbor window. Run only if H005–H007 are settled or skipped.
+- Notes: 2026-10-01 afternoon: accepted. extras=True t=0.5 pad=12/2 ties confirm F1/recall/hit vs pad=15/3 after H007 (F1 0.9752, recall 0.9610, hit 1.0) and cuts scout tokens 5698→5337. Folded into RECOMMENDED_CONFIG; snapshot updated; gates.json ε unchanged. Production neighbor window unchanged.
 
 ## Status values
 
@@ -130,4 +130,4 @@ Never loosen `docs/experiments/bow_scout_gemini_confirm/baseline/v1/gates.json`.
 
 ## Ledger notes
 
-2026-10-01 afternoon: H006 folded (news-briefing golden; n=11) then H007 folded (duration-gated probe in eval recommended path; confirm F1 0.9752, hit 1.0, scout tok 5698). Live catch-up on tip ade7344 for H006. Box Gemini spend $0.0049. Production AdClassifier and enable_bow_scout_gemini_confirm stay off. Frozen gates.json not loosened. TightPromo stays experiment-only. Next open: H008. 2026-10-01 morning: H005 accepted (Soft Skills-style golden). 2026-09-30 live: H001 measured (26→15 windows), H002 rejected, H003 no_win, H004 process_ok.
+2026-10-01 afternoon: H006 folded (news-briefing golden; n=11), H007 folded (duration-gated probe; hit 1.0, F1 0.9752), H008 folded (pad 12/2; scout tok 5337, token↓ 92.05%). Live catch-up on tip ade7344 for H006 (Gemini $0.0049 on box). Production AdClassifier and enable_bow_scout_gemini_confirm stay off. Frozen gates.json not loosened. TightPromo stays experiment-only. Open queue empty until follow-ups are seeded. 2026-10-01 morning: H005 accepted. 2026-09-30 live: H001 measured (26→15), H002 rejected, H003 no_win, H004 process_ok.

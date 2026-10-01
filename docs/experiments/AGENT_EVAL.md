@@ -118,7 +118,9 @@ Absolute priorities: **confidence** (no regressions) → **detection**
    (n=11); TightPromo stays experiment-only. `H007` accepted 2026-10-01
    afternoon — duration-gated midroll probe folded into eval
    `DEFAULT_WINDOW_POSTPROCESS` (cue-sparse block hit 0→1; time recall
-   0.961). Next open after H007 fold: `H008` (pad/threshold micro-sweep).
+   0.961). `H008` accepted 2026-10-01 afternoon — recommended pad 12s/2
+   segments (ties detection, scout tokens 5698→5337). Next open: seed
+   follow-ups after this wrap-up (`H009`+).
 
 ### Run
 

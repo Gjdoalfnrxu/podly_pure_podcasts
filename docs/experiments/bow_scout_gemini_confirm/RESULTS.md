@@ -1,22 +1,26 @@
 # Bag-of-words scout + Gemini confirm: offline results
 
-Generated at `2026-10-01T17:08:14.645268+00:00` (UTC). No live Gemini calls were made; confirm is an **oracle mock** that keeps labeled ad overlap inside scout windows.
+Generated at `2026-10-01T17:12:06.344960+00:00` (UTC). No live Gemini calls were made; confirm is an **oracle mock** that keeps labeled ad overlap inside scout windows.
 
 ## 2026-10-01 folds
 
 ### H005 (morning) — corpus
 
-Promoted `soft_skills_style_interview` (synthetic Soft Skills-*style* interview from H004 templates; **not** copyrighted episode text) into corpus v1 after TightPromo vs recommended dropped scout windows **2 → 1** on unlabeled `code review` / `code path` / `code sample`, with labeled `use code SOFT20` recall **1.0**. Frozen `gates.json` ε **not** loosened. TightPromo stays experiment-only.
+Promoted `soft_skills_style_interview` (synthetic; **not** copyrighted episode text) into corpus v1. TightPromo 2→1 windows on unlabeled `code <word>` with `use code SOFT20` recall 1.0.
 
 ### H006 (afternoon) — corpus
 
-Promoted `news_briefing_style_code_cta` (synthetic news-briefing-*style* golden from H004 templates; **not** The Daily / **not** NYT text) into corpus v1 after TightPromo vs recommended dropped scout windows **2 → 1** on unlabeled `code review` / `code path`, with labeled `use code SAVE50` recall **1.0**. Live catch-up (tip `ade73440e24f18bba300eb5a860910cb494f0936`): Gemini classified the dropped window as `technical_discussion`; real eps still 26→15 (−42.3%). Frozen `gates.json` ε **not** loosened. TightPromo stays experiment-only.
+Promoted `news_briefing_style_code_cta` (synthetic; **not** The Daily / NYT text) into corpus v1. TightPromo 2→1 windows on unlabeled `code review` / `code path` with `use code SAVE50` recall 1.0. Live (tip `ade73440e24f18bba300eb5a860910cb494f0936`): Gemini classified the dropped window as `technical_discussion`; real eps 26→15 (−42.3%). TightPromo stays experiment-only.
 
 ### H007 (afternoon) — experiment-package probe
 
-Folded `duration_gated_midroll_probe` into the eval recommended path (`DEFAULT_WINDOW_POSTPROCESS`). Recovers `cue_sparse_storytelling` ad-block hit **0 → 1** with a 40s window on episodes ≥900s; skips 10-minute `ad_free_interview`. Vs pre-probe n=11 snapshot: confirm F1 **0.9091 → 0.9752**, recall **0.9091 → 0.9610**, hit **0.9091 → 1.0**, scout tokens **5352 → 5698** (limit **5887**). Frozen `gates.json` ε **not** loosened. Production CueDetector extras stay off. Cue-sparse time coverage is **57.1%** (window 460–500s vs label 480–515s); block hit is 1.0.
+Folded `duration_gated_midroll_probe` into eval `DEFAULT_WINDOW_POSTPROCESS`. Cue-sparse ad-block hit 0→1; skips 10-minute `ad_free_interview`. Confirm F1 0.9091→0.9752, hit 0.9091→1.0, scout tokens 5352→5698 (then within ε). Production CueDetector extras stay off.
 
-Recommended-config macros after H007 (n=11 + probe): confirm F1 **0.9752**, recall **0.9610**, hit **1.0**, precision **1.0**, residual **0.0066**, scout tokens **5698**, token↓ **91.48%**.
+### H008 (afternoon) — experiment-package pad
+
+Folded recommended pad to **12s / 2 segments** (still extras on, t=0.5). Ties confirm F1/recall/hit vs 15/3 after H007's probe and cuts scout tokens **5698 → 5337** (token↓ 91.48% → 92.05%). Frozen `gates.json` ε **not** loosened. Production neighbor window unchanged.
+
+Recommended-config macros after H005–H008 (n=11 + probe + pad=12/2): confirm F1 **0.9752**, recall **0.9610**, hit **1.0**, precision **1.0**, residual **0.0066**, scout tokens **5337**, token↓ **92.05%**. Cue-sparse time coverage remains 57.1%.
 
 ## Hypotheses
 
@@ -27,8 +31,8 @@ Recommended-config macros after H007 (n=11 + probe): confirm F1 **0.9752**, reca
 ## Recommended scout config (offline)
 
 - threshold: `0.5` (flag if CueDetector score ≥ this)
-- pad_seconds: `15.0`
-- pad_segments: `3`
+- pad_seconds: `12.0`
+- pad_segments: `2`
 - include_scout_extras: `True` (optional `sponsored by` / `brought to you by` / `ad break` patterns; off in production `CueDetector()`)
 - include_self_promo: `false` (matches AdClassifier demotion)
 - window_postprocess: `duration_gated_midroll_probe` (H007; 40s midroll window on empty-scout episodes ≥900s)
@@ -43,8 +47,8 @@ Frozen corpus `v1` (11 fixtures). Agent contract: `docs/experiments/AGENT_EVAL.m
 | Path | Time recall | Time precision | Time F1 | Ad-block hit | FN rate | Residual cue rate | Input tokens |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
 | Production-like (oracle LLM + neighbor expand) | 100.0% | 57.6% | 72.0% | 100.0% | 0.0% | 0.0066 | 75866 |
-| Scout windows (pre-confirm) | 96.1% | 39.7% | 51.8% | 100.0% | 0.0% | — | — |
-| Scout + oracle confirm | 96.1% | 100.0% | 97.5% | 100.0% | 0.0% | 0.0066 | 5698 |
+| Scout windows (pre-confirm) | 96.1% | 44.6% | 56.8% | 100.0% | 0.0% | — | — |
+| Scout + oracle confirm | 96.1% | 100.0% | 97.5% | 100.0% | 0.0% | 0.0066 | 5337 |
 
 ## Headline metrics (recommended config)
 
@@ -52,14 +56,14 @@ Frozen corpus `v1` (11 fixtures). Agent contract: `docs/experiments/AGENT_EVAL.m
 | --- | ---: |
 | Scout ad-block hit rate | 100.0% |
 | Scout labeled-ad time coverage | 96.1% |
-| Scout window precision (pre-confirm) | 39.7% |
+| Scout window precision (pre-confirm) | 44.6% |
 | Scout+confirm time F1 | 97.5% |
 | False-negative risk (missed ad blocks) | 0.0% |
 | Residual strong-cue rate (after confirm cuts) | 0.0066 |
-| Mean token reduction vs full AdClassifier | 91.5% |
-| Mean USD reduction (est., similar $/M) | 79.3% |
+| Mean token reduction vs full AdClassifier | 92.0% |
+| Mean USD reduction (est., similar $/M) | 79.6% |
 | Full-walk input tokens (sum) | 75866 |
-| Scout+confirm input tokens (sum) | 5698 |
+| Scout+confirm input tokens (sum) | 5337 |
 | Repeat-episode scout input tokens (cached) | 0 |
 
 Hit rate is the fraction of **labeled ad blocks** that overlap a scout window. Coverage is the fraction of **labeled ad seconds** inside those windows. Precision is labeled-ad seconds / predicted seconds. F1 is the harmonic mean of time precision and recall after spans are merged.
@@ -68,17 +72,17 @@ Hit rate is the fraction of **labeled ad blocks** that overlap a scout window. C
 
 | Fixture | Segs | Ad blocks | Hit | Coverage | Precision | Windows | Full tok | Scout tok | Reduction | Missed |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- |
-| classic_host_reads | 540 | 3 | 100.0% | 100.0% | 48.6% | 3 | 20503 | 1172 | 94.3% | — |
+| classic_host_reads | 540 | 3 | 100.0% | 100.0% | 56.7% | 3 | 20503 | 1098 | 94.6% | — |
 | cue_sparse_storytelling | 240 | 1 | 100.0% | 57.1% | 50.0% | 1 | 8849 | 346 | 96.1% | — |
-| false_positive_content | 144 | 1 | 100.0% | 100.0% | 10.0% | 2 | 5964 | 742 | 87.6% | — |
-| self_promo_vs_sponsor | 180 | 1 | 100.0% | 100.0% | 33.3% | 1 | 6505 | 400 | 93.9% | — |
-| short_preroll_only | 96 | 1 | 100.0% | 100.0% | 40.0% | 1 | 3812 | 284 | 92.5% | — |
-| wildcard_midroll_example | 72 | 1 | 100.0% | 100.0% | 40.0% | 1 | 3488 | 471 | 86.5% | — |
+| false_positive_content | 144 | 1 | 100.0% | 100.0% | 11.8% | 2 | 5964 | 699 | 88.3% | — |
+| self_promo_vs_sponsor | 180 | 1 | 100.0% | 100.0% | 40.0% | 1 | 6505 | 371 | 94.3% | — |
+| short_preroll_only | 96 | 1 | 100.0% | 100.0% | 50.0% | 1 | 3812 | 269 | 92.9% | — |
+| wildcard_midroll_example | 72 | 1 | 100.0% | 100.0% | 46.2% | 1 | 3488 | 440 | 87.4% | — |
 | ad_free_interview | 120 | 0 | 100.0% | 100.0% | 100.0% | 0 | 4177 | 0 | 100.0% | — |
-| stacked_midrolls | 216 | 2 | 100.0% | 100.0% | 43.8% | 1 | 8438 | 455 | 94.6% | — |
-| chapter_style_ad_break | 108 | 1 | 100.0% | 100.0% | 45.5% | 1 | 3974 | 377 | 90.5% | — |
-| soft_skills_style_interview | 144 | 1 | 100.0% | 100.0% | 11.1% | 2 | 5965 | 705 | 88.2% | — |
-| news_briefing_style_code_cta | 120 | 1 | 100.0% | 100.0% | 14.3% | 2 | 4191 | 746 | 82.2% | — |
+| stacked_midrolls | 216 | 2 | 100.0% | 100.0% | 50.0% | 1 | 8438 | 423 | 95.0% | — |
+| chapter_style_ad_break | 108 | 1 | 100.0% | 100.0% | 55.6% | 1 | 3974 | 347 | 91.3% | — |
+| soft_skills_style_interview | 144 | 1 | 100.0% | 100.0% | 13.3% | 2 | 5965 | 659 | 89.0% | — |
+| news_briefing_style_code_cta | 120 | 1 | 100.0% | 100.0% | 17.6% | 2 | 4191 | 685 | 83.7% | — |
 
 ### Fixture notes
 
@@ -117,7 +121,7 @@ Cue-sparse host-reads (brand story, no URL/CTA/phone/sponsor phrase) are recover
 | True | 0.8 | 30.0 | 5 | 90.9% | 87.0% | 38.8% | 91.4% |
 | True | 1.5 | 15.0 | 3 | 78.8% | 73.7% | 61.7% | 96.1% |
 
-Raising padding increases coverage of ads whose cues sit in the middle of the block (Gemini then sees the intro). It also lowers precision and spends more confirm tokens. Threshold 0.5 with extras and ±15s/±3 segments is the best recall/token trade-off on this set: it includes transition bumpers (`after the break`) used by the prompt.py Wildcard example (score 0.5) while self-promo-only lines (weight 0.4) stay below the cut. Threshold 0.8 drops those transition-only ads. Cue-sparse brand reads still miss at every threshold.
+Raising padding increases coverage of ads whose cues sit in the middle of the block (Gemini then sees the intro). It also lowers precision and spends more confirm tokens. After H008, threshold 0.5 with extras and ±12s/±2 segments ties confirm F1/recall/hit vs ±15s/±3 on corpus v1 and spends fewer scout tokens. It still includes transition bumpers (`after the break`) used by the prompt.py Wildcard example (score 0.5) while self-promo-only lines (weight 0.4) stay below the cut. Threshold 0.8 drops those transition-only ads. H007's duration-gated probe recovers cue-sparse host-reads as a block hit on every sweep config that would otherwise return empty windows on long episodes; short ad-free interviews stay unprobed.
 
 ## Caching
 

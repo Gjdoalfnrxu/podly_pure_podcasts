@@ -103,8 +103,8 @@ DEFAULT_SWEEP: list[ScoutConfig] = [
 
 RECOMMENDED_CONFIG = ScoutConfig(
     threshold=0.5,
-    pad_seconds=15.0,
-    pad_segments=3,
+    pad_seconds=12.0,
+    pad_segments=2,
     include_scout_extras=True,
 )
 
@@ -113,6 +113,9 @@ RECOMMENDED_CONFIG = ScoutConfig(
 # ad_free_interview. Experiment-package only — production CueDetector
 # extras stay off.
 DEFAULT_WINDOW_POSTPROCESS = duration_gated_midroll_probe
+
+# H008 2026-10-01: pad=12s/2 segments ties confirm F1/recall/hit vs pad=15/3
+# and spends fewer scout tokens. Experiment-package only.
 
 
 def labeled_ad_duration(ads: list[Any]) -> float:
@@ -553,10 +556,10 @@ def render_results_markdown(results: dict[str, Any]) -> str:
         [
             "",
             "Cue-sparse host-reads (brand story, no URL/CTA/phone/sponsor phrase) "
-            "are the main residual risk. Padding cannot recover an ad the scout "
-            "never flags. A live Gemini full-walk would still catch these; a "
-            "scout-first path will not unless extras grow or a cheap fallback "
-            "full pass is kept.",
+            "are a **block hit** after H007's duration-gated probe, but time "
+            "coverage on `cue_sparse_storytelling` is still 57.1% (40s window "
+            "460–500s vs label 480–515s). Production `CueDetector()` extras stay "
+            "off. A wider probe is a follow-up, not a reason to loosen ε.",
             "",
             "## Threshold / padding sweep",
             "",
@@ -584,9 +587,10 @@ def render_results_markdown(results: dict[str, Any]) -> str:
             "",
             "Raising padding increases coverage of ads whose cues sit in the "
             "middle of the block (Gemini then sees the intro). It also lowers "
-            "precision and spends more confirm tokens. Threshold 0.5 with extras "
-            "and ±15s/±3 segments is the best recall/token trade-off on this set: "
-            "it includes transition bumpers (`after the break`) used by the "
+            "precision and spends more confirm tokens. After H008, threshold 0.5 "
+            "with extras and ±12s/±2 segments ties confirm F1/recall/hit vs "
+            "±15s/±3 on corpus v1 and spends fewer scout tokens. It still "
+            "includes transition bumpers (`after the break`) used by the "
             "prompt.py Wildcard example (score 0.5) while self-promo-only lines "
             "(weight 0.4) stay below the cut. Threshold 0.8 drops those "
             "transition-only ads. H007's duration-gated probe recovers "
