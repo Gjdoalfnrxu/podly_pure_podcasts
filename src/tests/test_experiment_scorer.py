@@ -66,6 +66,10 @@ def _results_from_snapshot() -> dict[str, Any]:
 def test_scorer_rejects_regression_then_prefers_f1_then_tokens() -> None:
     results = _results_from_snapshot()
     snapshot = load_snapshot()
+    # Post-H009 confirm F1 is already 1.0, so a +0.01 bump cannot rank
+    # above a cheaper survivor. Keep F1 under the ceiling for this unit
+    # test so detection still beats cost.
+    results["recommended"]["macro"]["scout_confirm_mean_time_f1"] = 0.98
     current = score_candidate("current", results, snapshot=snapshot)
     assert current.rejected is False
 

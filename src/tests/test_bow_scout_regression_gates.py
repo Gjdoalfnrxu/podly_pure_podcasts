@@ -73,7 +73,10 @@ def test_eval_gates_pass_against_committed_snapshot() -> None:
 def test_eval_gates_fail_on_recall_drop() -> None:
     results = evaluate_all()
     snapshot = extract_snapshot(results)
-    snapshot["macro"]["scout_confirm_mean_time_recall"] = 1.0
+    # Recall can already be 1.0 after H009; inject a synthetic drop beyond ε.
+    results["recommended"]["macro"]["scout_confirm_mean_time_recall"] = (
+        float(snapshot["macro"]["scout_confirm_mean_time_recall"]) - 0.05
+    )
     failures = compare_to_snapshot(results, snapshot=snapshot)
     metrics = {item.metric for item in failures}
     assert "scout_confirm_mean_time_recall" in metrics

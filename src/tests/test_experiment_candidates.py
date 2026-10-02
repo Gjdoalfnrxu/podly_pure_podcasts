@@ -115,7 +115,7 @@ def test_evaluate_all_default_applies_duration_gated_probe() -> None:
     sparse = by_id["cue_sparse_storytelling"]
     assert sparse["ad_hit_rate"] == 1.0
     assert sparse["n_windows"] == 1
-    # H009: 70s probe covers the full 480–515s Away host-read.
+    # H009: 70s probe covers the full 480-515s Away host-read.
     assert sparse["ad_coverage"] == 1.0
     assert sparse["paths"]["scout_confirm"]["time_recall"] == 1.0
     free = by_id["ad_free_interview"]
