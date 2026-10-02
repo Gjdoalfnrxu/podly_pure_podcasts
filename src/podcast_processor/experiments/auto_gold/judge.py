@@ -10,12 +10,14 @@ from typing import Any
 from podcast_processor.experiments.auto_gold.constants import (
     DEFAULT_GEMINI_MODEL,
     DEFAULT_JUDGE_BUDGET_USD,
+    JUDGE_GEMINI_INPUT_USD_PER_M,
+    JUDGE_GEMINI_OUTPUT_USD_PER_M,
     JUDGE_KEY_ENV_NEEDED,
 )
 from podcast_processor.experiments.auto_gold.types import ChunkTranscript, JudgeLabel
 from podcast_processor.experiments.cost_model import (
-    DEFAULT_GEMINI_PRICES,
     DEFAULT_OUTPUT_TOKENS_PER_CALL,
+    ModelPrices,
     usd_for_tokens,
 )
 from podcast_processor.experiments.gemini_confirm import (
@@ -23,6 +25,12 @@ from podcast_processor.experiments.gemini_confirm import (
     estimate_tokens_from_text,
 )
 from shared.env import GROQ_KEY_ENV, gemini_api_key, groq_api_key
+
+JUDGE_GEMINI_PRICES = ModelPrices(
+    name=DEFAULT_GEMINI_MODEL,
+    input_usd_per_million=JUDGE_GEMINI_INPUT_USD_PER_M,
+    output_usd_per_million=JUDGE_GEMINI_OUTPUT_USD_PER_M,
+)
 
 CompletionFn = Callable[..., Any]
 
@@ -122,19 +130,41 @@ class GoldJudge:
             )
         if self.spent_usd >= self.max_usd:
             self.n_budget_skips += 1
-            return JudgeLabel(
-                is_ad=False,
-                ad_spans=[],
-                content_type="none",
-                confidence=0.0,
-                skipped=True,
-                skip_reason=(
-                    f"gemini_judge budget cap ${self.max_usd:.2f} reached; "
-                    "remaining chunks skipped"
-                ),
-                model=self.model,
-            )
-        return self._live(transcript)
+            return self._budget_skip()
+        try:
+            return self._live(transcript)
+        except Exception as exc:  # noqa: BLE001
+            return self._api_error(exc)
+
+    def _budget_skip(self) -> JudgeLabel:
+        return JudgeLabel(
+            is_ad=False,
+            ad_spans=[],
+            content_type="none",
+            confidence=0.0,
+            skipped=True,
+            skip_reason=(
+                f"gemini_judge budget cap ${self.max_usd:.2f} reached; "
+                "remaining chunks skipped"
+            ),
+            model=self.model,
+        )
+
+    def _api_error(self, exc: Exception) -> JudgeLabel:
+        key = gemini_api_key()
+        message = str(exc)
+        if key:
+            message = message.replace(key, "[redacted]")
+        message = " ".join(message.split())[:300]
+        return JudgeLabel(
+            is_ad=False,
+            ad_spans=[],
+            content_type="none",
+            confidence=0.0,
+            skipped=True,
+            skip_reason=f"gemini_judge error: {type(exc).__name__}: {message}",
+            model=self.model,
+        )
 
     def _live(self, transcript: ChunkTranscript) -> JudgeLabel:
         key = gemini_api_key()
@@ -142,6 +172,7 @@ class GoldJudge:
         import litellm
 
         def _call(**kwargs: Any) -> Any:
+            kwargs.setdefault("reasoning_effort", "low")
             return litellm.completion(**kwargs)
 
         return self._complete(transcript, _call)
@@ -153,22 +184,11 @@ class GoldJudge:
         ]
         input_tokens = estimate_message_tokens(messages)
         estimated = usd_for_tokens(
-            input_tokens, DEFAULT_OUTPUT_TOKENS_PER_CALL, DEFAULT_GEMINI_PRICES
+            input_tokens, DEFAULT_OUTPUT_TOKENS_PER_CALL, JUDGE_GEMINI_PRICES
         )
         if self.spent_usd + estimated > self.max_usd:
             self.n_budget_skips += 1
-            return JudgeLabel(
-                is_ad=False,
-                ad_spans=[],
-                content_type="none",
-                confidence=0.0,
-                skipped=True,
-                skip_reason=(
-                    f"gemini_judge budget cap ${self.max_usd:.2f} reached; "
-                    "remaining chunks skipped"
-                ),
-                model=self.model,
-            )
+            return self._budget_skip()
         response = fn(
             model=self.model,
             messages=messages,
@@ -177,10 +197,26 @@ class GoldJudge:
         content = response.choices[0].message.content or "{}"
         label = parse_judge_json(content, model=self.model)
         output_tokens = estimate_tokens_from_text(label.raw_response)
-        label.usd = usd_for_tokens(input_tokens, output_tokens, DEFAULT_GEMINI_PRICES)
+        prompt_tokens, completion_tokens = _response_usage(
+            response, input_tokens, output_tokens
+        )
+        label.usd = usd_for_tokens(
+            prompt_tokens, completion_tokens, JUDGE_GEMINI_PRICES
+        )
         self.spent_usd += label.usd
         self.n_calls += 1
         return label
+
+
+def _response_usage(
+    response: Any, fallback_in: int, fallback_out: int
+) -> tuple[int, int]:
+    usage = getattr(response, "usage", None)
+    prompt = getattr(usage, "prompt_tokens", None) if usage is not None else None
+    completion = (
+        getattr(usage, "completion_tokens", None) if usage is not None else None
+    )
+    return int(prompt or fallback_in), int(completion or fallback_out)
 
 
 def _user_prompt(transcript: ChunkTranscript) -> str:

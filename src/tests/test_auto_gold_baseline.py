@@ -568,3 +568,46 @@ def test_judge_budget_cap_skips_without_calling() -> None:
     assert called["n"] == 0
     assert judge.n_budget_skips == 1
     assert judge.spent_usd == 0.0
+
+
+def test_judge_bills_gemini_38_flash_usage() -> None:
+    from podcast_processor.experiments.auto_gold.constants import DEFAULT_GEMINI_MODEL
+    from podcast_processor.experiments.auto_gold.types import ChunkTranscript
+
+    class _Usage:
+        prompt_tokens = 1000
+        completion_tokens = 100
+
+    class _Message:
+        content = (
+            '{"is_ad": true, "ad_spans": [{"start": 0, "end": 5, "confidence": 0.9}], '
+            '"content_type": "promotional_external", "confidence": 0.9}'
+        )
+
+    class _Choice:
+        message = _Message()
+
+    class _Resp:
+        choices = [_Choice()]
+        usage = _Usage()
+
+    def completion(**kwargs: object) -> _Resp:
+        assert kwargs["model"] == DEFAULT_GEMINI_MODEL
+        return _Resp()
+
+    judge = GoldJudge(mode="dry-run", completion_fn=completion, max_usd=0.50)
+    assert judge.model == "gemini/gemini-3.8-flash"
+    transcript = ChunkTranscript(
+        chunk=always_preroll(90.0),
+        audio_path=None,
+        skipped=False,
+        skip_reason=None,
+        backend="injected",
+        text="this episode is sponsored by example",
+        segments=[],
+    )
+    label = judge.judge(transcript)
+    assert label.is_ad
+    assert label.usd == pytest.approx(1000 / 1_000_000 * 0.75 + 100 / 1_000_000 * 3.75)
+    assert judge.spent_usd == pytest.approx(label.usd)
+    assert judge.n_calls == 1

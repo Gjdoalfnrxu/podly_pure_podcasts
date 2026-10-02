@@ -164,16 +164,19 @@ def _judge_body(result: PipelineResult) -> str:
                 if lab.is_ad:
                     ads += 1
     reason = ""
+    model = ""
     for row in result.shows:
         for lab in row.labels:
-            if lab.skip_reason:
+            if not model and lab.model:
+                model = lab.model
+            if lab.skip_reason and not reason:
                 reason = lab.skip_reason
-                break
-        if reason:
+        if reason and model:
             break
     return "\n".join(
         [
             f"- Mode: `{result.judge_mode}`",
+            f"- Model: `{model or 'n/a'}`",
             f"- Labeled chunks: `{labeled}` (is_ad={ads})",
             f"- Skipped: `{skipped}`",
             f"- Spend: `${result.judge_spend_usd:.4f}` / cap `${result.judge_budget_usd:.2f}` "

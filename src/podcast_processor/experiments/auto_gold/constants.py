@@ -44,7 +44,12 @@ DAI_HOST_MARKERS: tuple[str, ...] = (
 )
 
 DEFAULT_WHISPER_MODEL = "base.en"
-DEFAULT_GEMINI_MODEL = "gemini/gemini-2.5-flash"
+# gemini-2.5-flash returns 404 for new API keys (Oct 2026). 3.8 Flash is the
+# model the Gemini API tells those keys to use. Introductory rates through
+# 2026-12-31 are $0.75 / $3.75 per 1M tokens (thinking tokens count as output).
+DEFAULT_GEMINI_MODEL = "gemini/gemini-3.8-flash"
+JUDGE_GEMINI_INPUT_USD_PER_M = 0.75
+JUDGE_GEMINI_OUTPUT_USD_PER_M = 3.75
 DEFAULT_JUDGE_BUDGET_USD = 0.50
 # Canonical env var the operator must set for a live Gemini judge.
 # Aliases (GEMINI_KEY, GOOGLE_API_KEY, GOOGLE_GENERATIVE_AI_API_KEY) also work.
