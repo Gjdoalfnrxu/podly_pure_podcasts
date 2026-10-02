@@ -24,6 +24,7 @@ from podcast_processor.experiments.auto_gold.candidates import (
 )
 from podcast_processor.experiments.auto_gold.constants import PREROLL_END_SECONDS
 from podcast_processor.experiments.auto_gold.downloader import (
+    download_audio,
     enclosure_is_dai,
     episode_from_rss,
     fetch_show_episode,
@@ -425,7 +426,35 @@ def test_report_render_roundtrip(tmp_path: Path) -> None:
     assert "`False`" in rendered or "`false`" in rendered.lower()
 
 
-def test_fetch_show_episode_parses_rss(tmp_path: Path) -> None:
+def test_download_audio_unlinks_partial_on_max_bytes(tmp_path: Path) -> None:
+    dest = tmp_path / "ep.mp3"
+
+    class _Resp:
+        status_code = 200
+
+        def raise_for_status(self) -> None:
+            return None
+
+        def __enter__(self) -> _Resp:
+            return self
+
+        def __exit__(self, *args: object) -> None:
+            return None
+
+        def iter_content(self, chunk_size: int = 8192) -> list[bytes]:
+            return [b"x" * 100, b"y" * 100]
+
+    def fake_get(url: str, **kwargs: object) -> _Resp:
+        return _Resp()
+
+    with pytest.raises(OSError, match="max_bytes"):
+        download_audio(
+            "https://example.com/ep.mp3",
+            dest,
+            get=fake_get,
+            max_bytes=50,
+        )
+    assert not dest.exists()
     class _Resp:
         content = SAMPLE_RSS
         status_code = 200
