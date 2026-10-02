@@ -18,15 +18,15 @@ Production `AdClassifier` is not in this pipeline.
 - Shows in this run: `12`
 - Chunks proposed: `59`
 - Whisper transcribed: `59`
-- Judge is_ad: `0` / not_ad `0` / skipped `59`
+- Judge is_ad: `29` / not_ad `30` / skipped `0`
 - Whisper backend: `local`
-- Judge mode: `dry-run`
-- Gemini spend: `$0.0000` (cap `$0.50`, calls `0`)
-- Gemini/Google key present: `False`
+- Judge mode: `gemini`
+- Gemini spend: `$0.0367` (cap `$0.50`, calls `59`)
+- Gemini/Google key present: `True`
 - Canonical judge env var: `GEMINI_API_KEY`
 - GROQ_KEY present but unused: `True`
 - Production `enable_bow_scout_gemini_confirm`: `False` (must stay false)
-- Blocked steps: gemini_judge (dry-run / no Gemini or Google key; set GEMINI_API_KEY)
+- Blocked steps: none
 <!-- END:AUTO_GOLD_STATUS -->
 
 ## Sample (one recent episode per show)
@@ -34,18 +34,18 @@ Production `AdClassifier` is not in this pipeline.
 <!-- BEGIN:AUTO_GOLD_SAMPLE -->
 | show_id | genre | episode | RSS | chunks | whispered | is_ad |
 | --- | --- | --- | --- | ---: | ---: | ---: |
-| `npr_up_first` | news | FlyDubai Midair Attack, Trump Midterm Campaigning, Hegseth Reshaping Military | ok | 4 | 4 | 0 |
-| `npr_wait_wait` | comedy | A surprise snow day for the White House press corps | ok | 6 | 6 | 0 |
-| `serial` | true_crime | The Last 12 Weeks - Ep. 5 | ok | 5 | 5 | 0 |
+| `npr_up_first` | news | FlyDubai Midair Attack, Trump Midterm Campaigning, Hegseth Reshaping Military | ok | 4 | 4 | 2 |
+| `npr_wait_wait` | comedy | A surprise snow day for the White House press corps | ok | 6 | 6 | 4 |
+| `serial` | true_crime | The Last 12 Weeks - Ep. 5 | ok | 5 | 5 | 1 |
 | `atp` | tech | 711: Hot Dog on an Actuator | ok | 2 | 2 | 0 |
-| `bbc_football_daily` | sports | Special: Sir Alex Ferguson interview | ok | 3 | 3 | 0 |
-| `planet_money` | finance | Who’s gonna pay for your Social Security? | ok | 6 | 6 | 0 |
-| `bbc_global_news` | news | France rocked by student protests | ok | 3 | 3 | 0 |
-| `wtf_maron` | comedy | Episode 1344 - Laura Veirs | ok | 3 | 3 | 0 |
-| `crime_junkie` | true_crime | MURDERED: Dorothy “Toby” Tate | ok | 10 | 10 | 0 |
-| `darknet_diaries` | tech | 179: The Courthouse - Revisited | ok | 7 | 7 | 0 |
-| `bill_simmons` | sports | NBA Lie Detectors, Duren’s Future, Tomlin’s TV Splash, and a 2026 Sports Media Check With Kirk Goldsberry and Bryan Curtis | ok | 7 | 7 | 0 |
-| `marketplace` | finance | Inflation held steady in August. Yay? | ok | 3 | 3 | 0 |
+| `bbc_football_daily` | sports | Special: Sir Alex Ferguson interview | ok | 3 | 3 | 1 |
+| `planet_money` | finance | Who’s gonna pay for your Social Security? | ok | 6 | 6 | 5 |
+| `bbc_global_news` | news | France rocked by student protests | ok | 3 | 3 | 2 |
+| `wtf_maron` | comedy | Episode 1344 - Laura Veirs | ok | 3 | 3 | 1 |
+| `crime_junkie` | true_crime | MURDERED: Dorothy “Toby” Tate | ok | 10 | 10 | 7 |
+| `darknet_diaries` | tech | 179: The Courthouse - Revisited | ok | 7 | 7 | 3 |
+| `bill_simmons` | sports | NBA Lie Detectors, Duren’s Future, Tomlin’s TV Splash, and a 2026 Sports Media Check With Kirk Goldsberry and Bryan Curtis | ok | 7 | 7 | 1 |
+| `marketplace` | finance | Inflation held steady in August. Yay? | ok | 3 | 3 | 2 |
 
 Genres present: comedy, finance, news, sports, tech, true_crime. Finance shows: 2/12 (must not be the whole sample).
 <!-- END:AUTO_GOLD_SAMPLE -->
@@ -72,7 +72,7 @@ Publisher markers are **positives only**. Missing chapters never count as ad-fre
 - Backend: `local`
 - Transcribed chunks: `59`
 - Skipped chunks: `0`
-- Transcript characters: `38222`
+- Transcript characters: `38241`
 - Skip reason (first): n/a
 - Whisper runs on **candidate chunks only**, never the full episode.
 
@@ -111,7 +111,7 @@ Publisher markers are **positives only**. Missing chapters never count as ad-fre
 | `wtf_maron` | 1647-1675s | dsp_silence | 446 | which was a very different experience than outside. What did you get? I've tripped with my eyes closed. Yeah, I didn't have a ton of visuals. I don't think I... |
 | `wtf_maron` | 3095-3123s | dsp_silence | 319 | It takes how long it takes and it's not linear. No, nothing's linear. It's just a frequency you live with for the rest of it. Yeah. But I do think that one o... |
 | `crime_junkie` | 0-92s | preroll_always,dsp_silence | 1810 | When my husband and I became parents, it was in a whirlwind unconventional way. We literally went from no kids to a 10-day-old and a 10-year-old in a matter ... |
-| `crime_junkie` | 111-139s | dsp_silence | 507 | She reveals the shocking crimes, mysterious disappearances, and unsettling encounters hidden beneath the postcard perfect scenery. If you're ready to discove... |
+| `crime_junkie` | 111-139s | dsp_silence | 517 | She reveals the shocking crimes, mysterious disappearances, and unsettling encounters hidden beneath the postcard perfect scenery. If you're ready to discove... |
 | `crime_junkie` | 184-212s | dsp_silence | 196 | Let me take you back to November 15, 1983, just before 11 a.m. When sheriff's deputies are dispatched to the scene of what seems like a car accident on a dir... |
 | `crime_junkie` | 851-885s | dai_probe | 651 | Yeah, and if he's not that's just gonna make this case all the more difficult to solve with the resources that they had 1983 because there is no nationwide p... |
 | `crime_junkie` | 963-991s | dsp_silence | 404 | Turns out, they had been contacted by a local pawn shop because somebody had just brought in Toby's camera. One of the simplest, most powerful ways to build ... |
@@ -131,7 +131,7 @@ Publisher markers are **positives only**. Missing chapters never count as ad-fre
 | `bill_simmons` | 742-770s | dsp_silence | 418 | This dude dropped to 10 point a game and his on-offs splits were terrible. Detroit was a much better team when he was off the floor. And look, I think he sho... |
 | `bill_simmons` | 801-838s | dsp_silence | 499 | Well, we do five for 70, five for 80. Yeah. They're only offering four for 55. Like, we're at 580 right now, if you can, if you can figure it out. Sacramento... |
 | `bill_simmons` | 1501-1544s | dsp_silence | 719 | called, do you believe this? LeBron is the first one. He said, I didn't come here to lose in the second round. Felt like a slight dig in a bead. Like just a ... |
-| `bill_simmons` | 1566-1594s | dsp_silence | 590 | for big choice for him. I know he thinks very highly of Tyree's maxi Jalen Brown. Our personal friends of his. So I think he thinks this is a great team. And... |
+| `bill_simmons` | 1566-1594s | dsp_silence | 599 | for big choice for him. I know he thinks very highly of Tyree's maxi Jalen Brown. Our personal friends of his. So I think he thinks this is a great team. And... |
 | `bill_simmons` | 2494-2528s | dai_probe | 559 | It's been made by everybody, but the punishment should be you have to pay Gary Trent for your 64 million. Like we've decided and that's what you got to do. D... |
 | `bill_simmons` | 5006-5040s | dai_probe | 606 | But I didn't know the names of the linemen. Yeah, I mean, when they start saying the numbers, Herb Street does this too now because he's just doing too much,... |
 | `marketplace` | 0-92s | preroll_always | 1271 | Running a business is hard enough, so why make it harder with a dozen different apps that don't talk to each other? Introducing Odo, the only business softwa... |
@@ -142,21 +142,22 @@ Publisher markers are **positives only**. Missing chapters never count as ad-fre
 ## Judge (Gemini / dry-run; GROQ_KEY unused)
 
 <!-- BEGIN:AUTO_GOLD_JUDGE -->
-- Mode: `dry-run`
-- Labeled chunks: `0` (is_ad=0)
-- Skipped: `59`
-- Spend: `$0.0000` / cap `$0.50` (0 live calls)
+- Mode: `gemini`
+- Model: `gemini/gemini-3.8-flash`
+- Labeled chunks: `59` (is_ad=29)
+- Skipped: `0`
+- Spend: `$0.0367` / cap `$0.50` (59 live calls)
 - Canonical env var needed for live judge: `GEMINI_API_KEY` (aliases: `GEMINI_KEY`, `GOOGLE_API_KEY`, `GOOGLE_GENERATIVE_AI_API_KEY`). `GROQ_KEY` is never used.
-- Skip reason (first): no GEMINI_API_KEY / GEMINI_KEY / GOOGLE_API_KEY / GOOGLE_GENERATIVE_AI_API_KEY; dry-run skip. GROQ_KEY is unused. GROQ_KEY is set but unused for this judge.
+- Skip reason (first): n/a
 <!-- END:AUTO_GOLD_JUDGE -->
 
 ## Spend (Gemini cap $0.50)
 
 <!-- BEGIN:AUTO_GOLD_SPEND -->
-- Live Gemini calls: `0`
-- Estimated spend: `$0.0000`
+- Live Gemini calls: `59`
+- Estimated spend: `$0.0367`
 - Budget cap: `$0.50`
-- Key present: `False`
+- Key present: `True`
 - Set `GEMINI_API_KEY` to enable the judge. Do not use `GROQ_KEY`.
 <!-- END:AUTO_GOLD_SPEND -->
 
@@ -166,9 +167,7 @@ On a Cursor cloud VM without torch/Gemini, expect Whisper stub + judge
 dry-run. RSS-only still records the representative feed list.
 
 <!-- BEGIN:AUTO_GOLD_BLOCKED -->
-- gemini_judge (dry-run / no Gemini or Google key; set GEMINI_API_KEY)
-- note: GROQ_KEY is set in the environment and is unused by this judge.
-- note: Gemini judge budget cap $0.50; canonical env var GEMINI_API_KEY.
+No blocked steps in this run.
 <!-- END:AUTO_GOLD_BLOCKED -->
 
 ## Production flags
@@ -187,9 +186,10 @@ proposed cannot appear in gold. Whisper timestamps, dropped words, and
 hallucinated promo language shape the judge input. This gold is therefore
 conditioned on the candidate generator + ASR, not on a human full listen.
 
-**Same-family judge.** The default live judge is Gemini 2.5 Flash (or
-`GEMINI_CONFIRM_MODEL`). The scout±confirm experiment uses the same model
-family. Production `AdClassifier` is also an LLM walk. Measuring confirm or
+**Same-family judge.** The live judge is Gemini 3.8 Flash
+(`gemini/gemini-3.8-flash`, or `GEMINI_CONFIRM_MODEL`). Gemini 2.5 Flash
+returns 404 for new API keys. Scout±confirm and production `AdClassifier`
+are still LLM walks in the same broad family. Measuring confirm or
 classifier agreement against this gold is **optimistic**. Keep a human
 review step before promoting anything into `corpus/v1`.
 
