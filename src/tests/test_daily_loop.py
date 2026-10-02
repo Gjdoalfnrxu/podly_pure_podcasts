@@ -201,6 +201,8 @@ def test_ranked_open_puts_confidence_first() -> None:
         "H009",
         "H003",
         "H008",
+        "H011",
+        "H012",
     ]
 
 

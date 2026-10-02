@@ -1,0 +1,72 @@
+{
+  "generated_at": "2026-10-02T15:54:41.096321+00:00",
+  "run_date": "2026-10-02",
+  "offline": true,
+  "live_provider": "mock",
+  "live_blocked": null,
+  "daily_budget_usd": 0.5,
+  "spent_usd": 0.0,
+  "cache_dir": "docs/experiments/runs/.cache",
+  "production": {
+    "enable_bow_scout_gemini_confirm": false,
+    "ad_detection_default_strategy": "llm"
+  },
+  "baseline": {
+    "passed_gates": true,
+    "ranking_line": "Confidence-first ranking (survivors only are fold-eligible):\n- #1 frozen_recommended: F1=0.9752 recall=0.9610 hit=1.0000 tok\u2193=92.05% scout_tok=5337\nFold-eligible winner: frozen_recommended",
+    "macro": {
+      "n_fixtures": 11,
+      "mean_ad_hit_rate": 1.0,
+      "mean_ad_coverage": 0.961038961038961,
+      "mean_scout_precision": 0.44647378765025825,
+      "mean_false_negative_risk": 0.0,
+      "mean_token_reduction_pct": 92.04568649364559,
+      "mean_usd_reduction_pct": 79.63729079551436,
+      "sum_full_input_tokens": 75866,
+      "sum_scout_input_tokens": 5337,
+      "sum_cached_repeat_input_tokens": 0,
+      "sum_full_usd": 0.016779899999999997,
+      "sum_scout_usd": 0.0030505499999999995,
+      "scout_mean_ad_hit_rate": 1.0,
+      "scout_mean_time_recall": 0.961038961038961,
+      "scout_mean_time_precision": 0.44647378765025825,
+      "scout_mean_time_f1": 0.5684713262277322,
+      "scout_mean_false_negative_rate": 0.0,
+      "scout_confirm_mean_time_recall": 0.961038961038961,
+      "scout_confirm_mean_time_precision": 1.0,
+      "scout_confirm_mean_time_f1": 0.9752066115702479,
+      "scout_confirm_mean_residual_strong_cue_rate": 0.0065656565656565654,
+      "scout_confirm_sum_residual_strong_cues": 10,
+      "production_mean_time_recall": 1.0,
+      "production_mean_time_precision": 0.5757685075866894,
+      "production_mean_time_f1": 0.7202783128620448,
+      "production_mean_ad_hit_rate": 1.0,
+      "production_mean_residual_strong_cue_rate": 0.0065656565656565654
+    },
+    "recommended_config": {
+      "threshold": 0.5,
+      "pad_seconds": 12.0,
+      "pad_segments": 2,
+      "merge_gap_seconds": 8.0,
+      "include_scout_extras": true,
+      "include_self_promo": false
+    }
+  },
+  "hypotheses": [
+    {
+      "id": "H010",
+      "status": "measured",
+      "verdict": "no_win",
+      "result_path": "docs/experiments/runs/2026-10-02/H010.json",
+      "fold_eligible": false
+    },
+    {
+      "id": "H009",
+      "status": "accepted",
+      "verdict": "fold_eligible",
+      "result_path": "docs/experiments/runs/2026-10-02/H009.json",
+      "fold_eligible": true
+    }
+  ],
+  "fold_policy": "accepted = fold-eligible on the experiment package only. Do not set enable_bow_scout_gemini_confirm. Do not loosen gates.json. Snapshot updates require --update-baseline plus RESULTS notes."
+}

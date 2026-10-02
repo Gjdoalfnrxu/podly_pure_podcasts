@@ -1,0 +1,53 @@
+{
+  "hypothesis_id": "H010",
+  "status": "measured",
+  "verdict": "no_win",
+  "scored": {
+    "name": "H010",
+    "rejected": false,
+    "gate_failures": [],
+    "detection_f1": 0.9752066115702479,
+    "detection_recall": 0.961038961038961,
+    "ad_hit_rate": 1.0,
+    "token_reduction_pct": 93.30576647438252,
+    "scout_input_tokens": 4652.0,
+    "config": {
+      "threshold": 0.5,
+      "pad_seconds": 12.0,
+      "pad_segments": 2,
+      "merge_gap_seconds": 8.0,
+      "include_scout_extras": true,
+      "include_self_promo": false
+    }
+  },
+  "candidates": [
+    {
+      "name": "H010",
+      "rejected": false,
+      "gate_failures": [],
+      "detection_f1": 0.9752066115702479,
+      "detection_recall": 0.961038961038961,
+      "ad_hit_rate": 1.0,
+      "token_reduction_pct": 93.30576647438252,
+      "scout_input_tokens": 4652.0,
+      "config": {
+        "threshold": 0.5,
+        "pad_seconds": 12.0,
+        "pad_segments": 2,
+        "merge_gap_seconds": 8.0,
+        "include_scout_extras": true,
+        "include_self_promo": false
+      }
+    }
+  ],
+  "extras": {
+    "kind": "cue_pattern",
+    "detector": "TightPromoCueDetector",
+    "ranking": "Confidence-first ranking (survivors only are fold-eligible):\n- #1 H010: F1=0.9752 recall=0.9610 hit=1.0000 tok\u2193=93.31% scout_tok=4652\nFold-eligible winner: H010",
+    "improved_primary": false,
+    "fold_eligible": false,
+    "production_flag": false
+  },
+  "live_llm": false,
+  "corpus_version": "v1"
+}

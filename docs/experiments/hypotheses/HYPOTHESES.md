@@ -5,7 +5,7 @@ User priorities (absolute): **confidence** (no regressions) → **detection** (F
 
 The daily runner loads **open** rows in that order, runs offline eval vs the frozen snapshot by default, and never loosens `gates.json`.
 
-Updated at `2026-10-01T17:16:50.810939+00:00` (UTC).
+Updated at `2026-10-02T15:59:16.247095+00:00` (UTC).
 
 | ID | Primary | Status | Statement | Last result |
 | --- | --- | --- | --- | --- |
@@ -17,8 +17,10 @@ Updated at `2026-10-01T17:16:50.810939+00:00` (UTC).
 | `H006` | confidence | accepted | Add a news-briefing-style golden with side-by-side unlabeled bare `code <word>` tech speech and a labeled `use code SAVE…` / promo CTA so the H001 TightPromo detector can be measured offline on Daily-style structure. | fold_eligible, 2026-10-01 (`docs/experiments/runs/2026-10-01/H006.json`) |
 | `H007` | detection | accepted | Recover cue-sparse host-reads with a duration-gated midroll probe that stays within +10% of snapshot scout tokens=3901 (limit ~4291), cheaper than H002 storytelling/midroll-probe. | fold_eligible, 2026-10-01 (`docs/experiments/runs/2026-10-01/H007.json`) |
 | `H008` | cost | accepted | Micro-variant pad/threshold sweep (t=0.45 pad=15/3 extras; t=0.5 pad=12/2 extras) under frozen gates; keep recommended unless a survivor strictly beats F1 then recall then tokens. | fold_eligible, 2026-10-01 (`docs/experiments/runs/2026-10-01/H008.json`) |
-| `H009` | detection | open | Widen the duration-gated midroll probe from 40s (H007 half_window=20) to 70s (half_window=35) so cue_sparse_storytelling time recall rises from 0.571 toward 1.0 without exceeding +10% of snapshot scout tokens (5337, limit ~5871), still skipping short ad-free interviews. | — |
-| `H010` | confidence | open | Use TightPromoCueDetector as the experiment-package recommended scout detector now that both Soft Skills-style and news-briefing-style goldens are in corpus v1, so unlabeled `code <word>` tech-speech FPs drop offline while labeled use-code ads stay hits. | — |
+| `H009` | detection | accepted | Widen the duration-gated midroll probe from 40s (H007 half_window=20) to 70s (half_window=35) so cue_sparse_storytelling time recall rises from 0.571 toward 1.0 without exceeding +10% of snapshot scout tokens (5337, limit ~5871), still skipping short ad-free interviews. | fold_eligible, 2026-10-02 (`docs/experiments/runs/2026-10-02/H009.json`) |
+| `H010` | confidence | measured | Use TightPromoCueDetector as the experiment-package recommended scout detector now that both Soft Skills-style and news-briefing-style goldens are in corpus v1, so unlabeled `code <word>` tech-speech FPs drop offline while labeled use-code ads stay hits. | no_win, 2026-10-02 (`docs/experiments/runs/2026-10-02/H010.json`) |
+| `H011` | cost | open | Use TightPromoCueDetector as the experiment-package recommended scout detector on cost (not confidence): H010 showed residual/precision unchanged, but TightPromo cuts scout tokens with F1/recall/hit tied on corpus v1. | — |
+| `H012` | cost | open | Micro-variant pad/threshold sweep under the post-H009 70s probe (t=0.5 pad=10/2 extras; t=0.5 pad=8/1 extras); keep recommended unless a survivor strictly beats F1 then recall then tokens. | — |
 
 ## Predicted effects
 
@@ -123,24 +125,48 @@ Micro-variant pad/threshold sweep (t=0.45 pad=15/3 extras; t=0.5 pad=12/2 extras
 Widen the duration-gated midroll probe from 40s (H007 half_window=20) to 70s (half_window=35) so cue_sparse_storytelling time recall rises from 0.571 toward 1.0 without exceeding +10% of snapshot scout tokens (5337, limit ~5871), still skipping short ad-free interviews.
 
 - Primary metric: `detection`
-- Status: `open`
+- Status: `accepted`
 - Experiment kind: `cheap_recovery`
 - Confidence: Must still pass frozen ε. Short ad-free episodes must not gain a probe window.
 - Detection: Lift cue_sparse time recall from 0.571 toward 1.0 without dropping other fixtures' F1/hit.
 - Cost: One wider confirm window on long empty-scout episodes. Scout tokens must stay ≤5871.
-- Notes: Follow-up to H007. 2026-10-01 --check (ledger not updated): fold_eligible on post-H008 snapshot — confirm F1/recall/hit 1.0, scout tokens 5429 vs 5337 (limit ~5871). Do not fold from --check; next loop should fold if gates stay green. Production CueDetector extras stay off.
+- Notes: 2026-10-02: accepted and folded. Confirm F1/recall/hit 1.0 (frozen 0.9752/0.9610/1.0), scout tokens 5429 vs 5337 (limit ~5871). Cue-sparse time recall 0.571→1.0; short ad_free_interview stays unprobed. Folded into eval DEFAULT_WINDOW_POSTPROCESS; snapshot updated; gates.json ε unchanged. Production CueDetector extras stay off.
 
 ### `H010`
 
 Use TightPromoCueDetector as the experiment-package recommended scout detector now that both Soft Skills-style and news-briefing-style goldens are in corpus v1, so unlabeled `code <word>` tech-speech FPs drop offline while labeled use-code ads stay hits.
 
 - Primary metric: `confidence`
-- Status: `open`
+- Status: `measured`
 - Experiment kind: `cue_pattern`
 - Confidence: Fewer scout windows on unlabeled code-review/path speech on the two style goldens; residual/recall on labeled use-code ads stay green.
 - Detection: Labeled-ad F1/recall/hit on frozen v1 must still pass gates.
 - Cost: Fewer confirm tokens on tech-speech FPs; scout tokens should not rise.
-- Notes: H001/H005/H006 follow-up. 2026-10-01 --check (ledger not updated): measured/no_win on confidence (residual/precision unchanged) even though TightPromo scout tokens 4652 vs recommended 5337. Fold would set eval recommended detector only. Do not copy TIGHT_PROMO_PATTERN into production CueDetector.promo_pattern. Do not flip enable_bow_scout_gemini_confirm.
+- Notes: 2026-10-02 proper offline loop: measured/no_win. Gates green (F1 0.9752, recall 0.9610, hit 1.0). TightPromo scout tokens 4652 vs recommended 5337, but residual 0.0066 and confirm precision 1.0 are unchanged vs frozen recommended, so the confidence primary did not win. Do not force-accept. TightPromoCueDetector stays experiment-only. Do not copy TIGHT_PROMO_PATTERN into production CueDetector.promo_pattern. Do not flip enable_bow_scout_gemini_confirm. Cost follow-up is H011.
+
+### `H011`
+
+Use TightPromoCueDetector as the experiment-package recommended scout detector on cost (not confidence): H010 showed residual/precision unchanged, but TightPromo cuts scout tokens with F1/recall/hit tied on corpus v1.
+
+- Primary metric: `cost`
+- Status: `open`
+- Experiment kind: `cue_pattern`
+- Confidence: Must still pass frozen ε. Residual/precision may stay tied; do not treat a token-only win as a confidence win.
+- Detection: Confirm F1/recall/hit must stay at the post-H009 snapshot (1.0 / 1.0 / 1.0).
+- Cost: Fewer confirm tokens on unlabeled tech-speech FPs vs post-H009 scout tokens 5429 (limit ~5972).
+- Notes: H010 follow-up with cost primary. Fold would set eval recommended detector only. Do not copy TIGHT_PROMO_PATTERN into production CueDetector.promo_pattern. Do not flip enable_bow_scout_gemini_confirm. No new human labels.
+
+### `H012`
+
+Micro-variant pad/threshold sweep under the post-H009 70s probe (t=0.5 pad=10/2 extras; t=0.5 pad=8/1 extras); keep recommended unless a survivor strictly beats F1 then recall then tokens.
+
+- Primary metric: `cost`
+- Status: `open`
+- Experiment kind: `pad_sweep`
+- Confidence: Any config that fails snapshot ε is discarded, even if cheaper.
+- Detection: Do not trade F1/recall/hit for tokens. Post-H009 recommended 0.5/12s/2 extras=on is F1/recall/hit 1.0 on v1.
+- Cost: Among survivors, prefer higher mean_token_reduction_pct / fewer scout tokens than 5429.
+- Notes: Follow-up to H008/H009. Sweep is experiment-package only. Do not change production neighbor window. No new human labels.
 
 ## Status values
 
@@ -156,4 +182,4 @@ Never loosen `docs/experiments/bow_scout_gemini_confirm/baseline/v1/gates.json`.
 
 ## Ledger notes
 
-2026-10-01 afternoon wrap-up: H006/H007/H008 folded. Seeded H010 (TightPromo as eval detector; confidence) and H009 (wider duration-gated probe; detection). Production AdClassifier and enable_bow_scout_gemini_confirm stay off. Frozen gates.json not loosened. TightPromo stays experiment-only until H010. Live catch-up tip ade7344; box Gemini $0.0049. 2026-10-01 morning: H005 accepted. 2026-09-30 live: H001 measured (26→15), H002 rejected, H003 no_win, H004 process_ok.
+2026-10-02 weekday offline: H010 measured/no_win (TightPromo tokens 4652 vs 5337; residual/precision unchanged — not accepted). H009 folded (confirm F1/recall/hit 1.0, scout tokens 5429 vs 5337, limit ~5871). Seeded H011 (TightPromo as eval detector on cost) and H012 (pad micro-sweep after 70s probe). Production AdClassifier and enable_bow_scout_gemini_confirm stay off. Frozen gates.json not loosened. TightPromo stays experiment-only. Spend $0. 2026-10-01 afternoon: H006/H007/H008 folded. 2026-10-01 morning: H005 accepted. 2026-09-30 live: H001 measured (26→15), H002 rejected, H003 no_win, H004 process_ok.

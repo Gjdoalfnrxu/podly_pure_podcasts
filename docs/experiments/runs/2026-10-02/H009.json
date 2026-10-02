@@ -1,0 +1,56 @@
+{
+  "hypothesis_id": "H009",
+  "status": "accepted",
+  "verdict": "fold_eligible",
+  "scored": {
+    "name": "H009-wider_duration_gated_midroll_probe",
+    "rejected": false,
+    "gate_failures": [],
+    "detection_f1": 1.0,
+    "detection_recall": 1.0,
+    "ad_hit_rate": 1.0,
+    "token_reduction_pct": 91.95117144828863,
+    "scout_input_tokens": 5429.0,
+    "config": {
+      "threshold": 0.5,
+      "pad_seconds": 12.0,
+      "pad_segments": 2,
+      "merge_gap_seconds": 8.0,
+      "include_scout_extras": true,
+      "include_self_promo": false
+    }
+  },
+  "candidates": [
+    {
+      "name": "H009-wider_duration_gated_midroll_probe",
+      "rejected": false,
+      "gate_failures": [],
+      "detection_f1": 1.0,
+      "detection_recall": 1.0,
+      "ad_hit_rate": 1.0,
+      "token_reduction_pct": 91.95117144828863,
+      "scout_input_tokens": 5429.0,
+      "config": {
+        "threshold": 0.5,
+        "pad_seconds": 12.0,
+        "pad_segments": 2,
+        "merge_gap_seconds": 8.0,
+        "include_scout_extras": true,
+        "include_self_promo": false
+      }
+    }
+  ],
+  "extras": {
+    "kind": "cheap_recovery",
+    "variants": [
+      "wider_duration_gated_midroll_probe"
+    ],
+    "ranking": "Confidence-first ranking (survivors only are fold-eligible):\n- #1 H009-wider_duration_gated_midroll_probe: F1=1.0000 recall=1.0000 hit=1.0000 tok\u2193=91.95% scout_tok=5429\nFold-eligible winner: H009-wider_duration_gated_midroll_probe",
+    "improved_primary": true,
+    "fold_eligible": true,
+    "production_flag": false,
+    "fold_note": "Folded wider_duration_gated_midroll_probe (half_window=35) into eval_harness DEFAULT_WINDOW_POSTPROCESS. Snapshot updated; gates.json unchanged. Production CueDetector extras stay off. H010 TightPromo not folded."
+  },
+  "live_llm": false,
+  "corpus_version": "v1"
+}

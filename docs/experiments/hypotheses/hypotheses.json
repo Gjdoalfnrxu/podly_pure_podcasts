@@ -5,8 +5,8 @@
     "detection",
     "cost"
   ],
-  "updated_at": "2026-10-01T17:16:50.810939+00:00",
-  "notes": "2026-10-01 afternoon wrap-up: H006/H007/H008 folded. Seeded H010 (TightPromo as eval detector; confidence) and H009 (wider duration-gated probe; detection). Production AdClassifier and enable_bow_scout_gemini_confirm stay off. Frozen gates.json not loosened. TightPromo stays experiment-only until H010. Live catch-up tip ade7344; box Gemini $0.0049. 2026-10-01 morning: H005 accepted. 2026-09-30 live: H001 measured (26\u219215), H002 rejected, H003 no_win, H004 process_ok.",
+  "updated_at": "2026-10-02T15:59:16.247095+00:00",
+  "notes": "2026-10-02 weekday offline: H010 measured/no_win (TightPromo tokens 4652 vs 5337; residual/precision unchanged \u2014 not accepted). H009 folded (confirm F1/recall/hit 1.0, scout tokens 5429 vs 5337, limit ~5871). Seeded H011 (TightPromo as eval detector on cost) and H012 (pad micro-sweep after 70s probe). Production AdClassifier and enable_bow_scout_gemini_confirm stay off. Frozen gates.json not loosened. TightPromo stays experiment-only. Spend $0. 2026-10-01 afternoon: H006/H007/H008 folded. 2026-10-01 morning: H005 accepted. 2026-09-30 live: H001 measured (26\u219215), H002 rejected, H003 no_win, H004 process_ok.",
   "hypotheses": [
     {
       "id": "H001",
@@ -476,7 +476,7 @@
       "id": "H009",
       "statement": "Widen the duration-gated midroll probe from 40s (H007 half_window=20) to 70s (half_window=35) so cue_sparse_storytelling time recall rises from 0.571 toward 1.0 without exceeding +10% of snapshot scout tokens (5337, limit ~5871), still skipping short ad-free interviews.",
       "metric_primary": "detection",
-      "status": "open",
+      "status": "accepted",
       "predicted_effect": {
         "confidence": "Must still pass frozen \u03b5. Short ad-free episodes must not gain a probe window.",
         "detection": "Lift cue_sparse time recall from 0.571 toward 1.0 without dropping other fixtures' F1/hit.",
@@ -491,14 +491,39 @@
         }
       },
       "rank": 9,
-      "last_result": null,
-      "notes": "Follow-up to H007. 2026-10-01 --check (ledger not updated): fold_eligible on post-H008 snapshot \u2014 confirm F1/recall/hit 1.0, scout tokens 5429 vs 5337 (limit ~5871). Do not fold from --check; next loop should fold if gates stay green. Production CueDetector extras stay off."
+      "last_result": {
+        "run_date": "2026-10-02",
+        "run_dir": "docs/experiments/runs/2026-10-02",
+        "summary_path": "docs/experiments/runs/2026-10-02/summary.json",
+        "hypothesis_result_path": "docs/experiments/runs/2026-10-02/H009.json",
+        "verdict": "fold_eligible",
+        "passed_gates": true,
+        "score": {
+          "name": "H009-wider_duration_gated_midroll_probe",
+          "rejected": false,
+          "gate_failures": [],
+          "detection_f1": 1.0,
+          "detection_recall": 1.0,
+          "ad_hit_rate": 1.0,
+          "token_reduction_pct": 91.95117144828863,
+          "scout_input_tokens": 5429.0,
+          "config": {
+            "threshold": 0.5,
+            "pad_seconds": 12.0,
+            "pad_segments": 2,
+            "merge_gap_seconds": 8.0,
+            "include_scout_extras": true,
+            "include_self_promo": false
+          }
+        }
+      },
+      "notes": "2026-10-02: accepted and folded. Confirm F1/recall/hit 1.0 (frozen 0.9752/0.9610/1.0), scout tokens 5429 vs 5337 (limit ~5871). Cue-sparse time recall 0.571\u21921.0; short ad_free_interview stays unprobed. Folded into eval DEFAULT_WINDOW_POSTPROCESS; snapshot updated; gates.json \u03b5 unchanged. Production CueDetector extras stay off."
     },
     {
       "id": "H010",
       "statement": "Use TightPromoCueDetector as the experiment-package recommended scout detector now that both Soft Skills-style and news-briefing-style goldens are in corpus v1, so unlabeled `code <word>` tech-speech FPs drop offline while labeled use-code ads stay hits.",
       "metric_primary": "confidence",
-      "status": "open",
+      "status": "measured",
       "predicted_effect": {
         "confidence": "Fewer scout windows on unlabeled code-review/path speech on the two style goldens; residual/recall on labeled use-code ads stay green.",
         "detection": "Labeled-ad F1/recall/hit on frozen v1 must still pass gates.",
@@ -512,8 +537,88 @@
         }
       },
       "rank": 10,
+      "last_result": {
+        "run_date": "2026-10-02",
+        "run_dir": "docs/experiments/runs/2026-10-02",
+        "summary_path": "docs/experiments/runs/2026-10-02/summary.json",
+        "hypothesis_result_path": "docs/experiments/runs/2026-10-02/H010.json",
+        "verdict": "no_win",
+        "passed_gates": true,
+        "score": {
+          "name": "H010",
+          "rejected": false,
+          "gate_failures": [],
+          "detection_f1": 0.9752066115702479,
+          "detection_recall": 0.961038961038961,
+          "ad_hit_rate": 1.0,
+          "token_reduction_pct": 93.30576647438252,
+          "scout_input_tokens": 4652.0,
+          "config": {
+            "threshold": 0.5,
+            "pad_seconds": 12.0,
+            "pad_segments": 2,
+            "merge_gap_seconds": 8.0,
+            "include_scout_extras": true,
+            "include_self_promo": false
+          }
+        }
+      },
+      "notes": "2026-10-02 proper offline loop: measured/no_win. Gates green (F1 0.9752, recall 0.9610, hit 1.0). TightPromo scout tokens 4652 vs recommended 5337, but residual 0.0066 and confirm precision 1.0 are unchanged vs frozen recommended, so the confidence primary did not win. Do not force-accept. TightPromoCueDetector stays experiment-only. Do not copy TIGHT_PROMO_PATTERN into production CueDetector.promo_pattern. Do not flip enable_bow_scout_gemini_confirm. Cost follow-up is H011."
+    },
+    {
+      "id": "H011",
+      "statement": "Use TightPromoCueDetector as the experiment-package recommended scout detector on cost (not confidence): H010 showed residual/precision unchanged, but TightPromo cuts scout tokens with F1/recall/hit tied on corpus v1.",
+      "metric_primary": "cost",
+      "status": "open",
+      "predicted_effect": {
+        "confidence": "Must still pass frozen \u03b5. Residual/precision may stay tied; do not treat a token-only win as a confidence win.",
+        "detection": "Confirm F1/recall/hit must stay at the post-H009 snapshot (1.0 / 1.0 / 1.0).",
+        "cost": "Fewer confirm tokens on unlabeled tech-speech FPs vs post-H009 scout tokens 5429 (limit ~5972)."
+      },
+      "experiment": {
+        "kind": "cue_pattern",
+        "params": {
+          "candidate": "TightPromoCueDetector",
+          "production_change": false
+        }
+      },
+      "rank": 11,
       "last_result": null,
-      "notes": "H001/H005/H006 follow-up. 2026-10-01 --check (ledger not updated): measured/no_win on confidence (residual/precision unchanged) even though TightPromo scout tokens 4652 vs recommended 5337. Fold would set eval recommended detector only. Do not copy TIGHT_PROMO_PATTERN into production CueDetector.promo_pattern. Do not flip enable_bow_scout_gemini_confirm."
+      "notes": "H010 follow-up with cost primary. Fold would set eval recommended detector only. Do not copy TIGHT_PROMO_PATTERN into production CueDetector.promo_pattern. Do not flip enable_bow_scout_gemini_confirm. No new human labels."
+    },
+    {
+      "id": "H012",
+      "statement": "Micro-variant pad/threshold sweep under the post-H009 70s probe (t=0.5 pad=10/2 extras; t=0.5 pad=8/1 extras); keep recommended unless a survivor strictly beats F1 then recall then tokens.",
+      "metric_primary": "cost",
+      "status": "open",
+      "predicted_effect": {
+        "confidence": "Any config that fails snapshot \u03b5 is discarded, even if cheaper.",
+        "detection": "Do not trade F1/recall/hit for tokens. Post-H009 recommended 0.5/12s/2 extras=on is F1/recall/hit 1.0 on v1.",
+        "cost": "Among survivors, prefer higher mean_token_reduction_pct / fewer scout tokens than 5429."
+      },
+      "experiment": {
+        "kind": "pad_sweep",
+        "params": {
+          "include_default_sweep": true,
+          "extra_configs": [
+            {
+              "threshold": 0.5,
+              "pad_seconds": 10.0,
+              "pad_segments": 2,
+              "include_scout_extras": true
+            },
+            {
+              "threshold": 0.5,
+              "pad_seconds": 8.0,
+              "pad_segments": 1,
+              "include_scout_extras": true
+            }
+          ]
+        }
+      },
+      "rank": 12,
+      "last_result": null,
+      "notes": "Follow-up to H008/H009. Sweep is experiment-package only. Do not change production neighbor window. No new human labels."
     }
   ]
 }
