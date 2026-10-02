@@ -12,20 +12,20 @@
   },
   "macro": {
     "scout_mean_ad_hit_rate": 1.0,
-    "scout_mean_time_recall": 0.961038961038961,
+    "scout_mean_time_recall": 1.0,
     "scout_mean_time_precision": 0.44647378765025825,
-    "scout_mean_time_f1": 0.5684713262277322,
+    "scout_mean_time_f1": 0.5805925383489444,
     "scout_mean_false_negative_rate": 0.0,
-    "scout_confirm_mean_time_recall": 0.961038961038961,
+    "scout_confirm_mean_time_recall": 1.0,
     "scout_confirm_mean_time_precision": 1.0,
-    "scout_confirm_mean_time_f1": 0.9752066115702479,
+    "scout_confirm_mean_time_f1": 1.0,
     "scout_confirm_mean_residual_strong_cue_rate": 0.0065656565656565654,
     "scout_confirm_sum_residual_strong_cues": 10,
     "production_mean_time_recall": 1.0,
     "production_mean_time_f1": 0.7202783128620448,
-    "mean_token_reduction_pct": 92.04568649364559,
+    "mean_token_reduction_pct": 91.95117144828863,
     "sum_full_input_tokens": 75866,
-    "sum_scout_input_tokens": 5337
+    "sum_scout_input_tokens": 5429
   },
   "per_fixture": [
     {
@@ -50,21 +50,21 @@
     {
       "fixture_id": "cue_sparse_storytelling",
       "scout_ad_hit_rate": 1.0,
-      "scout_time_recall": 0.5714285714285714,
+      "scout_time_recall": 1.0,
       "scout_time_precision": 0.5,
-      "scout_time_f1": 0.5333333333333333,
+      "scout_time_f1": 0.6666666666666666,
       "scout_false_negative_rate": 0.0,
-      "scout_confirm_time_recall": 0.5714285714285714,
+      "scout_confirm_time_recall": 1.0,
       "scout_confirm_time_precision": 1.0,
-      "scout_confirm_time_f1": 0.7272727272727273,
+      "scout_confirm_time_f1": 1.0,
       "scout_confirm_residual_strong_cues": 0,
       "scout_confirm_residual_strong_cue_rate": 0.0,
       "production_time_recall": 1.0,
       "production_time_precision": 0.6363636363636364,
       "production_time_f1": 0.7777777777777778,
       "full_input_tokens": 8849,
-      "scout_input_tokens": 346,
-      "token_reduction_pct": 96.08995366708103
+      "scout_input_tokens": 438,
+      "token_reduction_pct": 95.0502881681546
     },
     {
       "fixture_id": "false_positive_content",

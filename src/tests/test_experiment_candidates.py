@@ -115,10 +115,15 @@ def test_evaluate_all_default_applies_duration_gated_probe() -> None:
     sparse = by_id["cue_sparse_storytelling"]
     assert sparse["ad_hit_rate"] == 1.0
     assert sparse["n_windows"] == 1
+    # H009: 70s probe covers the full 480–515s Away host-read.
+    assert sparse["ad_coverage"] == 1.0
+    assert sparse["paths"]["scout_confirm"]["time_recall"] == 1.0
     free = by_id["ad_free_interview"]
     assert free["n_windows"] == 0
     assert ad_free_interview().duration_seconds < 900
     assert results["recommended"]["macro"]["scout_mean_ad_hit_rate"] == 1.0
+    assert results["recommended"]["macro"]["scout_confirm_mean_time_f1"] == 1.0
+    assert results["recommended"]["macro"]["scout_confirm_mean_time_recall"] == 1.0
 
 
 def test_soft_skills_style_tight_promo_drops_tech_speech_keeps_use_code() -> None:

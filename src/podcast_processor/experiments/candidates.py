@@ -39,8 +39,9 @@ class TightPromoCueDetector(CueDetector):
     2026-09-30 live (4 real eps): baseline scout windows 26 → TightPromo 15
     (-42.3%). Soft Skills tech-speech `code <word>` FPs drop; The Daily
     window counts stay the same. Experiment-only — do not copy
-    TIGHT_PROMO_PATTERN into production CueDetector until Soft Skills-style
-    goldens are promoted and offline confidence metrics move.
+    TIGHT_PROMO_PATTERN into production CueDetector.promo_pattern.
+    2026-10-02 H010: offline measured/no_win (residual/precision
+    unchanged); stay experiment-only.
     """
 
     def __init__(self, include_scout_extras: bool = False) -> None:
@@ -103,12 +104,12 @@ def wider_duration_gated_midroll_probe(
     fraction: float = 0.4,
     half_window_seconds: float = 35.0,
 ) -> list[ScoutWindow]:
-    """H009 candidate: 70s duration-gated window to lift cue-sparse time recall.
+    """H009 folded 2026-10-02: 70s duration-gated window for cue-sparse time recall.
 
     H007's 40s window (half=20) hits the Away host-read but only covers
     480-500s of the 480-515s label (time recall 0.571). A 70s window
-    centered at 40% duration should cover the full labeled span while
-    still skipping short ad-free interviews.
+    centered at 40% duration covers the full labeled span while still
+    skipping short ad-free interviews. Now eval DEFAULT_WINDOW_POSTPROCESS.
     """
     return duration_gated_midroll_probe(
         episode,

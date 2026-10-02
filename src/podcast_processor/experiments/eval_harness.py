@@ -18,7 +18,7 @@ from podcast_processor.experiments.bow_scout import (
     BowScout,
     ScoutConfig,
 )
-from podcast_processor.experiments.candidates import duration_gated_midroll_probe
+from podcast_processor.experiments.candidates import wider_duration_gated_midroll_probe
 from podcast_processor.experiments.cost_model import (
     DEFAULT_CLASSIFIER_PRICES,
     DEFAULT_GEMINI_PRICES,
@@ -108,11 +108,13 @@ RECOMMENDED_CONFIG = ScoutConfig(
     include_scout_extras=True,
 )
 
-# H007 2026-10-01: duration-gated 40s midroll probe on long empty-scout
+# H007 2026-10-01: duration-gated midroll probe on long empty-scout
 # episodes. Recovers cue_sparse_storytelling without probing short
 # ad_free_interview. Experiment-package only — production CueDetector
 # extras stay off.
-DEFAULT_WINDOW_POSTPROCESS = duration_gated_midroll_probe
+# H009 2026-10-02: widen half_window 20→35 (70s window) so cue-sparse
+# time recall goes 0.571→1.0 inside the +10% scout-token ε.
+DEFAULT_WINDOW_POSTPROCESS = wider_duration_gated_midroll_probe
 
 # H008 2026-10-01: pad=12s/2 segments ties confirm F1/recall/hit vs pad=15/3
 # and spends fewer scout tokens. Experiment-package only.
@@ -432,6 +434,8 @@ def render_results_markdown(results: dict[str, Any]) -> str:
         "(optional `sponsored by` / `brought to you by` / `ad break` patterns; "
         "off in production `CueDetector()`)",
         "- include_self_promo: `false` (matches AdClassifier demotion)",
+        "- window_postprocess: `wider_duration_gated_midroll_probe` "
+        "(H009; 70s midroll window on empty-scout episodes ≥900s)",
         f"- production flag `enable_bow_scout_gemini_confirm`: "
         f"`{results.get('enable_bow_scout_gemini_confirm_default', False)}` "
         "(Feed/PodcastProcessor stay on the LLM AdClassifier path)",
@@ -556,10 +560,9 @@ def render_results_markdown(results: dict[str, Any]) -> str:
         [
             "",
             "Cue-sparse host-reads (brand story, no URL/CTA/phone/sponsor phrase) "
-            "are a **block hit** after H007's duration-gated probe, but time "
-            "coverage on `cue_sparse_storytelling` is still 57.1% (40s window "
-            "460–500s vs label 480–515s). Production `CueDetector()` extras stay "
-            "off. A wider probe is a follow-up, not a reason to loosen ε.",
+            "are a **block hit** with full time coverage after H009's 70s "
+            "duration-gated probe (H007's 40s window only covered 57.1%). "
+            "Production `CueDetector()` extras stay off. Do not loosen ε.",
             "",
             "## Threshold / padding sweep",
             "",
@@ -593,10 +596,10 @@ def render_results_markdown(results: dict[str, Any]) -> str:
             "includes transition bumpers (`after the break`) used by the "
             "prompt.py Wildcard example (score 0.5) while self-promo-only lines "
             "(weight 0.4) stay below the cut. Threshold 0.8 drops those "
-            "transition-only ads. H007's duration-gated probe recovers "
-            "cue-sparse host-reads as a block hit on every sweep config that "
-            "would otherwise return empty windows on long episodes; short "
-            "ad-free interviews stay unprobed.",
+            "transition-only ads. H007/H009's duration-gated probe recovers "
+            "cue-sparse host-reads as a block hit (H009: full time coverage) "
+            "on every sweep config that would otherwise return empty windows "
+            "on long episodes; short ad-free interviews stay unprobed.",
             "",
             "## Caching",
             "",
