@@ -105,6 +105,7 @@ class JudgeLabel:
     skip_reason: str | None
     model: str
     raw_response: str = ""
+    usd: float = 0.0
 
     def as_dict(self) -> dict[str, Any]:
         return {
@@ -116,6 +117,7 @@ class JudgeLabel:
             "skip_reason": self.skip_reason,
             "model": self.model,
             "raw_response": self.raw_response,
+            "usd": self.usd,
         }
 
 
@@ -164,8 +166,34 @@ class PipelineResult:
     blocked_steps: list[str]
     notes: list[str]
     output_dir: Path | None = None
+    judge_spend_usd: float = 0.0
+    judge_budget_usd: float = 0.50
+    judge_calls: int = 0
+    judge_env_needed: str = "GEMINI_API_KEY"
 
     def as_dict(self) -> dict[str, Any]:
+        n_chunks = sum(len(row.candidates) for row in self.shows)
+        n_transcribed = sum(
+            1
+            for row in self.shows
+            for item in row.transcripts
+            if not item.skipped and item.text.strip()
+        )
+        n_is_ad = sum(
+            1
+            for row in self.shows
+            for lab in row.labels
+            if not lab.skipped and lab.is_ad
+        )
+        n_not_ad = sum(
+            1
+            for row in self.shows
+            for lab in row.labels
+            if not lab.skipped and not lab.is_ad
+        )
+        n_judge_skipped = sum(
+            1 for row in self.shows for lab in row.labels if lab.skipped
+        )
         return {
             "gold_family": self.gold_family,
             "sampling_unit": self.sampling_unit,
@@ -173,6 +201,15 @@ class PipelineResult:
             "judge_mode": self.judge_mode,
             "groq_key_present_but_unused": self.groq_key_present_but_unused,
             "gemini_key_present": self.gemini_key_present,
+            "judge_spend_usd": self.judge_spend_usd,
+            "judge_budget_usd": self.judge_budget_usd,
+            "judge_calls": self.judge_calls,
+            "judge_env_needed": self.judge_env_needed,
+            "n_chunks": n_chunks,
+            "n_transcribed": n_transcribed,
+            "n_is_ad": n_is_ad,
+            "n_not_ad": n_not_ad,
+            "n_judge_skipped": n_judge_skipped,
             "production_flag_enable_bow_scout_gemini_confirm": (
                 self.production_flag_enable_bow_scout_gemini_confirm
             ),

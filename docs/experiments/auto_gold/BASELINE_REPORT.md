@@ -44,6 +44,12 @@ _Not yet run._
 _Not yet run._
 <!-- END:AUTO_GOLD_JUDGE -->
 
+## Spend (Gemini cap $0.50)
+
+<!-- BEGIN:AUTO_GOLD_SPEND -->
+_Not yet run._
+<!-- END:AUTO_GOLD_SPEND -->
+
 ## Blocked steps
 
 On a Cursor cloud VM without torch/Gemini, expect Whisper stub + judge

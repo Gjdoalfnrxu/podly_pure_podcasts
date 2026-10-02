@@ -19,7 +19,10 @@ from podcast_processor.experiments.auto_gold.audio_ops import (
 )
 from podcast_processor.experiments.auto_gold.candidates import propose_candidates
 from podcast_processor.experiments.auto_gold.constants import (
+    DEFAULT_JUDGE_BUDGET_USD,
+    DEFAULT_WHISPER_MODEL,
     GOLD_FAMILY,
+    JUDGE_KEY_ENV_NEEDED,
     SAMPLING_UNIT,
 )
 from podcast_processor.experiments.auto_gold.downloader import fetch_show_episode
@@ -28,7 +31,10 @@ from podcast_processor.experiments.auto_gold.judge import (
     gemini_key_present,
     groq_key_present,
 )
-from podcast_processor.experiments.auto_gold.report import write_report
+from podcast_processor.experiments.auto_gold.report import (
+    default_template_path,
+    write_report,
+)
 from podcast_processor.experiments.auto_gold.shows import (
     ShowListError,
     filter_shows,
@@ -61,6 +67,9 @@ class AutoGoldConfig:
     enable_fingerprint: bool = False
     include_dai_probes: bool = True
     max_download_bytes: int | None = None
+    max_judge_usd: float = DEFAULT_JUDGE_BUDGET_USD
+    whisper_model: str | None = None
+    write_docs_report: bool = False
     genres: set[str] | None = None
     show_ids: set[str] | None = None
     require_representative: bool = True
@@ -93,8 +102,14 @@ def run_auto_gold(config: AutoGoldConfig) -> PipelineResult:
         show_ids=config.show_ids,
         require_representative=config.require_representative,
     )
-    whisper = config.whisper or ChunkWhisper(mode=config.whisper_mode)
-    judge = config.judge or GoldJudge(mode=config.judge_mode)
+    whisper = config.whisper or ChunkWhisper(
+        mode=config.whisper_mode,
+        model_name=config.whisper_model or DEFAULT_WHISPER_MODEL,
+    )
+    judge = config.judge or GoldJudge(
+        mode=config.judge_mode,
+        max_usd=config.max_judge_usd,
+    )
     blocked: list[str] = []
     notes: list[str] = []
     if config.offline:
@@ -105,9 +120,16 @@ def run_auto_gold(config: AutoGoldConfig) -> PipelineResult:
     if whisper.backend == "stub":
         blocked.append(f"whisper ({whisper.detail})")
     if judge.mode == "dry-run":
-        blocked.append("gemini_judge (dry-run / no Gemini or Google key)")
+        blocked.append(
+            "gemini_judge (dry-run / no Gemini or Google key; "
+            f"set {JUDGE_KEY_ENV_NEEDED})"
+        )
     if groq_key_present():
         notes.append("GROQ_KEY is set in the environment and is unused by this judge.")
+    notes.append(
+        f"Gemini judge budget cap ${config.max_judge_usd:.2f}; "
+        f"canonical env var {JUDGE_KEY_ENV_NEEDED}."
+    )
     if not ffmpeg_available():
         notes.append(
             "ffmpeg/ffprobe missing; chunk extract / DSP / fingerprint skipped."
@@ -115,6 +137,7 @@ def run_auto_gold(config: AutoGoldConfig) -> PipelineResult:
 
     results: list[ShowResult] = []
     for show in shows:
+        logger.info("auto-gold show %s (%s)", show.show_id, show.genre)
         results.append(_run_show(show, config, whisper, judge))
 
     payload = PipelineResult(
@@ -131,11 +154,17 @@ def run_auto_gold(config: AutoGoldConfig) -> PipelineResult:
         blocked_steps=blocked,
         notes=notes,
         output_dir=config.output_dir,
+        judge_spend_usd=float(judge.spent_usd),
+        judge_budget_usd=float(judge.max_usd),
+        judge_calls=int(judge.n_calls),
+        judge_env_needed=JUDGE_KEY_ENV_NEEDED,
     )
     config.output_dir.mkdir(parents=True, exist_ok=True)
     metrics = config.output_dir / "metrics.json"
     metrics.write_text(json.dumps(payload.as_dict(), indent=2) + "\n", encoding="utf-8")
     write_report(payload, config.output_dir / "BASELINE_REPORT.md")
+    if config.write_docs_report:
+        write_report(payload, default_template_path())
     return payload
 
 

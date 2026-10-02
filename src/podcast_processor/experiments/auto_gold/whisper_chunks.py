@@ -89,6 +89,7 @@ class ChunkWhisper:
             self.detail = "callable injected (tests / Cake wrapper)"
         else:
             self.backend, self.detail = resolve_whisper_backend(mode)
+        self._model: Any = None
 
     def transcribe_chunk(
         self,
@@ -121,9 +122,13 @@ class ChunkWhisper:
     def _local_whisper(self, chunk: CandidateChunk, wav_path: Path) -> ChunkTranscript:
         import whisper
 
+        if self._model is None:
+            logger.info("loading local whisper model=%s (once)", self.model_name)
+            self._model = whisper.load_model(name=self.model_name)
         logger.info("local whisper model=%s file=%s", self.model_name, wav_path)
-        model = whisper.load_model(name=self.model_name)
-        result = model.transcribe(str(wav_path), fp16=False, language=self.language)
+        result = self._model.transcribe(
+            str(wav_path), fp16=False, language=self.language
+        )
         rows = list(result.get("segments") or [])
         return _from_rows(chunk, wav_path, rows, backend=f"local:{self.model_name}")
 

@@ -45,6 +45,11 @@ DAI_HOST_MARKERS: tuple[str, ...] = (
 
 DEFAULT_WHISPER_MODEL = "base.en"
 DEFAULT_GEMINI_MODEL = "gemini/gemini-2.5-flash"
+DEFAULT_JUDGE_BUDGET_USD = 0.50
+# Canonical env var the operator must set for a live Gemini judge.
+# Aliases (GEMINI_KEY, GOOGLE_API_KEY, GOOGLE_GENERATIVE_AI_API_KEY) also work.
+# GROQ_KEY is never accepted.
+JUDGE_KEY_ENV_NEEDED = "GEMINI_API_KEY"
 
 # Finance may be present but must not dominate the sample.
 MAX_FINANCE_FRACTION = 1.0 / 3.0

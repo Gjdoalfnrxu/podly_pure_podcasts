@@ -390,6 +390,7 @@ def test_report_template_has_locked_family() -> None:
         "CANDIDATES",
         "WHISPER",
         "JUDGE",
+        "SPEND",
         "BLOCKED",
         "PRODUCTION_FLAGS",
     ):
@@ -498,3 +499,30 @@ def test_ffmpeg_extracts_candidate_chunk(tmp_path: Path) -> None:
     duration = probe_duration_seconds(dest)
     assert duration is not None
     assert 9.0 < duration < 11.0
+
+
+def test_judge_budget_cap_skips_without_calling() -> None:
+    called = {"n": 0}
+
+    def completion(**kwargs: object) -> None:
+        called["n"] += 1
+        raise AssertionError("budget cap should skip the live call")
+
+    judge = GoldJudge(mode="dry-run", completion_fn=completion, max_usd=0.0)
+    from podcast_processor.experiments.auto_gold.types import ChunkTranscript
+
+    transcript = ChunkTranscript(
+        chunk=always_preroll(90.0),
+        audio_path=None,
+        skipped=False,
+        skip_reason=None,
+        backend="injected",
+        text="sponsored by example",
+        segments=[],
+    )
+    label = judge.judge(transcript)
+    assert label.skipped
+    assert "budget cap" in (label.skip_reason or "")
+    assert called["n"] == 0
+    assert judge.n_budget_skips == 1
+    assert judge.spent_usd == 0.0

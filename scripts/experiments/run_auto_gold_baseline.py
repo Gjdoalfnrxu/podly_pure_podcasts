@@ -102,6 +102,22 @@ def main() -> int:
         default=None,
         help="Abort an episode download above this many megabytes.",
     )
+    parser.add_argument(
+        "--max-judge-usd",
+        type=float,
+        default=0.50,
+        help="Cap live Gemini judge spend (default 0.50). Dry-run spends 0.",
+    )
+    parser.add_argument(
+        "--whisper-model",
+        default=None,
+        help="Local Whisper model name (default base.en).",
+    )
+    parser.add_argument(
+        "--write-docs-report",
+        action="store_true",
+        help="Also fill docs/experiments/auto_gold/BASELINE_REPORT.md in-tree.",
+    )
     args = parser.parse_args()
 
     logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
@@ -133,11 +149,15 @@ def main() -> int:
             enable_fingerprint=args.enable_fingerprint,
             include_dai_probes=not args.no_dai_probes,
             max_download_bytes=max_bytes,
+            max_judge_usd=args.max_judge_usd,
+            whisper_model=args.whisper_model,
+            write_docs_report=args.write_docs_report,
             genres=set(args.genres) if args.genres else None,
             show_ids=set(args.show_ids) if args.show_ids else None,
             require_representative=not filtered,
         )
     )
+    summary = result.as_dict()
     print(
         json.dumps(
             {
@@ -147,6 +167,10 @@ def main() -> int:
                 "whisper": result.whisper_backend,
                 "judge": result.judge_mode,
                 "gemini_key": result.gemini_key_present,
+                "judge_spend_usd": result.judge_spend_usd,
+                "judge_budget_usd": result.judge_budget_usd,
+                "n_is_ad": summary["n_is_ad"],
+                "n_transcribed": summary["n_transcribed"],
                 "groq_unused": result.groq_key_present_but_unused,
                 "blocked": result.blocked_steps,
                 "output_dir": str(output_dir),

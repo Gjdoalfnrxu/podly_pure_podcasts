@@ -7,8 +7,21 @@ import os
 from collections.abc import Callable
 from typing import Any
 
-from podcast_processor.experiments.auto_gold.constants import DEFAULT_GEMINI_MODEL
+from podcast_processor.experiments.auto_gold.constants import (
+    DEFAULT_GEMINI_MODEL,
+    DEFAULT_JUDGE_BUDGET_USD,
+    JUDGE_KEY_ENV_NEEDED,
+)
 from podcast_processor.experiments.auto_gold.types import ChunkTranscript, JudgeLabel
+from podcast_processor.experiments.cost_model import (
+    DEFAULT_GEMINI_PRICES,
+    DEFAULT_OUTPUT_TOKENS_PER_CALL,
+    usd_for_tokens,
+)
+from podcast_processor.experiments.gemini_confirm import (
+    estimate_message_tokens,
+    estimate_tokens_from_text,
+)
 from shared.env import GROQ_KEY_ENV, gemini_api_key, groq_api_key
 
 CompletionFn = Callable[..., Any]
@@ -27,7 +40,7 @@ Times are absolute episode seconds.
 """
 
 SKIP_NO_KEY = (
-    "no GEMINI_API_KEY / GEMINI_KEY / GOOGLE_API_KEY / "
+    f"no {JUDGE_KEY_ENV_NEEDED} / GEMINI_KEY / GOOGLE_API_KEY / "
     "GOOGLE_GENERATIVE_AI_API_KEY; dry-run skip. GROQ_KEY is unused."
 )
 SKIP_NO_TRANSCRIPT = "chunk has no Whisper transcript; judge skipped"
@@ -63,12 +76,17 @@ class GoldJudge:
         mode: str = "auto",
         model: str | None = None,
         completion_fn: CompletionFn | None = None,
+        max_usd: float = DEFAULT_JUDGE_BUDGET_USD,
     ) -> None:
         self.requested_mode = mode
         self.model = (
             model or os.environ.get("GEMINI_CONFIRM_MODEL") or DEFAULT_GEMINI_MODEL
         )
         self.completion_fn = completion_fn
+        self.max_usd = float(max_usd)
+        self.spent_usd = 0.0
+        self.n_calls = 0
+        self.n_budget_skips = 0
         if completion_fn is not None:
             self.mode = "injected"
         else:
@@ -102,6 +120,20 @@ class GoldJudge:
                 skip_reason=SKIP_NO_KEY + extra,
                 model=self.model,
             )
+        if self.spent_usd >= self.max_usd:
+            self.n_budget_skips += 1
+            return JudgeLabel(
+                is_ad=False,
+                ad_spans=[],
+                content_type="none",
+                confidence=0.0,
+                skipped=True,
+                skip_reason=(
+                    f"gemini_judge budget cap ${self.max_usd:.2f} reached; "
+                    "remaining chunks skipped"
+                ),
+                model=self.model,
+            )
         return self._live(transcript)
 
     def _live(self, transcript: ChunkTranscript) -> JudgeLabel:
@@ -119,13 +151,36 @@ class GoldJudge:
             {"role": "system", "content": GOLD_JUDGE_SYSTEM_PROMPT},
             {"role": "user", "content": _user_prompt(transcript)},
         ]
+        input_tokens = estimate_message_tokens(messages)
+        estimated = usd_for_tokens(
+            input_tokens, DEFAULT_OUTPUT_TOKENS_PER_CALL, DEFAULT_GEMINI_PRICES
+        )
+        if self.spent_usd + estimated > self.max_usd:
+            self.n_budget_skips += 1
+            return JudgeLabel(
+                is_ad=False,
+                ad_spans=[],
+                content_type="none",
+                confidence=0.0,
+                skipped=True,
+                skip_reason=(
+                    f"gemini_judge budget cap ${self.max_usd:.2f} reached; "
+                    "remaining chunks skipped"
+                ),
+                model=self.model,
+            )
         response = fn(
             model=self.model,
             messages=messages,
             response_format={"type": "json_object"},
         )
         content = response.choices[0].message.content or "{}"
-        return parse_judge_json(content, model=self.model)
+        label = parse_judge_json(content, model=self.model)
+        output_tokens = estimate_tokens_from_text(label.raw_response)
+        label.usd = usd_for_tokens(input_tokens, output_tokens, DEFAULT_GEMINI_PRICES)
+        self.spent_usd += label.usd
+        self.n_calls += 1
+        return label
 
 
 def _user_prompt(transcript: ChunkTranscript) -> str:
