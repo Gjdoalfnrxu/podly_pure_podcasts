@@ -54,22 +54,22 @@
       "notes": "Long-form interview with classic host-read midrolls."
     },
     {
-      "id": "criminal",
-      "title": "Criminal",
-      "publisher": "Vox Media",
+      "id": "serial",
+      "title": "Serial",
+      "publisher": "The New York Times / Serial Productions",
       "genre": "true_crime",
-      "ad_mechanism": "host_read_midrolls",
-      "rss_url": "https://feeds.thisiscriminal.com/CriminalShow",
-      "notes": "Narrative true crime; host-reads."
+      "ad_mechanism": "dai_preroll_midroll",
+      "rss_url": "https://feeds.simplecast.com/xl36XBC2",
+      "notes": "True crime; Podtrac/Simplecast DAI. Replaces an unresolved Criminal RSS host."
     },
     {
-      "id": "casefile",
-      "title": "Casefile True Crime",
-      "publisher": "Casefile Presents",
+      "id": "crime_junkie",
+      "title": "Crime Junkie",
+      "publisher": "audiochuck",
       "genre": "true_crime",
-      "ad_mechanism": "network_spots_megaphone",
-      "rss_url": "https://feeds.megaphone.fm/CASEFILE",
-      "notes": "Megaphone DAI likely; fingerprint/DSP optional."
+      "ad_mechanism": "host_read_and_dai",
+      "rss_url": "https://feeds.simplecast.com/qm_9xx0g",
+      "notes": "High-volume true crime with host-reads plus insertion. Do not shrink the catalog to finance."
     },
     {
       "id": "atp",
@@ -99,13 +99,13 @@
       "notes": "Sports news; different from US DAI sports nets."
     },
     {
-      "id": "effectively_wild",
-      "title": "Effectively Wild",
-      "publisher": "FanGraphs / The Athletic",
+      "id": "bill_simmons",
+      "title": "The Bill Simmons Podcast",
+      "publisher": "The Ringer / Spotify",
       "genre": "sports",
-      "ad_mechanism": "host_read_and_network",
-      "rss_url": "https://feeds.megaphone.fm/SMG9742052756",
-      "notes": "Baseball conversation; Megaphone. Replace RSS if the catalog moves."
+      "ad_mechanism": "dynamic_insertion_plus_host_reads",
+      "rss_url": "https://rss.art19.com/the-bill-simmons-podcast",
+      "notes": "US sports talk; Art19 DAI, different stack from BBC Football Daily."
     },
     {
       "id": "planet_money",

@@ -185,9 +185,7 @@ def _extract_pcm(src: Path, start: float, duration: float = 8.0) -> bytes:
         "s16le",
         "-",
     ]
-    completed = subprocess.run(
-        cmd, check=True, capture_output=True, timeout=60
-    )
+    completed = subprocess.run(cmd, check=True, capture_output=True, timeout=60)
     return completed.stdout
 
 

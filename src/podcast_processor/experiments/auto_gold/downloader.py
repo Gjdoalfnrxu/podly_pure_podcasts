@@ -28,6 +28,7 @@ USER_AGENT = (
 )
 DEFAULT_TIMEOUT = 30
 TRAILER_TYPES = frozenset({"trailer"})
+MIN_EPISODE_SECONDS = 300.0
 
 GetFn = Callable[..., Any]
 
@@ -77,11 +78,7 @@ def parse_publisher_markers_xml(xml_bytes: bytes) -> list[PublisherMarker]:
             or elem.attrib.get("startTime")
             or elem.attrib.get("starttime")
         )
-        title = (
-            elem.attrib.get("title")
-            or elem.attrib.get("name")
-            or (elem.text or "")
-        )
+        title = elem.attrib.get("title") or elem.attrib.get("name") or (elem.text or "")
         start = parse_clock_time(start_raw or "")
         if start is None:
             continue
@@ -90,9 +87,7 @@ def parse_publisher_markers_xml(xml_bytes: bytes) -> list[PublisherMarker]:
     for idx, (start, title) in enumerate(chapters):
         end = chapters[idx + 1][0] if idx + 1 < len(chapters) else None
         markers.append(
-            PublisherMarker(
-                start=start, end=end, title=title, source="psc_chapter"
-            )
+            PublisherMarker(start=start, end=end, title=title, source="psc_chapter")
         )
     return markers
 
@@ -112,23 +107,35 @@ def itunes_duration(entry: Any) -> float | None:
 
 
 def entry_is_trailer(entry: Any) -> bool:
-    episode_type = str(
-        getattr(entry, "itunes_episodetype", "")
-        or getattr(entry, "itunes_episode_type", "")
-        or ""
-    ).strip().lower()
+    episode_type = (
+        str(
+            getattr(entry, "itunes_episodetype", "")
+            or getattr(entry, "itunes_episode_type", "")
+            or ""
+        )
+        .strip()
+        .lower()
+    )
     return episode_type in TRAILER_TYPES
 
 
 def pick_latest_audio_entry(parsed: Any) -> Any | None:
+    """Most recent real episode: skip trailers and sub-5-minute feed notes."""
     entries = list(getattr(parsed, "entries", None) or [])
+    fallback: Any | None = None
     for entry in entries:
         if entry_is_trailer(entry):
             continue
         audio = find_audio_link(entry)
-        if audio and str(audio).startswith("http"):
-            return entry
-    return None
+        if not (audio and str(audio).startswith("http")):
+            continue
+        if fallback is None:
+            fallback = entry
+        duration = itunes_duration(entry)
+        if duration is not None and duration < MIN_EPISODE_SECONDS:
+            continue
+        return entry
+    return fallback
 
 
 def fetch_rss(

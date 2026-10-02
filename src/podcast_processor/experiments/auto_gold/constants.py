@@ -17,7 +17,7 @@ REQUIRED_GENRES: frozenset[str] = frozenset(
 PREROLL_START_SECONDS = 0.0
 PREROLL_END_SECONDS = 90.0
 
-# Merge pad ±1–2s (default 2s) after unioning candidate sources.
+# Merge pad +/-1-2s (default 2s) after unioning candidate sources.
 DEFAULT_PAD_SECONDS = 2.0
 DEFAULT_MERGE_GAP_SECONDS = 2.0
 
@@ -27,9 +27,7 @@ DAI_PROBE_HALF_WINDOW_SECONDS = 15.0
 DAI_PROBE_MIN_DURATION_SECONDS = 600.0
 
 PUBLISHER_MARKER_FILTERS: tuple[str, ...] = tuple(
-    s.strip().lower()
-    for s in CHAPTER_FILTER_DEFAULT_STRINGS.split(",")
-    if s.strip()
+    s.strip().lower() for s in CHAPTER_FILTER_DEFAULT_STRINGS.split(",") if s.strip()
 )
 
 DAI_HOST_MARKERS: tuple[str, ...] = (

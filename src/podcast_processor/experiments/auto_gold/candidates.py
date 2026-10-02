@@ -1,8 +1,8 @@
 """High-recall candidate chunks. Independent of production AdClassifier.
 
-Sources (union, then pad ±1–2s and merge):
+Sources (union, then pad +/-1-2s and merge):
 
-1. Always 0–90s preroll (clamped to duration when known).
+1. Always 0-90s preroll (clamped to duration when known).
 2. Publisher markers as **positives only** (chapter titles / PSC chapters).
    Missing markers never imply ad-free.
 3. Optional fingerprint near-dupe hits (repeated preroll-like audio).
@@ -52,7 +52,7 @@ def always_preroll(duration: float | None) -> CandidateChunk:
         start=PREROLL_START_SECONDS,
         end=max(end, PREROLL_START_SECONDS + 0.5),
         sources=["preroll_always"],
-        notes="High-recall: first 0–90s of every episode",
+        notes="High-recall: first 0-90s of every episode",
     )
 
 
@@ -123,12 +123,10 @@ def merge_candidates(
     merge_gap_seconds: float = DEFAULT_MERGE_GAP_SECONDS,
     duration: float | None = None,
 ) -> list[CandidateChunk]:
-    """Pad ±1–2s and merge overlaps / tiny gaps."""
+    """Pad +/-1-2s and merge overlaps / tiny gaps."""
     padded: list[CandidateChunk] = []
     for chunk in chunks:
-        span = clamp_span(
-            chunk.start - pad_seconds, chunk.end + pad_seconds, duration
-        )
+        span = clamp_span(chunk.start - pad_seconds, chunk.end + pad_seconds, duration)
         if span is None:
             continue
         padded.append(

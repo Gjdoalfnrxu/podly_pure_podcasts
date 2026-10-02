@@ -109,7 +109,9 @@ def run_auto_gold(config: AutoGoldConfig) -> PipelineResult:
     if groq_key_present():
         notes.append("GROQ_KEY is set in the environment and is unused by this judge.")
     if not ffmpeg_available():
-        notes.append("ffmpeg/ffprobe missing; chunk extract / DSP / fingerprint skipped.")
+        notes.append(
+            "ffmpeg/ffprobe missing; chunk extract / DSP / fingerprint skipped."
+        )
 
     results: list[ShowResult] = []
     for show in shows:
@@ -137,49 +139,74 @@ def run_auto_gold(config: AutoGoldConfig) -> PipelineResult:
     return payload
 
 
+def _load_show_episode(
+    show: ShowSpec,
+    config: AutoGoldConfig,
+) -> tuple[EpisodeRef, Path | None, list[str]]:
+    blocked: list[str] = []
+    if config.offline:
+        return _offline_episode(show), None, ["offline"]
+    episode, audio_path = fetch_show_episode(
+        show,
+        config.output_dir,
+        download=config.download,
+        get=config.get,
+        max_bytes=config.max_download_bytes,
+    )
+    if not episode.rss_ok:
+        blocked.append(episode.error or "rss failed")
+    if config.download and audio_path is None:
+        blocked.append(episode.error or "audio missing")
+    if audio_path is not None:
+        probed = probe_duration_seconds(audio_path)
+        if probed is not None:
+            episode.duration_seconds = probed
+    return episode, audio_path, blocked
+
+
+def _optional_audio_candidates(
+    audio_path: Path | None,
+    episode: EpisodeRef,
+    config: AutoGoldConfig,
+) -> tuple[list[CandidateChunk], list[str]]:
+    extra: list[CandidateChunk] = []
+    blocked: list[str] = []
+    if config.enable_dsp:
+        if audio_path is not None:
+            extra.extend(silencedetect_candidates(audio_path, episode.duration_seconds))
+        else:
+            blocked.append("dsp_silence (no audio)")
+    if config.enable_fingerprint:
+        if audio_path is not None:
+            extra.extend(fingerprint_near_dupes(audio_path, episode.duration_seconds))
+        else:
+            blocked.append("fingerprint (no audio)")
+    return extra, blocked
+
+
+def _extract_wav(
+    audio_path: Path | None,
+    dest: Path,
+    chunk: CandidateChunk,
+) -> tuple[Path | None, str | None]:
+    if audio_path is None or not ffmpeg_available():
+        return None, None
+    try:
+        return extract_chunk_wav(audio_path, dest, chunk.start, chunk.end), None
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("extract failed %s: %s", dest.name, exc)
+        return None, f"extract {chunk.start:.0f}-{chunk.end:.0f}s"
+
+
 def _run_show(
     show: ShowSpec,
     config: AutoGoldConfig,
     whisper: ChunkWhisper,
     judge: GoldJudge,
 ) -> ShowResult:
-    show_blocked: list[str] = []
-    audio_path: Path | None = None
-    if config.offline:
-        episode = _offline_episode(show)
-        show_blocked.append("offline")
-    else:
-        episode, audio_path = fetch_show_episode(
-            show,
-            config.output_dir,
-            download=config.download,
-            get=config.get,
-            max_bytes=config.max_download_bytes,
-        )
-        if not episode.rss_ok:
-            show_blocked.append(episode.error or "rss failed")
-        if config.download and audio_path is None:
-            show_blocked.append(episode.error or "audio missing")
-
-    if audio_path is not None:
-        probed = probe_duration_seconds(audio_path)
-        if probed is not None:
-            episode.duration_seconds = probed
-
-    extra: list[CandidateChunk] = []
-    if audio_path is not None and config.enable_dsp:
-        extra.extend(
-            silencedetect_candidates(audio_path, episode.duration_seconds)
-        )
-    elif config.enable_dsp:
-        show_blocked.append("dsp_silence (no audio)")
-    if audio_path is not None and config.enable_fingerprint:
-        extra.extend(
-            fingerprint_near_dupes(audio_path, episode.duration_seconds)
-        )
-    elif config.enable_fingerprint:
-        show_blocked.append("fingerprint (no audio)")
-
+    episode, audio_path, show_blocked = _load_show_episode(show, config)
+    extra, extra_blocked = _optional_audio_candidates(audio_path, episode, config)
+    show_blocked.extend(extra_blocked)
     candidates = propose_candidates(
         episode,
         extra=extra,
@@ -190,14 +217,10 @@ def _run_show(
     labels = []
     wav_dir = config.output_dir / "chunks" / show.show_id
     for chunk in candidates:
-        wav_path = None
-        if audio_path is not None and ffmpeg_available():
-            dest = wav_dir / f"{chunk_id(show.show_id, chunk.start, chunk.end)}.wav"
-            try:
-                wav_path = extract_chunk_wav(audio_path, dest, chunk.start, chunk.end)
-            except Exception as exc:  # noqa: BLE001
-                logger.warning("extract failed %s %s: %s", show.show_id, chunk, exc)
-                show_blocked.append(f"extract {chunk.start:.0f}-{chunk.end:.0f}s")
+        dest = wav_dir / f"{chunk_id(show.show_id, chunk.start, chunk.end)}.wav"
+        wav_path, extract_error = _extract_wav(audio_path, dest, chunk)
+        if extract_error:
+            show_blocked.append(extract_error)
         transcript = whisper.transcribe_chunk(chunk, wav_path)
         transcripts.append(transcript)
         labels.append(judge.judge(transcript))

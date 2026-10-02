@@ -65,7 +65,9 @@ class GoldJudge:
         completion_fn: CompletionFn | None = None,
     ) -> None:
         self.requested_mode = mode
-        self.model = model or os.environ.get("GEMINI_CONFIRM_MODEL") or DEFAULT_GEMINI_MODEL
+        self.model = (
+            model or os.environ.get("GEMINI_CONFIRM_MODEL") or DEFAULT_GEMINI_MODEL
+        )
         self.completion_fn = completion_fn
         if completion_fn is not None:
             self.mode = "injected"
@@ -112,9 +114,7 @@ class GoldJudge:
 
         return self._complete(transcript, _call)
 
-    def _complete(
-        self, transcript: ChunkTranscript, fn: CompletionFn
-    ) -> JudgeLabel:
+    def _complete(self, transcript: ChunkTranscript, fn: CompletionFn) -> JudgeLabel:
         messages = [
             {"role": "system", "content": GOLD_JUDGE_SYSTEM_PROMPT},
             {"role": "user", "content": _user_prompt(transcript)},
@@ -130,9 +130,12 @@ class GoldJudge:
 
 def _user_prompt(transcript: ChunkTranscript) -> str:
     chunk = transcript.chunk
-    excerpts = "\n".join(
-        f"[{seg.start:.1f}-{seg.end:.1f}] {seg.text}" for seg in transcript.segments
-    ) or transcript.text
+    excerpts = (
+        "\n".join(
+            f"[{seg.start:.1f}-{seg.end:.1f}] {seg.text}" for seg in transcript.segments
+        )
+        or transcript.text
+    )
     return (
         f"Window {chunk.start:.1f}s-{chunk.end:.1f}s "
         f"(sources: {', '.join(chunk.sources)}).\n"
@@ -172,7 +175,9 @@ def parse_judge_json(content: str, model: str) -> JudgeLabel:
     return JudgeLabel(
         is_ad=is_ad,
         ad_spans=spans,
-        content_type=str(payload.get("content_type") or ("promotional_external" if is_ad else "none")),
+        content_type=str(
+            payload.get("content_type") or ("promotional_external" if is_ad else "none")
+        ),
         confidence=float(payload.get("confidence") or 0.0),
         skipped=False,
         skip_reason=None,

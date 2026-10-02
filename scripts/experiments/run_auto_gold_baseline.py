@@ -23,7 +23,10 @@ import sys
 from datetime import UTC, datetime
 from pathlib import Path
 
-from podcast_processor.experiments.auto_gold.pipeline import AutoGoldConfig, run_auto_gold
+from podcast_processor.experiments.auto_gold.pipeline import (
+    AutoGoldConfig,
+    run_auto_gold,
+)
 from podcast_processor.experiments.auto_gold.shows import default_shows_path
 from shared import defaults as DEFAULTS
 
@@ -135,21 +138,23 @@ def main() -> int:
             require_representative=not filtered,
         )
     )
-    print(json.dumps(
-        {
-            "gold_family": result.gold_family,
-            "n_shows": len(result.shows),
-            "genres": sorted({row.show.genre for row in result.shows}),
-            "whisper": result.whisper_backend,
-            "judge": result.judge_mode,
-            "gemini_key": result.gemini_key_present,
-            "groq_unused": result.groq_key_present_but_unused,
-            "blocked": result.blocked_steps,
-            "output_dir": str(output_dir),
-            "report": str(output_dir / "BASELINE_REPORT.md"),
-        },
-        indent=2,
-    ))
+    print(
+        json.dumps(
+            {
+                "gold_family": result.gold_family,
+                "n_shows": len(result.shows),
+                "genres": sorted({row.show.genre for row in result.shows}),
+                "whisper": result.whisper_backend,
+                "judge": result.judge_mode,
+                "gemini_key": result.gemini_key_present,
+                "groq_unused": result.groq_key_present_but_unused,
+                "blocked": result.blocked_steps,
+                "output_dir": str(output_dir),
+                "report": str(output_dir / "BASELINE_REPORT.md"),
+            },
+            indent=2,
+        )
+    )
     return 0
 
 

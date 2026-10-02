@@ -24,7 +24,13 @@ class ShowListError(ValueError):
 
 def default_shows_path() -> Path:
     """docs/experiments/auto_gold/shows.json relative to the repo root."""
-    return Path(__file__).resolve().parents[4] / "docs" / "experiments" / "auto_gold" / SHOWS_JSON_NAME
+    return (
+        Path(__file__).resolve().parents[4]
+        / "docs"
+        / "experiments"
+        / "auto_gold"
+        / SHOWS_JSON_NAME
+    )
 
 
 def load_show_catalog(path: Path | None = None) -> dict[str, Any]:
@@ -43,9 +49,7 @@ def parse_shows(payload: dict[str, Any]) -> list[ShowSpec]:
         )
     unit = str(payload.get("sampling_unit") or "")
     if unit != SAMPLING_UNIT:
-        raise ShowListError(
-            f"sampling_unit must be {SAMPLING_UNIT!r}, got {unit!r}"
-        )
+        raise ShowListError(f"sampling_unit must be {SAMPLING_UNIT!r}, got {unit!r}")
     raw_shows = payload.get("shows")
     if not isinstance(raw_shows, list) or not raw_shows:
         raise ShowListError("shows.json needs a non-empty shows array")
@@ -80,6 +84,11 @@ def validate_representative_sample(shows: list[ShowSpec]) -> None:
         raise ShowListError(
             f"need at least {MIN_SHOWS} shows (one per required genre); got {len(shows)}"
         )
+    finance = [show for show in shows if show.genre == "finance"]
+    if shows and len(finance) == len(shows):
+        raise ShowListError(
+            "refusing finance-only sample; general_podcast_ads is multi-genre"
+        )
     genres = {show.genre for show in shows}
     missing = REQUIRED_GENRES - genres
     if missing:
@@ -87,15 +96,10 @@ def validate_representative_sample(shows: list[ShowSpec]) -> None:
             "sample is not representative; missing genres "
             f"{sorted(missing)}. Required: {sorted(REQUIRED_GENRES)}"
         )
-    finance = [show for show in shows if show.genre == "finance"]
-    if len(finance) == len(shows):
-        raise ShowListError(
-            "refusing finance-only sample; general_podcast_ads is multi-genre"
-        )
     if len(finance) / len(shows) - 1e-12 > MAX_FINANCE_FRACTION:
         raise ShowListError(
             "finance shows dominate the sample "
-            f"({len(finance)}/{len(shows)}); keep finance ≤ "
+            f"({len(finance)}/{len(shows)}); keep finance <= "
             f"{MAX_FINANCE_FRACTION:.0%} because sampling unit is show"
         )
     ids = [show.show_id for show in shows]

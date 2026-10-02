@@ -50,6 +50,11 @@ def resolve_whisper_backend(mode: str) -> tuple[str, str]:
     wanted = (mode or "auto").strip().lower()
     ok, detail = whisper_import_status()
     if wanted == "stub":
+        if ok:
+            return "stub", (
+                "whisper-mode=stub; local whisper is importable but not used. "
+                "On Cake, pass --whisper-mode local per docs/experiments/auto_gold/CAKE_RUN.md"
+            )
         return "stub", STUB_REASON
     if wanted == "local":
         if not ok:
@@ -113,9 +118,7 @@ class ChunkWhisper:
             )
         return self._local_whisper(chunk, wav_path)
 
-    def _local_whisper(
-        self, chunk: CandidateChunk, wav_path: Path
-    ) -> ChunkTranscript:
+    def _local_whisper(self, chunk: CandidateChunk, wav_path: Path) -> ChunkTranscript:
         import whisper
 
         logger.info("local whisper model=%s file=%s", self.model_name, wav_path)

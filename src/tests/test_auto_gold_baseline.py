@@ -2,13 +2,20 @@
 
 from __future__ import annotations
 
+import ast
 import json
+import subprocess
 from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
 
 from podcast_processor.experiments.auto_gold import GOLD_FAMILY, REQUIRED_GENRES
+from podcast_processor.experiments.auto_gold.audio_ops import (
+    extract_chunk_wav,
+    ffmpeg_available,
+    probe_duration_seconds,
+)
 from podcast_processor.experiments.auto_gold.candidates import (
     always_preroll,
     candidates_from_publisher_markers,
@@ -28,7 +35,10 @@ from podcast_processor.experiments.auto_gold.judge import (
     groq_key_present,
     parse_judge_json,
 )
-from podcast_processor.experiments.auto_gold.pipeline import AutoGoldConfig, run_auto_gold
+from podcast_processor.experiments.auto_gold.pipeline import (
+    AutoGoldConfig,
+    run_auto_gold,
+)
 from podcast_processor.experiments.auto_gold.report import render_report
 from podcast_processor.experiments.auto_gold.shows import (
     ShowListError,
@@ -71,17 +81,22 @@ SAMPLE_RSS = b"""<?xml version="1.0"?>
 """
 
 
-def _show(**kwargs: object) -> ShowSpec:
-    base = dict(
-        show_id="s",
-        title="T",
-        publisher="P",
-        genre="news",
-        ad_mechanism="x",
-        rss_url="https://example.com/rss",
+def _show(
+    show_id: str = "s",
+    title: str = "T",
+    publisher: str = "P",
+    genre: str = "news",
+    ad_mechanism: str = "x",
+    rss_url: str = "https://example.com/rss",
+) -> ShowSpec:
+    return ShowSpec(
+        show_id=show_id,
+        title=title,
+        publisher=publisher,
+        genre=genre,
+        ad_mechanism=ad_mechanism,
+        rss_url=rss_url,
     )
-    base.update(kwargs)
-    return ShowSpec(**base)  # type: ignore[arg-type]
 
 
 def test_production_flag_stays_false() -> None:
@@ -90,10 +105,12 @@ def test_production_flag_stays_false() -> None:
 
 
 def test_auto_gold_package_does_not_import_adclassifier() -> None:
-    import ast
-    from pathlib import Path
-
-    root = Path(__file__).resolve().parents[1] / "podcast_processor" / "experiments" / "auto_gold"
+    root = (
+        Path(__file__).resolve().parents[1]
+        / "podcast_processor"
+        / "experiments"
+        / "auto_gold"
+    )
     imported: list[str] = []
     for path in root.glob("*.py"):
         tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
@@ -112,7 +129,7 @@ def test_auto_gold_package_does_not_import_adclassifier() -> None:
 def test_committed_shows_are_representative() -> None:
     shows = load_shows()
     genres = {show.genre for show in shows}
-    assert genres == REQUIRED_GENRES or REQUIRED_GENRES <= genres
+    assert genres == REQUIRED_GENRES or genres >= REQUIRED_GENRES
     finance = [show for show in shows if show.genre == "finance"]
     assert 0 < len(finance) < len(shows)
     assert len(shows) >= 6
@@ -120,6 +137,9 @@ def test_committed_shows_are_representative() -> None:
     ids = {show.show_id for show in shows}
     assert "planet_money" in ids
     assert "marketplace" in ids
+    assert "serial" in ids
+    assert "crime_junkie" in ids
+    assert "bill_simmons" in ids
     # Not a two-show catalog.
     assert len(shows) > 2
 
@@ -229,9 +249,10 @@ def test_whisper_auto_stubs_when_unimportable_or_mocked() -> None:
     result = backend.transcribe_chunk(chunk, Path("/tmp/missing.wav"))
     assert result.skipped
     assert result.text == ""
-    assert "stub" in (result.skip_reason or "").lower() or "whisper" in (
-        result.skip_reason or ""
-    ).lower()
+    assert (
+        "stub" in (result.skip_reason or "").lower()
+        or "whisper" in (result.skip_reason or "").lower()
+    )
     del detail
 
 
@@ -386,7 +407,9 @@ def test_report_render_roundtrip(tmp_path: Path) -> None:
             judge_mode="dry-run",
         )
     )
-    rendered = render_report(default_template_path().read_text(encoding="utf-8"), result)
+    rendered = render_report(
+        default_template_path().read_text(encoding="utf-8"), result
+    )
     assert "enable_bow_scout_gemini_confirm" in rendered
     assert "`False`" in rendered or "`false`" in rendered.lower()
 
@@ -421,3 +444,57 @@ def test_gemini_api_key_does_not_use_groq(monkeypatch: pytest.MonkeyPatch) -> No
     assert gemini_api_key() == ""
     monkeypatch.setenv("GOOGLE_API_KEY", "AIza-test-not-real")
     assert gemini_api_key() == "AIza-test-not-real"
+
+
+def test_skips_short_feed_notes() -> None:
+    import feedparser
+
+    xml = b"""<?xml version="1.0"?>
+<rss version="2.0" xmlns:itunes="http://www.itunes.com/dtds/podcast-1.0.dtd">
+  <channel>
+    <title>Example Comedy</title>
+    <item>
+      <title>A Message From The Host</title>
+      <enclosure url="https://example.com/note.mp3" type="audio/mpeg"/>
+      <itunes:duration>45</itunes:duration>
+    </item>
+    <item>
+      <title>Real Episode</title>
+      <enclosure url="https://example.com/ep.mp3" type="audio/mpeg"/>
+      <itunes:duration>3600</itunes:duration>
+    </item>
+  </channel>
+</rss>
+"""
+    episode = episode_from_rss(_show(genre="comedy"), xml, feedparser.parse(xml))
+    assert episode.episode_title == "Real Episode"
+    assert episode.duration_seconds == 3600.0
+
+
+def test_ffmpeg_extracts_candidate_chunk(tmp_path: Path) -> None:
+    if not ffmpeg_available():
+        pytest.skip("ffmpeg/ffprobe required")
+    src = tmp_path / "tone.wav"
+    subprocess.run(
+        [
+            "ffmpeg",
+            "-y",
+            "-f",
+            "lavfi",
+            "-i",
+            "sine=frequency=440:duration=30",
+            "-ar",
+            "16000",
+            "-ac",
+            "1",
+            str(src),
+        ],
+        check=True,
+        capture_output=True,
+    )
+    dest = tmp_path / "chunk.wav"
+    extract_chunk_wav(src, dest, 0.0, 10.0)
+    assert dest.stat().st_size > 0
+    duration = probe_duration_seconds(dest)
+    assert duration is not None
+    assert 9.0 < duration < 11.0
