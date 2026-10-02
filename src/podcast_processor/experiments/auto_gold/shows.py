@@ -107,6 +107,20 @@ def validate_representative_sample(shows: list[ShowSpec]) -> None:
         raise ShowListError("duplicate show ids")
 
 
+def prioritize_genre_coverage(shows: list[ShowSpec]) -> list[ShowSpec]:
+    """Run one show per required genre first so a time-budgeted VM still covers all six."""
+    seen: set[str] = set()
+    first: list[ShowSpec] = []
+    rest: list[ShowSpec] = []
+    for show in shows:
+        if show.genre in REQUIRED_GENRES and show.genre not in seen:
+            first.append(show)
+            seen.add(show.genre)
+        else:
+            rest.append(show)
+    return first + rest
+
+
 def filter_shows(
     shows: list[ShowSpec],
     *,

@@ -201,7 +201,7 @@ def download_audio(
     dest: Path,
     *,
     get: GetFn | None = None,
-    timeout: int = 60,
+    timeout: int = 180,
     max_bytes: int | None = None,
 ) -> Path:
     dest.parent.mkdir(parents=True, exist_ok=True)

@@ -44,6 +44,7 @@ from podcast_processor.experiments.auto_gold.shows import (
     ShowListError,
     load_shows,
     parse_shows,
+    prioritize_genre_coverage,
     validate_representative_sample,
 )
 from podcast_processor.experiments.auto_gold.types import (
@@ -142,6 +143,15 @@ def test_committed_shows_are_representative() -> None:
     assert "bill_simmons" in ids
     # Not a two-show catalog.
     assert len(shows) > 2
+
+
+def test_prioritize_genre_coverage_front_loads_required_genres() -> None:
+    shows = load_shows()
+    ordered = prioritize_genre_coverage(shows)
+    assert {s.show_id for s in ordered} == {s.show_id for s in shows}
+    first_six_genres = [s.genre for s in ordered[:6]]
+    assert set(first_six_genres) == REQUIRED_GENRES
+    assert len(first_six_genres) == len(set(first_six_genres))
 
 
 def test_rejects_finance_only_sample() -> None:

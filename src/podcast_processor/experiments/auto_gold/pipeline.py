@@ -39,6 +39,7 @@ from podcast_processor.experiments.auto_gold.shows import (
     ShowListError,
     filter_shows,
     load_shows,
+    prioritize_genre_coverage,
 )
 from podcast_processor.experiments.auto_gold.types import (
     CandidateChunk,
@@ -136,11 +137,58 @@ def run_auto_gold(config: AutoGoldConfig) -> PipelineResult:
         )
 
     results: list[ShowResult] = []
-    for show in shows:
+    for show in prioritize_genre_coverage(shows):
         logger.info("auto-gold show %s (%s)", show.show_id, show.genre)
-        results.append(_run_show(show, config, whisper, judge))
+        try:
+            results.append(_run_show(show, config, whisper, judge))
+        except Exception as exc:  # noqa: BLE001
+            logger.exception("auto-gold show %s failed: %s", show.show_id, exc)
+            results.append(
+                ShowResult(
+                    show=show,
+                    episode=EpisodeRef(
+                        show=show,
+                        episode_title="",
+                        audio_url=None,
+                        duration_seconds=None,
+                        guid="",
+                        published=None,
+                        dai_likely=False,
+                        rss_ok=False,
+                        error=f"show failed: {exc}",
+                    ),
+                    audio_path=None,
+                    candidates=[],
+                    transcripts=[],
+                    labels=[],
+                    blocked=[f"show failed: {exc}"],
+                )
+            )
+        _write_pipeline_outputs(
+            _snapshot_payload(config, whisper, judge, results, blocked, notes),
+            config,
+        )
+        logger.info(
+            "auto-gold checkpoint %s/%s after %s",
+            len(results),
+            len(shows),
+            show.show_id,
+        )
 
-    payload = PipelineResult(
+    payload = _snapshot_payload(config, whisper, judge, results, blocked, notes)
+    _write_pipeline_outputs(payload, config)
+    return payload
+
+
+def _snapshot_payload(
+    config: AutoGoldConfig,
+    whisper: ChunkWhisper,
+    judge: GoldJudge,
+    results: list[ShowResult],
+    blocked: list[str],
+    notes: list[str],
+) -> PipelineResult:
+    return PipelineResult(
         gold_family=GOLD_FAMILY,
         sampling_unit=SAMPLING_UNIT,
         whisper_backend=whisper.backend,
@@ -159,13 +207,15 @@ def run_auto_gold(config: AutoGoldConfig) -> PipelineResult:
         judge_calls=int(judge.n_calls),
         judge_env_needed=JUDGE_KEY_ENV_NEEDED,
     )
+
+
+def _write_pipeline_outputs(payload: PipelineResult, config: AutoGoldConfig) -> None:
     config.output_dir.mkdir(parents=True, exist_ok=True)
     metrics = config.output_dir / "metrics.json"
     metrics.write_text(json.dumps(payload.as_dict(), indent=2) + "\n", encoding="utf-8")
     write_report(payload, config.output_dir / "BASELINE_REPORT.md")
     if config.write_docs_report:
         write_report(payload, default_template_path())
-    return payload
 
 
 def _load_show_episode(
