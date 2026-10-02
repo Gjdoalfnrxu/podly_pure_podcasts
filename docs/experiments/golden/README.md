@@ -40,6 +40,11 @@ episode text. Do not check in NYT/Soft Skills transcripts.
 5. Production `AdClassifier` and `enable_bow_scout_gemini_confirm` stay
    unchanged.
 
+For a **multi-show automated** gold (RSS → high-recall chunks → Whisper on
+those chunks → Gemini judge, family `general_podcast_ads`), see
+`docs/experiments/auto_gold/README.md`. That path is Whisper-shaped and
+same-family-judge circular; it does not replace this human ingest.
+
 ## Templates
 
 Synthetic skeletons (not real shows) are produced by

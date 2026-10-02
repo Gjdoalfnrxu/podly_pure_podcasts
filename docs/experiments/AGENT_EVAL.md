@@ -220,5 +220,7 @@ Duration stubs use `output_ms ≈ source_ms − Σ ad_ms + 2 × fade_ms × n_cut
 3. Explain the new row in RESULTS / this file.
 4. Keep labels honest: known ad intervals only.
 5. Real Whisper goldens: `docs/experiments/golden/README.md` (secret-safe
-   ingest). Hypothesis `H004`.
+   ingest). Hypothesis `H004`. Automated multi-show gold (not finance-only):
+   `docs/experiments/auto_gold/README.md` — does not flip
+   `enable_bow_scout_gemini_confirm`.
 

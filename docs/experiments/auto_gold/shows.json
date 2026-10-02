@@ -1,0 +1,129 @@
+{
+  "gold_family": "general_podcast_ads",
+  "sampling_unit": "show",
+  "description": "Representative multi-show catalog for automated gold. One recent episode per show. Not a two-show finance sample (Planet Money + Indicator is explicitly insufficient).",
+  "required_genres": [
+    "news",
+    "comedy",
+    "true_crime",
+    "tech",
+    "sports",
+    "finance"
+  ],
+  "notes": [
+    "Sampling unit is the show, not the episode: fetch 1 recent episode per row.",
+    "Finance is present (Planet Money + Marketplace) but is 2 of 12 shows across 6 genres.",
+    "Ad mechanisms differ: NPR underwriting, BBC network, host-reads, Megaphone DAI.",
+    "Replace a dead RSS URL in this file; do not shrink to two finance shows."
+  ],
+  "shows": [
+    {
+      "id": "npr_up_first",
+      "title": "Up First",
+      "publisher": "NPR",
+      "genre": "news",
+      "ad_mechanism": "short_briefing_preroll_underwriting",
+      "rss_url": "https://feeds.npr.org/510318/podcast.xml",
+      "notes": "Short news briefing; preroll always in the candidate set."
+    },
+    {
+      "id": "bbc_global_news",
+      "title": "Global News Podcast",
+      "publisher": "BBC World Service",
+      "genre": "news",
+      "ad_mechanism": "network_preroll_midroll",
+      "rss_url": "https://podcasts.files.bbci.co.uk/p02nq0gn.rss",
+      "notes": "Different publisher stack from NPR."
+    },
+    {
+      "id": "npr_wait_wait",
+      "title": "Wait Wait... Don't Tell Me!",
+      "publisher": "NPR",
+      "genre": "comedy",
+      "ad_mechanism": "npr_underwriting_breaks",
+      "rss_url": "https://feeds.npr.org/344098539/podcast.xml",
+      "notes": "News-quiz comedy; underwriting, not host-read SaaS spots."
+    },
+    {
+      "id": "wtf_maron",
+      "title": "WTF with Marc Maron",
+      "publisher": "Maron / Stitcher",
+      "genre": "comedy",
+      "ad_mechanism": "host_read_midrolls",
+      "rss_url": "https://www.wtfpod.com/podcast/rss",
+      "notes": "Long-form interview with classic host-read midrolls."
+    },
+    {
+      "id": "criminal",
+      "title": "Criminal",
+      "publisher": "Vox Media",
+      "genre": "true_crime",
+      "ad_mechanism": "host_read_midrolls",
+      "rss_url": "https://feeds.thisiscriminal.com/CriminalShow",
+      "notes": "Narrative true crime; host-reads."
+    },
+    {
+      "id": "casefile",
+      "title": "Casefile True Crime",
+      "publisher": "Casefile Presents",
+      "genre": "true_crime",
+      "ad_mechanism": "network_spots_megaphone",
+      "rss_url": "https://feeds.megaphone.fm/CASEFILE",
+      "notes": "Megaphone DAI likely; fingerprint/DSP optional."
+    },
+    {
+      "id": "atp",
+      "title": "Accidental Tech Podcast",
+      "publisher": "ATP",
+      "genre": "tech",
+      "ad_mechanism": "host_read_pre_mid_post",
+      "rss_url": "https://atp.fm/rss",
+      "notes": "Explicit pre/mid/post host-reads; chapters often labeled."
+    },
+    {
+      "id": "darknet_diaries",
+      "title": "Darknet Diaries",
+      "publisher": "Jack Rhysider",
+      "genre": "tech",
+      "ad_mechanism": "host_read_megaphone",
+      "rss_url": "https://feeds.megaphone.fm/darknetdiaries",
+      "notes": "Tech storytelling with Megaphone insertion."
+    },
+    {
+      "id": "bbc_football_daily",
+      "title": "Football Daily",
+      "publisher": "BBC Sport",
+      "genre": "sports",
+      "ad_mechanism": "bbc_network_breaks",
+      "rss_url": "https://podcasts.files.bbci.co.uk/p02nrsln.rss",
+      "notes": "Sports news; different from US DAI sports nets."
+    },
+    {
+      "id": "effectively_wild",
+      "title": "Effectively Wild",
+      "publisher": "FanGraphs / The Athletic",
+      "genre": "sports",
+      "ad_mechanism": "host_read_and_network",
+      "rss_url": "https://feeds.megaphone.fm/SMG9742052756",
+      "notes": "Baseball conversation; Megaphone. Replace RSS if the catalog moves."
+    },
+    {
+      "id": "planet_money",
+      "title": "Planet Money",
+      "publisher": "NPR",
+      "genre": "finance",
+      "ad_mechanism": "npr_underwriting_and_host_reads",
+      "rss_url": "https://feeds.npr.org/510289/podcast.xml",
+      "notes": "Finance, but not the whole sample. Do not pair only with The Indicator."
+    },
+    {
+      "id": "marketplace",
+      "title": "Marketplace",
+      "publisher": "APM / Marketplace",
+      "genre": "finance",
+      "ad_mechanism": "public_radio_underwriting",
+      "rss_url": "https://www.marketplace.org/feed/podcast/marketplace",
+      "notes": "Different publisher from Planet Money (not two NPR finance shows)."
+    }
+  ]
+}
