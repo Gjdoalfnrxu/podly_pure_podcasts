@@ -141,7 +141,7 @@ def run_auto_gold(config: AutoGoldConfig) -> PipelineResult:
         logger.info("auto-gold show %s (%s)", show.show_id, show.genre)
         try:
             results.append(_run_show(show, config, whisper, judge))
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:
             logger.exception("auto-gold show %s failed: %s", show.show_id, exc)
             results.append(
                 ShowResult(

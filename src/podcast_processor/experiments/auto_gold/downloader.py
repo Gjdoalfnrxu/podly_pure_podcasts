@@ -211,7 +211,9 @@ def download_audio(
     referer = "https://open.acast.com/" if "acast.com" in url else None
     headers = {"User-Agent": USER_AGENT, "Referer": referer}
     try:
-        with session_get(url, stream=True, timeout=timeout, headers=headers) as response:
+        with session_get(
+            url, stream=True, timeout=timeout, headers=headers
+        ) as response:
             response.raise_for_status()
             written = 0
             with dest.open("wb") as handle:
@@ -222,9 +224,9 @@ def download_audio(
                     if max_bytes is not None and written > max_bytes:
                         raise OSError(f"download exceeded max_bytes={max_bytes}")
                     handle.write(chunk)
-    except Exception:
+    except (OSError, requests.RequestException):
         if dest.exists():
-            dest.unlink()
+            dest.unlink(missing_ok=True)
         raise
     return dest
 

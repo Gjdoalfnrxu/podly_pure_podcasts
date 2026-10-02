@@ -455,6 +455,9 @@ def test_download_audio_unlinks_partial_on_max_bytes(tmp_path: Path) -> None:
             max_bytes=50,
         )
     assert not dest.exists()
+
+
+def test_fetch_show_episode_parses_rss(tmp_path: Path) -> None:
     class _Resp:
         content = SAMPLE_RSS
         status_code = 200
