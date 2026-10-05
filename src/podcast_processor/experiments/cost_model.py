@@ -33,6 +33,8 @@ GROQ_GPT_OSS_120B_INPUT_USD_PER_M = 0.15
 GROQ_GPT_OSS_120B_OUTPUT_USD_PER_M = 0.60
 GEMINI_25_FLASH_INPUT_USD_PER_M = 0.15
 GEMINI_25_FLASH_OUTPUT_USD_PER_M = 0.60
+GEMINI_31_FLASH_LITE_INPUT_USD_PER_M = 0.25
+GEMINI_31_FLASH_LITE_OUTPUT_USD_PER_M = 1.50
 
 # Typical JSON response size when the chunk/window has 0-few ads.
 DEFAULT_OUTPUT_TOKENS_PER_CALL = 250
@@ -50,11 +52,44 @@ DEFAULT_CLASSIFIER_PRICES = ModelPrices(
     input_usd_per_million=GROQ_GPT_OSS_120B_INPUT_USD_PER_M,
     output_usd_per_million=GROQ_GPT_OSS_120B_OUTPUT_USD_PER_M,
 )
-DEFAULT_GEMINI_PRICES = ModelPrices(
+GEMINI_25_FLASH_PRICES = ModelPrices(
     name="gemini/gemini-2.5-flash",
     input_usd_per_million=GEMINI_25_FLASH_INPUT_USD_PER_M,
     output_usd_per_million=GEMINI_25_FLASH_OUTPUT_USD_PER_M,
 )
+GEMINI_31_FLASH_LITE_PRICES = ModelPrices(
+    name="gemini/gemini-3.1-flash-lite",
+    input_usd_per_million=GEMINI_31_FLASH_LITE_INPUT_USD_PER_M,
+    output_usd_per_million=GEMINI_31_FLASH_LITE_OUTPUT_USD_PER_M,
+)
+# Eval token-USD estimates stay on the frozen 2.5-flash row so snapshot
+# macros do not move. Live accounting looks up the configured model.
+DEFAULT_GEMINI_PRICES = GEMINI_25_FLASH_PRICES
+
+_GEMINI_PRICES_BY_MODEL: dict[str, ModelPrices] = {
+    GEMINI_25_FLASH_PRICES.name: GEMINI_25_FLASH_PRICES,
+    "gemini-2.5-flash": GEMINI_25_FLASH_PRICES,
+    GEMINI_31_FLASH_LITE_PRICES.name: GEMINI_31_FLASH_LITE_PRICES,
+    "gemini-3.1-flash-lite": GEMINI_31_FLASH_LITE_PRICES,
+}
+
+
+def gemini_prices_for_model(model: str | None) -> ModelPrices:
+    """Return the Gemini price row for a litellm model id.
+
+    Unknown SKUs fall back to the 2.5-flash eval row rather than inventing
+    a rate. Accounting for a live confirm must pass the configured model.
+    """
+    if not model:
+        return DEFAULT_GEMINI_PRICES
+    normalized = model.strip()
+    if normalized in _GEMINI_PRICES_BY_MODEL:
+        return _GEMINI_PRICES_BY_MODEL[normalized]
+    sku = normalized.split("/")[-1]
+    for key, prices in _GEMINI_PRICES_BY_MODEL.items():
+        if sku == key.split("/")[-1]:
+            return prices
+    return DEFAULT_GEMINI_PRICES
 
 
 def usd_for_tokens(input_tokens: int, output_tokens: int, prices: ModelPrices) -> float:

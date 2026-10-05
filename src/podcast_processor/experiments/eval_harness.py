@@ -160,6 +160,7 @@ def evaluate_episode(
     detector: Any | None = None,
     window_postprocess: Any | None = None,
     confirm_model: str | None = None,
+    budget: Any | None = None,
 ) -> dict[str, Any]:
     scout = BowScout(config=config, detector=detector)
     windows = scout.scout(episode.segments)
@@ -171,6 +172,7 @@ def evaluate_episode(
         mock_mode=confirm_mock_mode,  # type: ignore[arg-type]
         cache_dir=cache_dir,
         labeled_ads=episode.labeled_ads,
+        budget=budget,
     )
     confirms = client.confirm_windows(
         windows, episode.podcast_title, episode.podcast_topic
@@ -289,6 +291,7 @@ def evaluate_all(
     confirm_model: str | None = None,
     confirm_mock_mode: str = "oracle",
     episodes: list[EpisodeFixture] | None = None,
+    budget: Any | None = None,
 ) -> dict[str, Any]:
     recommended = config or RECOMMENDED_CONFIG
     # `sweep=[]` skips the extra configs; only `None` means the default sweep.
@@ -305,6 +308,7 @@ def evaluate_all(
         "window_postprocess": postprocess,
         "confirm_model": confirm_model,
         "confirm_mock_mode": confirm_mock_mode,
+        "budget": budget,
     }
     recommended_rows = [
         evaluate_episode(episode, recommended, **eval_kwargs) for episode in episodes

@@ -19,7 +19,7 @@ from typing import Any
 
 from podcast_processor.experiments.cost_model import (
     DEFAULT_CLASSIFIER_PRICES,
-    DEFAULT_GEMINI_PRICES,
+    gemini_prices_for_model,
     usd_for_tokens,
 )
 
@@ -56,8 +56,12 @@ def estimate_usd(
     output_tokens: int,
     *,
     provider: str = "gemini",
+    model: str | None = None,
 ) -> float:
-    prices = DEFAULT_GEMINI_PRICES if provider != "groq" else DEFAULT_CLASSIFIER_PRICES
+    if provider == "groq":
+        prices = DEFAULT_CLASSIFIER_PRICES
+    else:
+        prices = gemini_prices_for_model(model)
     return usd_for_tokens(input_tokens, output_tokens, prices)
 
 

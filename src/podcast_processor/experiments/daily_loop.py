@@ -20,6 +20,7 @@ from podcast_processor.experiments.baseline import (
 )
 from podcast_processor.experiments.bow_scout import ScoutConfig
 from podcast_processor.experiments.budget import (
+    BudgetExceeded,
     DailyBudget,
     daily_budget_usd,
     default_cache_dir,
@@ -194,31 +195,35 @@ def _style_confidence_win(recommended: dict[str, Any], tight: dict[str, Any]) ->
 
 
 def _cheap_recovery_eval_kwargs(
-    variant: str, *, offline: bool, cache_dir: Path
+    variant: str, *, offline: bool, cache_dir: Path, budget: DailyBudget | None = None
 ) -> dict[str, Any]:
     if variant == "storytelling_phrase":
         return _eval_kwargs(
             offline=offline,
             cache_dir=cache_dir,
             detector=StorytellingScoutDetector(include_scout_extras=True),
+            budget=budget,
         )
     if variant == "cheap_midroll_probe":
         return _eval_kwargs(
             offline=offline,
             cache_dir=cache_dir,
             window_postprocess=cheap_midroll_probe,
+            budget=budget,
         )
     if variant == "duration_gated_midroll_probe":
         return _eval_kwargs(
             offline=offline,
             cache_dir=cache_dir,
             window_postprocess=duration_gated_midroll_probe,
+            budget=budget,
         )
     if variant == "wider_duration_gated_midroll_probe":
         return _eval_kwargs(
             offline=offline,
             cache_dir=cache_dir,
             window_postprocess=wider_duration_gated_midroll_probe,
+            budget=budget,
         )
     raise ValueError(f"unknown cheap_recovery variant {variant!r}")
 
@@ -229,6 +234,7 @@ def _eval_kwargs(
     cache_dir: Path,
     detector: Any | None = None,
     window_postprocess: Any | None = None,
+    budget: DailyBudget | None = None,
 ) -> dict[str, Any]:
     kwargs: dict[str, Any] = {
         "sweep": [],
@@ -236,6 +242,7 @@ def _eval_kwargs(
         "detector": detector,
         "window_postprocess": window_postprocess,
         "confirm_mock_mode": "oracle",
+        "budget": budget,
     }
     if not offline and any_live_confirm_enabled():
         kwargs["confirm_model"] = default_live_confirm_model()
@@ -253,11 +260,14 @@ def _run_cue_pattern(
     evaluate_fn: EvaluateFn,
     offline: bool,
     cache_dir: Path,
+    budget: DailyBudget | None = None,
 ) -> tuple[dict[str, Any], list[RankedCandidate], dict[str, Any]]:
     detector = TightPromoCueDetector(include_scout_extras=True)
     results = evaluate_fn(
         config=RECOMMENDED_CONFIG,
-        **_eval_kwargs(offline=offline, cache_dir=cache_dir, detector=detector),
+        **_eval_kwargs(
+            offline=offline, cache_dir=cache_dir, detector=detector, budget=budget
+        ),
     )
     return (
         results,
@@ -272,12 +282,15 @@ def _run_style_golden_promo(
     evaluate_fn: EvaluateFn,
     offline: bool,
     cache_dir: Path,
+    budget: DailyBudget | None = None,
 ) -> tuple[dict[str, Any], list[RankedCandidate], dict[str, Any]]:
     params = _experiment_params(item)
     detector = TightPromoCueDetector(include_scout_extras=True)
     results = evaluate_fn(
         config=RECOMMENDED_CONFIG,
-        **_eval_kwargs(offline=offline, cache_dir=cache_dir, detector=detector),
+        **_eval_kwargs(
+            offline=offline, cache_dir=cache_dir, detector=detector, budget=budget
+        ),
     )
     fixture_names = params.get("fixtures")
     names = (
@@ -288,6 +301,7 @@ def _run_style_golden_promo(
     eval_episode_kwargs: dict[str, Any] = {
         "cache_dir": cache_dir,
         "confirm_mock_mode": "oracle",
+        "budget": budget,
     }
     style_rows: list[dict[str, Any]] = []
     wins: list[bool] = []
@@ -329,6 +343,7 @@ def _run_cheap_recovery(
     evaluate_fn: EvaluateFn,
     offline: bool,
     cache_dir: Path,
+    budget: DailyBudget | None = None,
 ) -> tuple[dict[str, Any], list[RankedCandidate], dict[str, Any]]:
     params = _experiment_params(item)
     raw_variants = params.get("variants")
@@ -343,7 +358,7 @@ def _run_cheap_recovery(
         variant_results = evaluate_fn(
             config=RECOMMENDED_CONFIG,
             **_cheap_recovery_eval_kwargs(
-                variant, offline=offline, cache_dir=cache_dir
+                variant, offline=offline, cache_dir=cache_dir, budget=budget
             ),
         )
         if first_results is None:
@@ -351,7 +366,7 @@ def _run_cheap_recovery(
         candidates.append(score_candidate(f"{item.id}-{variant}", variant_results))
     results = first_results or evaluate_fn(
         config=RECOMMENDED_CONFIG,
-        **_eval_kwargs(offline=offline, cache_dir=cache_dir),
+        **_eval_kwargs(offline=offline, cache_dir=cache_dir, budget=budget),
     )
     return results, candidates, {"variants": variants}
 
@@ -360,7 +375,9 @@ def _run_pad_sweep(
     item: Hypothesis,
     *,
     evaluate_fn: EvaluateFn,
+    offline: bool,
     cache_dir: Path,
+    budget: DailyBudget | None = None,
 ) -> tuple[dict[str, Any], list[RankedCandidate], dict[str, Any]]:
     params = _experiment_params(item)
     extra_cfgs = list(DEFAULT_SWEEP)
@@ -396,6 +413,12 @@ def _run_pad_sweep(
         sweep=extra_cfgs,
         cache_dir=cache_dir,
         confirm_mock_mode="oracle",
+        budget=budget,
+        **(
+            {"confirm_model": default_live_confirm_model()}
+            if not offline and any_live_confirm_enabled()
+            else {}
+        ),
     )
     candidates: list[RankedCandidate] = []
     for row in sweep_eval.get("sweep", []):
@@ -434,6 +457,23 @@ def _run_golden_ingest(
     return baseline_results, [scored], extras
 
 
+def _run_process_gate(
+    item: Hypothesis,
+    baseline_results: dict[str, Any],
+) -> tuple[dict[str, Any], list[RankedCandidate], dict[str, Any]]:
+    """Ledger-only process rule; does not change eval metrics or fold code."""
+    params = _experiment_params(item)
+    scored = score_candidate(item.id, baseline_results)
+    extras = {
+        "rule": str(params.get("rule") or item.statement),
+        "requires_live_confirm_for_cost_fold": bool(
+            params.get("requires_live_confirm_for_cost_fold", True)
+        ),
+        "promotes_to_corpus": False,
+    }
+    return baseline_results, [scored], extras
+
+
 def run_hypothesis_experiment(
     item: Hypothesis,
     baseline_results: dict[str, Any],
@@ -441,6 +481,7 @@ def run_hypothesis_experiment(
     evaluate_fn: EvaluateFn,
     offline: bool,
     cache_dir: Path,
+    budget: DailyBudget | None = None,
 ) -> dict[str, Any]:
     kind = str(item.experiment.get("kind") or "offline_eval")
     baseline_macro = baseline_results["recommended"]["macro"]
@@ -448,26 +489,44 @@ def run_hypothesis_experiment(
 
     if kind == "cue_pattern":
         results, candidates, extra = _run_cue_pattern(
-            item, evaluate_fn=evaluate_fn, offline=offline, cache_dir=cache_dir
+            item,
+            evaluate_fn=evaluate_fn,
+            offline=offline,
+            cache_dir=cache_dir,
+            budget=budget,
         )
     elif kind == "style_golden_promo":
         results, candidates, extra = _run_style_golden_promo(
-            item, evaluate_fn=evaluate_fn, offline=offline, cache_dir=cache_dir
+            item,
+            evaluate_fn=evaluate_fn,
+            offline=offline,
+            cache_dir=cache_dir,
+            budget=budget,
         )
     elif kind == "cheap_recovery":
         results, candidates, extra = _run_cheap_recovery(
-            item, evaluate_fn=evaluate_fn, offline=offline, cache_dir=cache_dir
+            item,
+            evaluate_fn=evaluate_fn,
+            offline=offline,
+            cache_dir=cache_dir,
+            budget=budget,
         )
     elif kind == "pad_sweep":
         results, candidates, extra = _run_pad_sweep(
-            item, evaluate_fn=evaluate_fn, cache_dir=cache_dir
+            item,
+            evaluate_fn=evaluate_fn,
+            offline=offline,
+            cache_dir=cache_dir,
+            budget=budget,
         )
     elif kind == "golden_ingest":
         results, candidates, extra = _run_golden_ingest(item, baseline_results)
+    elif kind == "process_gate":
+        results, candidates, extra = _run_process_gate(item, baseline_results)
     else:
         results = evaluate_fn(
             config=RECOMMENDED_CONFIG,
-            **_eval_kwargs(offline=offline, cache_dir=cache_dir),
+            **_eval_kwargs(offline=offline, cache_dir=cache_dir, budget=budget),
         )
         candidates = [score_candidate(item.id, results)]
         extra = {}
@@ -475,7 +534,7 @@ def run_hypothesis_experiment(
 
     ranked = rank_candidates(candidates)
     winner = next((row for row in ranked if not row.rejected), None)
-    process_only = kind == "golden_ingest"
+    process_only = kind in {"golden_ingest", "process_gate"}
     improved = False
     if kind == "style_golden_promo":
         improved = bool(extras.get("style_confidence_win")) and (
@@ -608,24 +667,33 @@ def run_daily_loop(
 
     hypothesis_rows: list[dict[str, Any]] = []
     experiment_offline = offline or live_blocked is not None
+    spend_path = run_root / "spend.json"
     for item in picked:
-        if experiment_offline:
-            with live_confirm_flags_cleared():
+        try:
+            if experiment_offline:
+                with live_confirm_flags_cleared():
+                    row = run_hypothesis_experiment(
+                        item,
+                        baseline_results,
+                        evaluate_fn=eval_impl,
+                        offline=True,
+                        cache_dir=cache,
+                        budget=cap,
+                    )
+            else:
                 row = run_hypothesis_experiment(
                     item,
                     baseline_results,
                     evaluate_fn=eval_impl,
-                    offline=True,
+                    offline=False,
                     cache_dir=cache,
+                    budget=cap,
                 )
-        else:
-            row = run_hypothesis_experiment(
-                item,
-                baseline_results,
-                evaluate_fn=eval_impl,
-                offline=False,
-                cache_dir=cache,
-            )
+        except BudgetExceeded:
+            live_blocked = "budget_exhausted"
+            experiment_offline = True
+            write_budget(cap, spend_path)
+            break
         result_path = run_root / f"{item.id}.json"
         result_path.write_text(json.dumps(row, indent=2) + "\n", encoding="utf-8")
         last = LastResult(
@@ -656,8 +724,8 @@ def run_daily_loop(
                 "fold_eligible": row["extras"].get("fold_eligible"),
             }
         )
+        write_budget(cap, spend_path)
 
-    spend_path = run_root / "spend.json"
     write_budget(cap, spend_path)
 
     summary = {

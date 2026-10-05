@@ -54,3 +54,27 @@ def test_zero_budget_blocks_live(monkeypatch, tmp_path) -> None:
 def test_estimate_usd_positive_for_tokens() -> None:
     usd = estimate_usd(1_000_000, 0, provider="gemini")
     assert usd > 0
+
+
+def test_gemini_prices_follow_configured_model() -> None:
+    from podcast_processor.experiments.cost_model import (
+        DEFAULT_GEMINI_PRICES,
+        gemini_prices_for_model,
+    )
+    from podcast_processor.experiments.gemini_confirm import DEFAULT_GEMINI_MODEL
+
+    lite = gemini_prices_for_model("gemini/gemini-3.1-flash-lite")
+    flash = gemini_prices_for_model("gemini/gemini-2.5-flash")
+    assert DEFAULT_GEMINI_MODEL == "gemini/gemini-3.1-flash-lite"
+    assert lite.input_usd_per_million == pytest.approx(0.25)
+    assert lite.output_usd_per_million == pytest.approx(1.50)
+    assert flash.input_usd_per_million == pytest.approx(0.15)
+    assert flash.output_usd_per_million == pytest.approx(0.60)
+    assert DEFAULT_GEMINI_PRICES.name == "gemini/gemini-2.5-flash"
+    assert estimate_usd(
+        1_000_000, 0, provider="gemini", model="gemini/gemini-3.1-flash-lite"
+    ) == pytest.approx(0.25)
+    assert estimate_usd(
+        1_000_000, 0, provider="gemini", model="gemini/gemini-2.5-flash"
+    ) == pytest.approx(0.15)
+    assert gemini_prices_for_model(DEFAULT_GEMINI_MODEL).name == lite.name

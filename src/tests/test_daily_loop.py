@@ -7,6 +7,8 @@ import os
 from dataclasses import asdict
 from typing import Any
 
+import pytest
+
 from podcast_processor.experiments.baseline import load_snapshot
 from podcast_processor.experiments.bow_scout import ScoutConfig
 from podcast_processor.experiments.daily_loop import run_daily_loop
@@ -196,6 +198,8 @@ def test_ranked_open_puts_confidence_first() -> None:
         "H005",
         "H006",
         "H010",
+        "H013",
+        "H014",
         "H002",
         "H007",
         "H009",
@@ -280,3 +284,131 @@ def test_daily_loop_h005_style_golden_promo_records_window_drop(
     assert item.status == "accepted"
     assert item.last_result is not None
     assert item.last_result.verdict == "fold_eligible"
+
+
+def test_live_daily_loop_records_gemini_spend_and_stops_at_budget(
+    monkeypatch, tmp_path
+) -> None:
+    """Billable Gemini confirms must increment spend.json and halt at $cap."""
+    import sys
+    import types
+    from types import SimpleNamespace
+
+    from podcast_processor.experiments.budget import DailyBudget, estimate_usd
+    from podcast_processor.experiments.gemini_confirm import (
+        CONFIRM_SYSTEM_PROMPT,
+        DEFAULT_GEMINI_MODEL,
+        PRE_CALL_OUTPUT_TOKEN_ESTIMATE,
+        GeminiConfirmClient,
+        estimate_message_tokens,
+        live_calls_enabled,
+        window_user_prompt,
+    )
+    from podcast_processor.experiments.types import ScoutSegment, ScoutWindow
+
+    monkeypatch.setenv(GEMINI_API_KEY_ENV, "sk-test")
+    monkeypatch.setenv(GEMINI_LIVE_ENV, "true")
+    monkeypatch.delenv(GROQ_API_KEY_ENV, raising=False)
+    monkeypatch.delenv(GROQ_KEY_ENV, raising=False)
+    monkeypatch.delenv(GROQ_LIVE_ENV, raising=False)
+
+    litellm_calls: list[dict[str, object]] = []
+
+    def fake_completion(**kwargs: object) -> SimpleNamespace:
+        litellm_calls.append(dict(kwargs))
+        return SimpleNamespace(
+            choices=[
+                SimpleNamespace(
+                    message=SimpleNamespace(
+                        content=json.dumps(
+                            {
+                                "is_ad": True,
+                                "ad_spans": [
+                                    {"start": 0.0, "end": 5.0, "confidence": 0.9}
+                                ],
+                                "content_type": "promotional_external",
+                                "confidence": 0.9,
+                            }
+                        )
+                    )
+                )
+            ]
+        )
+
+    fake_litellm = types.ModuleType("litellm")
+    fake_litellm.completion = fake_completion  # type: ignore[attr-defined]
+    monkeypatch.setitem(sys.modules, "litellm", fake_litellm)
+
+    def make_window(tag: str) -> ScoutWindow:
+        return ScoutWindow(
+            start_time=0.0,
+            end_time=5.0,
+            start_seq=0,
+            end_seq=0,
+            segment_indices=[0],
+            peak_score=1.0,
+            cue_types=["url"],
+            segments=[
+                ScoutSegment(0, 0.0, 5.0, f"Visit example-{tag}.com today."),
+            ],
+        )
+
+    probe = make_window("1")
+    probe_messages = [
+        {"role": "system", "content": CONFIRM_SYSTEM_PROMPT},
+        {"role": "user", "content": window_user_prompt(probe, "t", "topic")},
+    ]
+    planned = estimate_usd(
+        estimate_message_tokens(probe_messages),
+        PRE_CALL_OUTPUT_TOKEN_ESTIMATE,
+        provider="gemini",
+        model=DEFAULT_GEMINI_MODEL,
+    )
+    budget = DailyBudget(limit_usd=planned * 1.01)
+    live_eval_calls = {"n": 0}
+
+    def spending_evaluate(**kwargs: object) -> dict[str, object]:
+        if live_calls_enabled():
+            live_eval_calls["n"] += 1
+            client = GeminiConfirmClient(
+                cache_dir=kwargs.get("cache_dir"),  # type: ignore[arg-type]
+                budget=kwargs.get("budget"),  # type: ignore[arg-type]
+            )
+            client.confirm_window(make_window(str(live_eval_calls["n"])), "t", "topic")
+        return _fake_evaluate(**kwargs)
+
+    ledger_copy = tmp_path / "ledger"
+    write_ledger(load_ledger(), ledger_copy)
+    summary = run_daily_loop(
+        ledger_root=ledger_copy,
+        runs_dir=tmp_path / "runs",
+        run_date="2026-10-05",
+        offline=False,
+        update_ledger=False,
+        hypothesis_ids=["H001", "H004"],
+        evaluate_fn=spending_evaluate,
+        budget=budget,
+        cache_dir=tmp_path / "cache",
+    )
+
+    assert DEFAULTS.ENABLE_BOW_SCOUT_GEMINI_CONFIRM is False
+    assert summary["production"]["enable_bow_scout_gemini_confirm"] is False
+    assert budget.live_calls == 1
+    assert budget.spent_usd > 0
+    assert budget.skipped_live_calls >= 1
+    assert len(litellm_calls) == 1
+    assert summary["spent_usd"] == pytest.approx(budget.spent_usd)
+    assert summary["live_blocked"] == "budget_exhausted"
+    assert [row["id"] for row in summary["hypotheses"]] == ["H001"]
+    spend_payload = json.loads(
+        (tmp_path / "runs" / "2026-10-05" / "spend.json").read_text(encoding="utf-8")
+    )
+    assert spend_payload["live_calls"] == 1
+    assert spend_payload["spent_usd"] == pytest.approx(budget.spent_usd)
+    two_five = estimate_usd(
+        estimate_message_tokens(probe_messages),
+        PRE_CALL_OUTPUT_TOKEN_ESTIMATE,
+        provider="gemini",
+        model="gemini/gemini-2.5-flash",
+    )
+    assert planned != pytest.approx(two_five)

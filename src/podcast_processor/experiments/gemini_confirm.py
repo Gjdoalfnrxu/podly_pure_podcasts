@@ -6,8 +6,10 @@ Live calls are opt-in. CI and the offline harness always use the mock:
 - PODLY_GEMINI_CONFIRM_LIVE=true
   before litellm is invoked.
 
-Model name comes from GEMINI_CONFIRM_MODEL (default gemini/gemini-2.5-flash).
+Model name comes from GEMINI_CONFIRM_MODEL (default gemini/gemini-3.1-flash-lite).
 Responses are cached by sha256(model + messages) so repeat episodes are free.
+Every billable live call must be recorded on DailyBudget so the $0.50/day
+cap can stop the loop.
 """
 
 from __future__ import annotations
@@ -17,7 +19,10 @@ import json
 import os
 from collections.abc import Callable
 from pathlib import Path
-from typing import Any, Literal
+from typing import TYPE_CHECKING, Any, Literal
+
+if TYPE_CHECKING:
+    from podcast_processor.experiments.budget import DailyBudget
 
 from podcast_processor.cue_detector import CueDetector
 from podcast_processor.experiments.types import (
@@ -31,7 +36,9 @@ from shared.env import GROQ_API_KEY_ENV, groq_api_key
 GEMINI_API_KEY_ENV = "GEMINI_API_KEY"
 GEMINI_MODEL_ENV = "GEMINI_CONFIRM_MODEL"
 GEMINI_LIVE_ENV = "PODLY_GEMINI_CONFIRM_LIVE"
-DEFAULT_GEMINI_MODEL = "gemini/gemini-2.5-flash"
+DEFAULT_GEMINI_MODEL = "gemini/gemini-3.1-flash-lite"
+# Conservative pre-call output size used to refuse live work before spend.
+PRE_CALL_OUTPUT_TOKEN_ESTIMATE = 250
 GROQ_MODEL_ENV = "GROQ_CONFIRM_MODEL"
 GROQ_LIVE_ENV = "PODLY_GROQ_CONFIRM_LIVE"
 DEFAULT_GROQ_CONFIRM_MODEL = "groq/openai/gpt-oss-120b"
@@ -139,15 +146,66 @@ class GeminiConfirmClient:
         cache_dir: Path | str | None = None,
         labeled_ads: list[LabeledAd] | None = None,
         completion_fn: Callable[..., Any] | None = None,
+        budget: DailyBudget | None = None,
     ) -> None:
         self.model = model or default_live_confirm_model()
         self.mock_mode: MockMode = mock_mode
         self.cache_dir = Path(cache_dir) if cache_dir else None
         self.labeled_ads = labeled_ads or []
         self.completion_fn = completion_fn
+        self.budget = budget
         self.cue_detector = CueDetector(include_scout_extras=True)
         if self.cache_dir:
             self.cache_dir.mkdir(parents=True, exist_ok=True)
+
+    def _billable_provider(self) -> str:
+        if live_calls_enabled():
+            return "gemini"
+        if groq_live_calls_enabled():
+            return "groq"
+        if self.completion_fn is not None:
+            return "gemini" if "gemini" in self.model else "groq"
+        return "mock"
+
+    def _record_budget(
+        self,
+        *,
+        input_tokens: int,
+        output_tokens: int,
+        cached: bool,
+        skipped: bool = False,
+        reason: str = "",
+        usd: float | None = None,
+    ) -> None:
+        if self.budget is None:
+            return
+        from podcast_processor.experiments.budget import estimate_usd
+
+        provider = self._billable_provider()
+        charged = (
+            0.0
+            if cached or skipped
+            else (
+                usd
+                if usd is not None
+                else estimate_usd(
+                    input_tokens,
+                    output_tokens,
+                    provider=provider,
+                    model=self.model,
+                )
+            )
+        )
+        self.budget.record(
+            charged,
+            source=f"confirm:{self.model}",
+            cached=cached,
+            skipped=skipped,
+            provider=provider,
+            input_tokens=input_tokens,
+            output_tokens=output_tokens,
+            reason=reason,
+        )
 
     def confirm_window(
         self,
@@ -170,14 +228,31 @@ class GeminiConfirmClient:
             cached.output_tokens = 0
             cached.prompt_hash = cache_key
             cached.model = self.model
+            self._record_budget(
+                input_tokens=0,
+                output_tokens=0,
+                cached=True,
+            )
             return cached
 
         input_tokens = estimate_message_tokens(messages)
-        if (
+        live = (
             live_calls_enabled()
             or groq_live_calls_enabled()
             or self.completion_fn is not None
-        ):
+        )
+        if live:
+            if self.budget is not None:
+                from podcast_processor.experiments.budget import estimate_usd
+
+                provider = self._billable_provider()
+                planned_usd = estimate_usd(
+                    input_tokens,
+                    PRE_CALL_OUTPUT_TOKEN_ESTIMATE,
+                    provider=provider,
+                    model=self.model,
+                )
+                self.budget.refuse_if_over(planned_usd, f"confirm:{self.model}")
             result = self._live_confirm(messages)
         else:
             result = self._mock_confirm(window)
@@ -188,6 +263,12 @@ class GeminiConfirmClient:
         result.input_tokens = input_tokens
         if result.output_tokens <= 0:
             result.output_tokens = estimate_tokens_from_text(result.raw_response) or 80
+        if live:
+            self._record_budget(
+                input_tokens=result.input_tokens,
+                output_tokens=result.output_tokens,
+                cached=False,
+            )
         self._write_cache(cache_key, result)
         return result
 
