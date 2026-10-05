@@ -182,13 +182,17 @@ def evaluate_episode(
     production = classify_production_like(episode)
     full_tokens = production.tokens
     scout_tokens = estimate_scout_confirm_tokens(
-        windows, episode.podcast_title, episode.podcast_topic
+        windows,
+        episode.podcast_title,
+        episode.podcast_topic,
+        model=client.model,
     )
     repeat_tokens = estimate_scout_confirm_tokens(
         windows,
         episode.podcast_title,
         episode.podcast_topic,
         cached_hashes=_hashes_from_confirms(confirms),
+        model=client.model,
     )
 
     scout_quality = path_quality_metrics(

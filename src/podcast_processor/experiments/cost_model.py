@@ -241,12 +241,14 @@ def estimate_scout_confirm_tokens(
     prices: ModelPrices = DEFAULT_GEMINI_PRICES,
     output_tokens_per_call: int = DEFAULT_OUTPUT_TOKENS_PER_CALL,
     cached_hashes: set[str] | None = None,
+    model: str | None = None,
 ) -> TokenEstimate:
     input_tokens = 0
     output_tokens = 0
     calls = 0
     cached_calls = 0
     window_tokens: list[int] = []
+    hash_model = model or prices.name
     for window in windows:
         messages = [
             {"role": "system", "content": CONFIRM_SYSTEM_PROMPT},
@@ -255,7 +257,7 @@ def estimate_scout_confirm_tokens(
                 "content": window_user_prompt(window, podcast_title, podcast_topic),
             },
         ]
-        cache_key = prompt_hash(prices.name, messages)
+        cache_key = prompt_hash(hash_model, messages)
         tokens = estimate_message_tokens(messages)
         window_tokens.append(tokens)
         if cached_hashes is not None and cache_key in cached_hashes:
@@ -275,7 +277,7 @@ def estimate_scout_confirm_tokens(
             "windows": len(windows),
             "cached_calls": cached_calls,
             "window_input_tokens": window_tokens,
-            "model": prices.name,
+            "model": hash_model,
         },
     )
 

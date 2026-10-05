@@ -19,10 +19,7 @@ import json
 import os
 from collections.abc import Callable
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Literal
-
-if TYPE_CHECKING:
-    from podcast_processor.experiments.budget import DailyBudget
+from typing import Any, Literal
 
 from podcast_processor.cue_detector import CueDetector
 from podcast_processor.experiments.types import (
@@ -146,7 +143,7 @@ class GeminiConfirmClient:
         cache_dir: Path | str | None = None,
         labeled_ads: list[LabeledAd] | None = None,
         completion_fn: Callable[..., Any] | None = None,
-        budget: DailyBudget | None = None,
+        budget: Any | None = None,
     ) -> None:
         self.model = model or default_live_confirm_model()
         self.mock_mode: MockMode = mock_mode
