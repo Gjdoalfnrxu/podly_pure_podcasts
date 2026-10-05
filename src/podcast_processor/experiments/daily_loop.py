@@ -608,6 +608,35 @@ def _offline_and_block(
     return True, cap, "live_flags_off"
 
 
+def _run_hypothesis_with_offline_guard(
+    item: Hypothesis,
+    baseline_results: dict[str, Any],
+    *,
+    evaluate_fn: EvaluateFn,
+    cache_dir: Path,
+    budget: DailyBudget | None,
+    experiment_offline: bool,
+) -> dict[str, Any]:
+    if experiment_offline:
+        with live_confirm_flags_cleared():
+            return run_hypothesis_experiment(
+                item,
+                baseline_results,
+                evaluate_fn=evaluate_fn,
+                offline=True,
+                cache_dir=cache_dir,
+                budget=budget,
+            )
+    return run_hypothesis_experiment(
+        item,
+        baseline_results,
+        evaluate_fn=evaluate_fn,
+        offline=False,
+        cache_dir=cache_dir,
+        budget=budget,
+    )
+
+
 def run_daily_loop(
     *,
     repo_root: Path | None = None,
@@ -670,25 +699,14 @@ def run_daily_loop(
     spend_path = run_root / "spend.json"
     for item in picked:
         try:
-            if experiment_offline:
-                with live_confirm_flags_cleared():
-                    row = run_hypothesis_experiment(
-                        item,
-                        baseline_results,
-                        evaluate_fn=eval_impl,
-                        offline=True,
-                        cache_dir=cache,
-                        budget=cap,
-                    )
-            else:
-                row = run_hypothesis_experiment(
-                    item,
-                    baseline_results,
-                    evaluate_fn=eval_impl,
-                    offline=False,
-                    cache_dir=cache,
-                    budget=cap,
-                )
+            row = _run_hypothesis_with_offline_guard(
+                item,
+                baseline_results,
+                evaluate_fn=eval_impl,
+                cache_dir=cache,
+                budget=cap,
+                experiment_offline=experiment_offline,
+            )
         except BudgetExceeded:
             live_blocked = "budget_exhausted"
             experiment_offline = True

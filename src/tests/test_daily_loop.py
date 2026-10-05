@@ -372,7 +372,7 @@ def test_live_daily_loop_records_gemini_spend_and_stops_at_budget(
             live_eval_calls["n"] += 1
             client = GeminiConfirmClient(
                 cache_dir=kwargs.get("cache_dir"),  # type: ignore[arg-type]
-                budget=kwargs.get("budget"),  # type: ignore[arg-type]
+                budget=kwargs.get("budget"),
             )
             client.confirm_window(make_window(str(live_eval_calls["n"])), "t", "topic")
         return _fake_evaluate(**kwargs)
