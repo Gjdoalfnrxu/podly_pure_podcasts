@@ -123,8 +123,12 @@ Absolute priorities: **confidence** (no regressions) → **detection**
    2026-10-02 (`no_win` on residual/precision; TightPromo stays
    experiment-only). `H009` accepted 2026-10-02 — 70s duration-gated
    probe folded into eval `DEFAULT_WINDOW_POSTPROCESS` (cue-sparse time
-   recall 0.571→1.0; confirm F1/recall/hit 1.0). Next open: `H011`
-   (TightPromo as eval detector on cost), then `H012` (pad micro-sweep).
+   recall 0.571→1.0; confirm F1/recall/hit 1.0). `H011` measured
+   2026-10-05 live (gates pass, 4744 scout tokens, fold **held** pending
+   self-promo policy). `H012` measured 2026-10-05 live/`no_win` (mock pad
+   8/1 passed; live recall 0.862 / F1 0.915 failed). Next open: `H013`
+   (live-confirm required before any cost fold). `H014` blocked on
+   self-promo policy; not fold-ready.
 
 ### Run
 

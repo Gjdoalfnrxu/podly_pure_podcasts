@@ -1,0 +1,33 @@
+{
+  "generated_at": "2026-10-05T15:52:27.058534+00:00",
+  "run_date": "2026-10-05",
+  "offline": false,
+  "live_provider": "gemini",
+  "live_blocked": null,
+  "daily_budget_usd": 0.5,
+  "spent_usd": 0.0,
+  "cache_dir": "../cache/experiment_confirm",
+  "production": {
+    "enable_bow_scout_gemini_confirm": false,
+    "ad_detection_default_strategy": "llm"
+  },
+  "hypotheses": [
+    {
+      "id": "H011",
+      "status": "measured",
+      "verdict": "fold_eligible",
+      "result_path": "docs/experiments/runs/2026-10-05/H011.json",
+      "fold_eligible": true,
+      "fold_held": true
+    },
+    {
+      "id": "H012",
+      "status": "measured",
+      "verdict": "no_win",
+      "result_path": "docs/experiments/runs/2026-10-05/H012.json",
+      "fold_eligible": false
+    }
+  ],
+  "fold_policy": "accepted = fold-eligible on the experiment package only. Do not set enable_bow_scout_gemini_confirm. Do not loosen gates.json. Snapshot updates require --update-baseline plus RESULTS notes.",
+  "notes": "Live Gemini confirm ran on a separate machine (gemini/gemini-3.1-flash-lite). H011 gates pass and would be fold-eligible on cost (4744 vs 5429 tokens) but fold is held pending self-promo policy (Soft Skills 531 ~1927-1962s). H012 live: pad 8/1 fails recall 0.862 / F1 0.915; no survivor beats frozen recommended 0.5/12s/2. spend.json live_calls=0 is an accounting bug (cache wrote ~72 entries); fixed in code this day. Production flag unchanged."
+}

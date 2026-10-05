@@ -1,0 +1,11 @@
+{
+  "date": "2026-10-05",
+  "limit_usd": 0.5,
+  "spent_usd": 0.0,
+  "remaining_usd": 0.5,
+  "live_calls": 0,
+  "cached_calls": 0,
+  "skipped_live_calls": 0,
+  "events": [],
+  "notes": "Live Gemini confirm (gemini/gemini-3.1-flash-lite) wrote ~72 new cache entries on a separate machine, but DailyBudget.record was never called from the live confirm path, so live_calls/spent_usd stayed 0. Those zeros are an accounting bug, not $0 spend. Fixed in this day's code change; do not treat this file as the billable total."
+}

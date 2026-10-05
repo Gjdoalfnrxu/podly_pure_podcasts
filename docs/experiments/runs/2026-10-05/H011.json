@@ -1,0 +1,57 @@
+{
+  "hypothesis_id": "H011",
+  "status": "measured",
+  "verdict": "fold_eligible",
+  "scored": {
+    "name": "H011",
+    "rejected": false,
+    "gate_failures": [],
+    "detection_f1": 1.0,
+    "detection_recall": 1.0,
+    "ad_hit_rate": 1.0,
+    "token_reduction_pct": 93.21125142902557,
+    "scout_input_tokens": 4744.0,
+    "config": {
+      "threshold": 0.5,
+      "pad_seconds": 12.0,
+      "pad_segments": 2,
+      "merge_gap_seconds": 8.0,
+      "include_scout_extras": true,
+      "include_self_promo": false
+    },
+    "fold_eligible": true,
+    "fold_held": true
+  },
+  "candidates": [
+    {
+      "name": "H011",
+      "rejected": false,
+      "gate_failures": [],
+      "detection_f1": 1.0,
+      "detection_recall": 1.0,
+      "ad_hit_rate": 1.0,
+      "token_reduction_pct": 93.21125142902557,
+      "scout_input_tokens": 4744.0,
+      "config": {
+        "threshold": 0.5,
+        "pad_seconds": 12.0,
+        "pad_segments": 2,
+        "merge_gap_seconds": 8.0,
+        "include_scout_extras": true,
+        "include_self_promo": false
+      }
+    }
+  ],
+  "extras": {
+    "kind": "cue_pattern",
+    "detector": "TightPromoCueDetector",
+    "ranking": "Confidence-first ranking (survivors only are fold-eligible):\n- #1 H011: F1=1.0000 recall=1.0000 hit=1.0000 tok\u2193=93.21% scout_tok=4744\nFold-eligible winner: H011",
+    "improved_primary": true,
+    "fold_eligible": true,
+    "production_flag": false,
+    "fold_held": true,
+    "fold_held_reason": "Live 2026-10-02 real episodes: TightPromo dropped a Soft Skills 531 window (~1927-1962s) that Gemini judged is_ad (educational/self_promo). Fold held pending a user policy decision on whether self/network/membership promos count as ads."
+  },
+  "live_llm": true,
+  "corpus_version": "v1"
+}

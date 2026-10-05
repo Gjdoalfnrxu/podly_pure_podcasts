@@ -5,7 +5,7 @@ User priorities (absolute): **confidence** (no regressions) → **detection** (F
 
 The daily runner loads **open** rows in that order, runs offline eval vs the frozen snapshot by default, and never loosens `gates.json`.
 
-Updated at `2026-10-02T15:59:16.247095+00:00` (UTC).
+Updated at `2026-10-05T16:04:42.774675+00:00` (UTC).
 
 | ID | Primary | Status | Statement | Last result |
 | --- | --- | --- | --- | --- |
@@ -19,8 +19,10 @@ Updated at `2026-10-02T15:59:16.247095+00:00` (UTC).
 | `H008` | cost | accepted | Micro-variant pad/threshold sweep (t=0.45 pad=15/3 extras; t=0.5 pad=12/2 extras) under frozen gates; keep recommended unless a survivor strictly beats F1 then recall then tokens. | fold_eligible, 2026-10-01 (`docs/experiments/runs/2026-10-01/H008.json`) |
 | `H009` | detection | accepted | Widen the duration-gated midroll probe from 40s (H007 half_window=20) to 70s (half_window=35) so cue_sparse_storytelling time recall rises from 0.571 toward 1.0 without exceeding +10% of snapshot scout tokens (5337, limit ~5871), still skipping short ad-free interviews. | fold_eligible, 2026-10-02 (`docs/experiments/runs/2026-10-02/H009.json`) |
 | `H010` | confidence | measured | Use TightPromoCueDetector as the experiment-package recommended scout detector now that both Soft Skills-style and news-briefing-style goldens are in corpus v1, so unlabeled `code <word>` tech-speech FPs drop offline while labeled use-code ads stay hits. | no_win, 2026-10-02 (`docs/experiments/runs/2026-10-02/H010.json`) |
-| `H011` | cost | open | Use TightPromoCueDetector as the experiment-package recommended scout detector on cost (not confidence): H010 showed residual/precision unchanged, but TightPromo cuts scout tokens with F1/recall/hit tied on corpus v1. | — |
-| `H012` | cost | open | Micro-variant pad/threshold sweep under the post-H009 70s probe (t=0.5 pad=10/2 extras; t=0.5 pad=8/1 extras); keep recommended unless a survivor strictly beats F1 then recall then tokens. | — |
+| `H011` | cost | measured | Use TightPromoCueDetector as the experiment-package recommended scout detector on cost (not confidence): H010 showed residual/precision unchanged, but TightPromo cuts scout tokens with F1/recall/hit tied on corpus v1. | fold_eligible, 2026-10-05 (`docs/experiments/runs/2026-10-05/H011.json`) |
+| `H012` | cost | measured | Micro-variant pad/threshold sweep under the post-H009 70s probe (t=0.5 pad=10/2 extras; t=0.5 pad=8/1 extras); keep recommended unless a survivor strictly beats F1 then recall then tokens. | no_win, 2026-10-05 (`docs/experiments/runs/2026-10-05/H012.json`) |
+| `H013` | confidence | open | Require a live Gemini confirm gate pass (not mock-only oracle) before any cost hypothesis is fold-eligible, because H012 mock pad 8/1 passed frozen ε while live recall 0.862 / F1 0.915 failed. | — |
+| `H014` | confidence | blocked | Decide whether self/network/membership promos count as ads before any TightPromo cost fold (H011). Live 2026-10-02: Soft Skills 531 window ~1927–1962s dropped by TightPromo was Gemini is_ad / educational/self_promo. | — |
 
 ## Predicted effects
 
@@ -149,24 +151,48 @@ Use TightPromoCueDetector as the experiment-package recommended scout detector n
 Use TightPromoCueDetector as the experiment-package recommended scout detector on cost (not confidence): H010 showed residual/precision unchanged, but TightPromo cuts scout tokens with F1/recall/hit tied on corpus v1.
 
 - Primary metric: `cost`
-- Status: `open`
+- Status: `measured`
 - Experiment kind: `cue_pattern`
 - Confidence: Must still pass frozen ε. Residual/precision may stay tied; do not treat a token-only win as a confidence win.
 - Detection: Confirm F1/recall/hit must stay at the post-H009 snapshot (1.0 / 1.0 / 1.0).
 - Cost: Fewer confirm tokens on unlabeled tech-speech FPs vs post-H009 scout tokens 5429 (limit ~5972).
-- Notes: H010 follow-up with cost primary. Fold would set eval recommended detector only. Do not copy TIGHT_PROMO_PATTERN into production CueDetector.promo_pattern. Do not flip enable_bow_scout_gemini_confirm. No new human labels.
+- Notes: 2026-10-05 live Gemini confirm (gemini/gemini-3.1-flash-lite): gates pass, confirm F1/recall/hit 1.0, TightPromo scout tokens 5429→4744. Would be fold-eligible on cost, but DO NOT FOLD YET. 2026-10-02 live real episodes: TightPromo dropped a Soft Skills 531 window (~1927–1962s) that Gemini judged is_ad (content_type educational/self_promo). Fold held pending a user policy decision on whether self/network/membership promos count as ads. Do not copy TIGHT_PROMO_PATTERN into production CueDetector.promo_pattern. Do not flip enable_bow_scout_gemini_confirm. Mock and live both passed frozen ε on corpus v1.
 
 ### `H012`
 
 Micro-variant pad/threshold sweep under the post-H009 70s probe (t=0.5 pad=10/2 extras; t=0.5 pad=8/1 extras); keep recommended unless a survivor strictly beats F1 then recall then tokens.
 
 - Primary metric: `cost`
-- Status: `open`
+- Status: `measured`
 - Experiment kind: `pad_sweep`
 - Confidence: Any config that fails snapshot ε is discarded, even if cheaper.
 - Detection: Do not trade F1/recall/hit for tokens. Post-H009 recommended 0.5/12s/2 extras=on is F1/recall/hit 1.0 on v1.
 - Cost: Among survivors, prefer higher mean_token_reduction_pct / fewer scout tokens than 5429.
-- Notes: Follow-up to H008/H009. Sweep is experiment-package only. Do not change production neighbor window. No new human labels.
+- Notes: 2026-10-05: use the LIVE result, not mock. Mock --check marked pad 8/1 (5043 tokens) fold_eligible with F1/recall/hit 1.0. Live Gemini confirm rejected pad 8/1: scout_confirm_mean_time_recall 0.862 (limit 0.98 vs baseline 1.0) and scout_confirm_mean_time_f1 0.915 (limit 0.97). Survivors that still pass live gates (pad 10/2, 15/3, t=0.4 pad 15/3) do not beat frozen recommended 0.5/12s/2 (5429 tokens). measured/no_win. Sweep stays experiment-package only. Do not change production neighbor window.
+
+### `H013`
+
+Require a live Gemini confirm gate pass (not mock-only oracle) before any cost hypothesis is fold-eligible, because H012 mock pad 8/1 passed frozen ε while live recall 0.862 / F1 0.915 failed.
+
+- Primary metric: `confidence`
+- Status: `open`
+- Experiment kind: `process_gate`
+- Confidence: Stops mock-only cost folds from landing a config that later fails live confirm ε. Does not change frozen gates.json.
+- Detection: Live confirm F1/recall/hit remain the detection source of truth for fold decisions; mock ranking stays a cheap screen only.
+- Cost: Cost survivors stay measured until a live-confirm run also passes frozen ε. No token-only mock win may fold.
+- Notes: Process hypothesis, not a detector/pad fold. Seeded after H012 mock/live disagreement. Do not flip enable_bow_scout_gemini_confirm. Do not loosen gates.json. Implementing the gate is a daily-loop fold-policy change only.
+
+### `H014`
+
+Decide whether self/network/membership promos count as ads before any TightPromo cost fold (H011). Live 2026-10-02: Soft Skills 531 window ~1927–1962s dropped by TightPromo was Gemini is_ad / educational/self_promo.
+
+- Primary metric: `confidence`
+- Status: `blocked`
+- Experiment kind: `process_gate`
+- Confidence: If self-promo is not an ad, TightPromo dropping that window is a confidence win. If it is an ad, folding TightPromo would be a miss.
+- Detection: Policy decides whether the dropped Soft Skills 531 window is an FN. Do not fold from corpus-v1 token savings alone.
+- Cost: H011 token drop 5429→4744 stays recorded but not fold-ready until this policy is decided.
+- Notes: Blocked on an explicit user policy decision. Not fold-ready. Do not seed or fold TightPromo into eval recommended detector until this is resolved. Do not copy TIGHT_PROMO_PATTERN into production CueDetector.promo_pattern. Do not flip enable_bow_scout_gemini_confirm.
 
 ## Status values
 
@@ -182,4 +208,4 @@ Never loosen `docs/experiments/bow_scout_gemini_confirm/baseline/v1/gates.json`.
 
 ## Ledger notes
 
-2026-10-02 weekday offline: H010 measured/no_win (TightPromo tokens 4652 vs 5337; residual/precision unchanged — not accepted). H009 folded (confirm F1/recall/hit 1.0, scout tokens 5429 vs 5337, limit ~5871). Seeded H011 (TightPromo as eval detector on cost) and H012 (pad micro-sweep after 70s probe). Production AdClassifier and enable_bow_scout_gemini_confirm stay off. Frozen gates.json not loosened. TightPromo stays experiment-only. Spend $0. 2026-10-01 afternoon: H006/H007/H008 folded. 2026-10-01 morning: H005 accepted. 2026-09-30 live: H001 measured (26→15), H002 rejected, H003 no_win, H004 process_ok.
+2026-10-05 live (separate machine, gemini/gemini-3.1-flash-lite): H012 measured/no_win — mock pad 8/1 was fold_eligible (5043 tok) but live recall 0.862 / F1 0.915 failed frozen ε; keep recommended 0.5/12s/2. H011 measured with gates passing and fold_eligible=true but fold HELD pending self-promo policy (Soft Skills 531 ~1927–1962s Gemini is_ad). Seeded H013 (confidence: live-confirm required before any cost fold) and H014 (blocked: self-promo policy; not fold-ready). Production AdClassifier and enable_bow_scout_gemini_confirm stay off. Frozen gates.json not loosened. TightPromo stays experiment-only. Spend accounting was broken (live_calls=0 despite ~72 cache writes); fixed in code this day. 2026-10-02 weekday offline: H010 measured/no_win. H009 folded. 2026-10-01 afternoon: H006/H007/H008 folded. 2026-10-01 morning: H005 accepted. 2026-09-30 live: H001 measured (26→15), H002 rejected, H003 no_win, H004 process_ok.

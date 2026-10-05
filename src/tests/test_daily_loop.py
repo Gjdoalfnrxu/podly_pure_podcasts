@@ -198,8 +198,6 @@ def test_ranked_open_puts_confidence_first() -> None:
         "H005",
         "H006",
         "H010",
-        "H013",
-        "H014",
         "H002",
         "H007",
         "H009",
