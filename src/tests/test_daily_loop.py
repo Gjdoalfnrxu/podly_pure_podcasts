@@ -426,9 +426,7 @@ def _cheaper_cost_evaluate(**kwargs: Any) -> dict[str, Any]:
     payload = _fake_evaluate(**kwargs)
     if kwargs.get("detector") is not None:
         macro = dict(payload["recommended"]["macro"])
-        macro["sum_scout_input_tokens"] = (
-            float(macro["sum_scout_input_tokens"]) - 200.0
-        )
+        macro["sum_scout_input_tokens"] = float(macro["sum_scout_input_tokens"]) - 200.0
         macro["mean_token_reduction_pct"] = (
             float(macro["mean_token_reduction_pct"]) + 1.0
         )
