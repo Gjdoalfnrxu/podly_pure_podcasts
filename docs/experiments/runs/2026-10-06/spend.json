@@ -1,0 +1,11 @@
+{
+  "date": "2026-10-06",
+  "limit_usd": 0.5,
+  "spent_usd": 0.0,
+  "remaining_usd": 0.5,
+  "live_calls": 0,
+  "cached_calls": 0,
+  "skipped_live_calls": 0,
+  "events": [],
+  "notes": "Live H013 (separate machine, gemini) made 0 confirm calls and spent $0. This agent's offline follow-up made no Groq/Gemini calls."
+}

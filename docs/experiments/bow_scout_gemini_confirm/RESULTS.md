@@ -2,6 +2,10 @@
 
 Generated at `2026-10-02T15:57:58.290732+00:00` (UTC). No live Gemini calls were made; confirm is an **oracle mock** that keeps labeled ad overlap inside scout windows.
 
+## 2026-10-06 policy (no fold)
+
+Live H013 (separate machine): 0 confirm calls, $0, measured/`process_ok`. Offline follow-up: H014 resolved (self-promo/network/membership **count as ads**); H011 TightPromo **rejected** because it dropped Soft Skills 531 ~1927–1962s (`educational/self_promo`). `cost_fold_eligible` now blocks mock-only cost folds. Frozen `gates.json` / `snapshot.json` **unchanged**. `enable_bow_scout_gemini_confirm` stays off. Eval still excludes self-promo labels (`include_self_promo: false`); alignment is H015, not a silent baseline rewrite.
+
 ## 2026-10-02 folds
 
 ### H010 — TightPromo as eval recommended detector — **measured / no_win**

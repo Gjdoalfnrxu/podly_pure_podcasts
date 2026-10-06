@@ -1,0 +1,58 @@
+{
+  "hypothesis_id": "H011",
+  "status": "rejected",
+  "verdict": "rejected",
+  "scored": {
+    "name": "H011",
+    "rejected": false,
+    "gate_failures": [],
+    "detection_f1": 1.0,
+    "detection_recall": 1.0,
+    "ad_hit_rate": 1.0,
+    "token_reduction_pct": 93.21125142902557,
+    "scout_input_tokens": 4744.0,
+    "fold_eligible": false,
+    "fold_held": false,
+    "live_llm": true,
+    "config": {
+      "threshold": 0.5,
+      "pad_seconds": 12.0,
+      "pad_segments": 2,
+      "merge_gap_seconds": 8.0,
+      "include_scout_extras": true,
+      "include_self_promo": false
+    },
+    "policy_rejected": true,
+    "rejected_reason": "Rejected: TightPromo drops a Gemini-judged self-promo ad window (Soft Skills 531, ~1927-1962s, 2026-10-02 live run, content_type educational/self_promo). Under the 2026-10-05 policy that first-party promo counts as an ad, folding TightPromo would be a miss. Do not fold. Do not copy TIGHT_PROMO_PATTERN into production CueDetector.promo_pattern. Do not flip enable_bow_scout_gemini_confirm."
+  },
+  "candidates": [
+    {
+      "name": "H011",
+      "rejected": false,
+      "gate_failures": [],
+      "detection_f1": 1.0,
+      "detection_recall": 1.0,
+      "ad_hit_rate": 1.0,
+      "token_reduction_pct": 93.21125142902557,
+      "scout_input_tokens": 4744.0,
+      "config": {
+        "threshold": 0.5,
+        "pad_seconds": 12.0,
+        "pad_segments": 2,
+        "merge_gap_seconds": 8.0,
+        "include_scout_extras": true,
+        "include_self_promo": false
+      }
+    }
+  ],
+  "extras": {
+    "kind": "cue_pattern",
+    "detector": "TightPromoCueDetector",
+    "fold_eligible": false,
+    "production_flag": false,
+    "policy_rejected": true,
+    "fold_held_reason": "H014 policy: self-promo counts as an ad. TightPromo dropped Soft Skills 531 ~1927-1962s (Gemini is_ad / educational/self_promo). Do not fold."
+  },
+  "live_llm": true,
+  "corpus_version": "v1"
+}

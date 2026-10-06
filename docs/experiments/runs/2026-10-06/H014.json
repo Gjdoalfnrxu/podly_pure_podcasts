@@ -1,0 +1,23 @@
+{
+  "hypothesis_id": "H014",
+  "status": "measured",
+  "verdict": "process_ok",
+  "scored": {
+    "name": "H014",
+    "rejected": false,
+    "gate_failures": [],
+    "policy": "self_promo_counts_as_ad",
+    "decision": "User policy decided 2026-10-05: self-promo, network/sister-show promos, first-party app plugs, and membership/donation asks COUNT AS ADS and should be cut.",
+    "decided": "2026-10-05",
+    "blocks_hypothesis": "H011"
+  },
+  "extras": {
+    "kind": "process_gate",
+    "rule": "self_promo_policy",
+    "fold_eligible": false,
+    "production_flag": false,
+    "promotes_to_corpus": false
+  },
+  "live_llm": false,
+  "corpus_version": "v1"
+}

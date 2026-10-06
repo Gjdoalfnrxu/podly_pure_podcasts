@@ -18,7 +18,7 @@ from podcast_processor.experiments.baseline import (
     compare_to_snapshot,
     format_gate_failures,
 )
-from podcast_processor.experiments.bow_scout import ScoutConfig
+from podcast_processor.experiments.bow_scout import ScoutConfig, overlap_seconds
 from podcast_processor.experiments.budget import (
     BudgetExceeded,
     DailyBudget,
@@ -39,7 +39,10 @@ from podcast_processor.experiments.eval_harness import (
     evaluate_all,
     evaluate_episode,
 )
-from podcast_processor.experiments.fixtures import style_golden_fixtures
+from podcast_processor.experiments.fixtures import (
+    self_promo_vs_sponsor,
+    style_golden_fixtures,
+)
 from podcast_processor.experiments.gemini_confirm import (
     GEMINI_LIVE_ENV,
     GROQ_LIVE_ENV,
@@ -74,6 +77,15 @@ from shared import defaults as DEFAULTS
 
 DEFAULT_RUNS_DIR = Path("docs/experiments/runs")
 EvaluateFn = Callable[..., dict[str, Any]]
+SEED_ONLY_KINDS = frozenset({"eval_alignment", "detection_gap"})
+# H013: mock-only cost wins stay measured; live confirm is required to fold.
+FOLD_POLICY = (
+    "accepted = fold-eligible on the experiment package only. "
+    "Cost hypotheses are never fold-eligible from a mock-only confirm run "
+    "(H013: live Gemini confirm required). "
+    "Do not set enable_bow_scout_gemini_confirm. Do not loosen gates.json. "
+    "Snapshot updates require --update-baseline plus RESULTS notes."
+)
 
 
 def _utc_today() -> str:
@@ -159,6 +171,28 @@ def _improved_for_primary(
     if primary == "cost":
         return _improved_cost(scored, baseline_macro) and not scored.rejected
     return _improved_confidence(scored, baseline_macro)
+
+
+def cost_fold_eligible(
+    *,
+    metric_primary: str,
+    otherwise_fold_eligible: bool,
+    offline: bool,
+    live_llm: bool,
+) -> bool:
+    """H013: a mock-only cost win is never fold-eligible.
+
+    Detection/confidence folds may still land from oracle mock. Cost folds
+    require a live Gemini/Groq confirm pass so H012-style mock/live
+    disagreements cannot ship a cheaper pad that later fails frozen ε.
+    """
+    if not otherwise_fold_eligible:
+        return False
+    if metric_primary != "cost":
+        return True
+    if offline or not live_llm:
+        return False
+    return True
 
 
 def _live_provider(offline: bool) -> str:
@@ -461,7 +495,7 @@ def _run_process_gate(
     item: Hypothesis,
     baseline_results: dict[str, Any],
 ) -> tuple[dict[str, Any], list[RankedCandidate], dict[str, Any]]:
-    """Ledger-only process rule; does not change eval metrics or fold code."""
+    """Ledger process rule. Cost-fold live-confirm is enforced in fold policy."""
     params = _experiment_params(item)
     scored = score_candidate(item.id, baseline_results)
     extras = {
@@ -469,9 +503,113 @@ def _run_process_gate(
         "requires_live_confirm_for_cost_fold": bool(
             params.get("requires_live_confirm_for_cost_fold", True)
         ),
+        "enforced_in_fold_policy": True,
         "promotes_to_corpus": False,
     }
     return baseline_results, [scored], extras
+
+
+def _self_promo_eval_gap() -> dict[str, Any]:
+    """Corpus v1 labels only the external sponsor on self_promo_vs_sponsor."""
+    episode = self_promo_vs_sponsor()
+    span_start = 3 * 60.0
+    span_end = span_start + 15.0
+    labeled_overlap = sum(
+        overlap_seconds(ad.start, ad.end, span_start, span_end)
+        for ad in episode.labeled_ads
+    )
+    return {
+        "fixture_id": episode.fixture_id,
+        "self_promo_span": {"start": span_start, "end": span_end},
+        "labeled_overlap_seconds": labeled_overlap,
+        "self_promo_labeled_as_ad": labeled_overlap > 0.5,
+        "include_self_promo": bool(RECOMMENDED_CONFIG.include_self_promo),
+        "n_labeled_ads": len(episode.labeled_ads),
+    }
+
+
+def _run_eval_alignment(
+    item: Hypothesis,
+    baseline_results: dict[str, Any],
+) -> tuple[dict[str, Any], list[RankedCandidate], dict[str, Any]]:
+    """Record the self-promo eval gap. Do not rewrite the frozen snapshot."""
+    scored = score_candidate(item.id, baseline_results)
+    gap = _self_promo_eval_gap()
+    extras = {
+        "rule": "align_eval_self_promo_as_ad",
+        "policy": (
+            "self-promo, network/sister-show promos, first-party app plugs, "
+            "and membership/donation asks count as ads"
+        ),
+        "eval_excludes_self_promo": (
+            not gap["self_promo_labeled_as_ad"] and not gap["include_self_promo"]
+        ),
+        "silent_baseline_change": False,
+        "requires_update_baseline": True,
+        "gap": gap,
+        "promotes_to_corpus": False,
+        "fold_eligible": False,
+    }
+    return baseline_results, [scored], extras
+
+
+def _run_detection_gap(
+    item: Hypothesis,
+    baseline_results: dict[str, Any],
+) -> tuple[dict[str, Any], list[RankedCandidate], dict[str, Any]]:
+    """Seeded detection miss; stay open until an offline golden exists."""
+    params = _experiment_params(item)
+    scored = score_candidate(item.id, baseline_results)
+    extras = {
+        "gap": str(params.get("gap") or item.statement),
+        "offline_testable": bool(params.get("offline_testable", True)),
+        "production_change": False,
+        "fold_eligible": False,
+        "promotes_to_corpus": False,
+    }
+    return baseline_results, [scored], extras
+
+
+def _dispatch_experiment(
+    kind: str,
+    item: Hypothesis,
+    baseline_results: dict[str, Any],
+    *,
+    evaluate_fn: EvaluateFn,
+    offline: bool,
+    cache_dir: Path,
+    budget: DailyBudget | None,
+) -> tuple[dict[str, Any], list[RankedCandidate], dict[str, Any]]:
+    """Run the experiment implementation for `kind`."""
+    eval_kinds = {
+        "cue_pattern": _run_cue_pattern,
+        "style_golden_promo": _run_style_golden_promo,
+        "cheap_recovery": _run_cheap_recovery,
+        "pad_sweep": _run_pad_sweep,
+    }
+    baseline_kinds = {
+        "golden_ingest": _run_golden_ingest,
+        "process_gate": _run_process_gate,
+        "eval_alignment": _run_eval_alignment,
+        "detection_gap": _run_detection_gap,
+    }
+    runner = eval_kinds.get(kind)
+    if runner is not None:
+        return runner(
+            item,
+            evaluate_fn=evaluate_fn,
+            offline=offline,
+            cache_dir=cache_dir,
+            budget=budget,
+        )
+    baseline_runner = baseline_kinds.get(kind)
+    if baseline_runner is not None:
+        return baseline_runner(item, baseline_results)
+    results = evaluate_fn(
+        config=RECOMMENDED_CONFIG,
+        **_eval_kwargs(offline=offline, cache_dir=cache_dir, budget=budget),
+    )
+    return results, [score_candidate(item.id, results)], {}
 
 
 def run_hypothesis_experiment(
@@ -486,61 +624,27 @@ def run_hypothesis_experiment(
     kind = str(item.experiment.get("kind") or "offline_eval")
     baseline_macro = baseline_results["recommended"]["macro"]
     extras: dict[str, Any] = {"kind": kind}
-
-    if kind == "cue_pattern":
-        results, candidates, extra = _run_cue_pattern(
-            item,
-            evaluate_fn=evaluate_fn,
-            offline=offline,
-            cache_dir=cache_dir,
-            budget=budget,
-        )
-    elif kind == "style_golden_promo":
-        results, candidates, extra = _run_style_golden_promo(
-            item,
-            evaluate_fn=evaluate_fn,
-            offline=offline,
-            cache_dir=cache_dir,
-            budget=budget,
-        )
-    elif kind == "cheap_recovery":
-        results, candidates, extra = _run_cheap_recovery(
-            item,
-            evaluate_fn=evaluate_fn,
-            offline=offline,
-            cache_dir=cache_dir,
-            budget=budget,
-        )
-    elif kind == "pad_sweep":
-        results, candidates, extra = _run_pad_sweep(
-            item,
-            evaluate_fn=evaluate_fn,
-            offline=offline,
-            cache_dir=cache_dir,
-            budget=budget,
-        )
-    elif kind == "golden_ingest":
-        results, candidates, extra = _run_golden_ingest(item, baseline_results)
-    elif kind == "process_gate":
-        results, candidates, extra = _run_process_gate(item, baseline_results)
-    else:
-        results = evaluate_fn(
-            config=RECOMMENDED_CONFIG,
-            **_eval_kwargs(offline=offline, cache_dir=cache_dir, budget=budget),
-        )
-        candidates = [score_candidate(item.id, results)]
-        extra = {}
+    results, candidates, extra = _dispatch_experiment(
+        kind,
+        item,
+        baseline_results,
+        evaluate_fn=evaluate_fn,
+        offline=offline,
+        cache_dir=cache_dir,
+        budget=budget,
+    )
     extras.update(extra)
 
     ranked = rank_candidates(candidates)
     winner = next((row for row in ranked if not row.rejected), None)
     process_only = kind in {"golden_ingest", "process_gate"}
+    seed_only = kind in SEED_ONLY_KINDS
     improved = False
     if kind == "style_golden_promo":
         improved = bool(extras.get("style_confidence_win")) and (
             winner is not None and not winner.rejected
         )
-    elif winner is not None and not process_only:
+    elif winner is not None and not process_only and not seed_only:
         improved = _improved_for_primary(item.metric_primary, winner, baseline_macro)
     # Multiple variants: accepted only if a survivor improved the primary.
     representative = winner or (
@@ -553,9 +657,25 @@ def run_hypothesis_experiment(
     )
     if process_only:
         status, verdict = "measured", "process_ok"
+    live_llm = bool(results.get("live_llm") or results.get("live_gemini"))
+    otherwise_fold_eligible = status == "accepted"
+    fold_ok = cost_fold_eligible(
+        metric_primary=item.metric_primary,
+        otherwise_fold_eligible=otherwise_fold_eligible,
+        offline=offline,
+        live_llm=live_llm,
+    )
+    if otherwise_fold_eligible and not fold_ok:
+        extras["mock_only_cost_win"] = True
+        extras["fold_held_reason"] = "live_confirm_required_for_cost_fold"
+        status, verdict = "measured", "no_win"
+    if seed_only:
+        status, verdict = "open", "seeded"
+        fold_ok = False
     extras["ranking"] = format_ranking(ranked)
     extras["improved_primary"] = improved
-    extras["fold_eligible"] = status == "accepted"
+    extras["fold_eligible"] = fold_ok and status == "accepted"
+    extras["requires_live_confirm_for_cost_fold"] = True
     extras["production_flag"] = bool(DEFAULTS.ENABLE_BOW_SCOUT_GEMINI_CONFIRM)
     scored_json = representative.to_json()
     if kind == "style_golden_promo":
@@ -569,7 +689,7 @@ def run_hypothesis_experiment(
         "scored": scored_json,
         "candidates": [row.to_json() for row in ranked],
         "extras": extras,
-        "live_llm": bool(results.get("live_llm") or results.get("live_gemini")),
+        "live_llm": live_llm,
         "corpus_version": results.get("corpus_version"),
     }
 
@@ -768,11 +888,7 @@ def run_daily_loop(
             "recommended_config": baseline_results["recommended_config"],
         },
         "hypotheses": hypothesis_rows,
-        "fold_policy": (
-            "accepted = fold-eligible on the experiment package only. "
-            "Do not set enable_bow_scout_gemini_confirm. Do not loosen gates.json. "
-            "Snapshot updates require --update-baseline plus RESULTS notes."
-        ),
+        "fold_policy": FOLD_POLICY,
     }
     (run_root / "summary.json").write_text(
         json.dumps(summary, indent=2) + "\n", encoding="utf-8"

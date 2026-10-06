@@ -11,7 +11,11 @@ import pytest
 
 from podcast_processor.experiments.baseline import load_snapshot
 from podcast_processor.experiments.bow_scout import ScoutConfig
-from podcast_processor.experiments.daily_loop import run_daily_loop
+from podcast_processor.experiments.daily_loop import (
+    FOLD_POLICY,
+    cost_fold_eligible,
+    run_daily_loop,
+)
 from podcast_processor.experiments.gemini_confirm import (
     GEMINI_API_KEY_ENV,
     GEMINI_LIVE_ENV,
@@ -200,9 +204,12 @@ def test_ranked_open_puts_confidence_first() -> None:
         "H010",
         "H013",
         "H014",
+        "H015",
         "H002",
         "H007",
         "H009",
+        "H016",
+        "H017",
         "H003",
         "H008",
         "H011",
@@ -412,3 +419,186 @@ def test_live_daily_loop_records_gemini_spend_and_stops_at_budget(
         model="gemini/gemini-2.5-flash",
     )
     assert planned != pytest.approx(two_five)
+
+
+def _cheaper_cost_evaluate(**kwargs: Any) -> dict[str, Any]:
+    """Snapshot macros, cheaper scout tokens when a candidate detector is set."""
+    payload = _fake_evaluate(**kwargs)
+    if kwargs.get("detector") is not None:
+        macro = dict(payload["recommended"]["macro"])
+        macro["sum_scout_input_tokens"] = (
+            float(macro["sum_scout_input_tokens"]) - 200.0
+        )
+        macro["mean_token_reduction_pct"] = (
+            float(macro["mean_token_reduction_pct"]) + 1.0
+        )
+        payload["recommended"]["macro"] = macro
+    if kwargs.get("confirm_model"):
+        payload["live_llm"] = True
+        payload["live_gemini"] = True
+    return payload
+
+
+def test_cost_fold_eligible_blocks_mock_only_cost_wins() -> None:
+    assert (
+        cost_fold_eligible(
+            metric_primary="cost",
+            otherwise_fold_eligible=True,
+            offline=True,
+            live_llm=False,
+        )
+        is False
+    )
+    assert (
+        cost_fold_eligible(
+            metric_primary="cost",
+            otherwise_fold_eligible=True,
+            offline=False,
+            live_llm=False,
+        )
+        is False
+    )
+    assert (
+        cost_fold_eligible(
+            metric_primary="cost",
+            otherwise_fold_eligible=True,
+            offline=False,
+            live_llm=True,
+        )
+        is True
+    )
+    assert (
+        cost_fold_eligible(
+            metric_primary="detection",
+            otherwise_fold_eligible=True,
+            offline=True,
+            live_llm=False,
+        )
+        is True
+    )
+    assert (
+        cost_fold_eligible(
+            metric_primary="cost",
+            otherwise_fold_eligible=False,
+            offline=False,
+            live_llm=True,
+        )
+        is False
+    )
+
+
+def test_mock_only_cost_win_is_never_fold_eligible(monkeypatch, tmp_path) -> None:
+    monkeypatch.delenv(GEMINI_API_KEY_ENV, raising=False)
+    monkeypatch.delenv(GEMINI_LIVE_ENV, raising=False)
+    monkeypatch.delenv(GROQ_API_KEY_ENV, raising=False)
+    monkeypatch.delenv(GROQ_KEY_ENV, raising=False)
+    monkeypatch.delenv(GROQ_LIVE_ENV, raising=False)
+    ledger_copy = tmp_path / "ledger"
+    write_ledger(load_ledger(), ledger_copy)
+    summary = run_daily_loop(
+        ledger_root=ledger_copy,
+        runs_dir=tmp_path / "runs",
+        run_date="2026-10-06",
+        offline=True,
+        update_ledger=False,
+        hypothesis_ids=["H011"],
+        evaluate_fn=_cheaper_cost_evaluate,
+        cache_dir=tmp_path / "cache",
+    )
+    row = summary["hypotheses"][0]
+    assert row["id"] == "H011"
+    assert row["fold_eligible"] is False
+    assert row["status"] == "measured"
+    assert row["verdict"] == "no_win"
+    payload = json.loads(
+        (tmp_path / "runs" / "2026-10-06" / "H011.json").read_text(encoding="utf-8")
+    )
+    assert payload["extras"]["mock_only_cost_win"] is True
+    assert payload["extras"]["fold_held_reason"] == (
+        "live_confirm_required_for_cost_fold"
+    )
+    assert payload["extras"]["improved_primary"] is True
+    assert "live Gemini confirm required" in FOLD_POLICY
+    assert summary["production"]["enable_bow_scout_gemini_confirm"] is False
+    assert DEFAULTS.ENABLE_BOW_SCOUT_GEMINI_CONFIRM is False
+
+
+def test_live_cost_win_can_be_fold_eligible(monkeypatch, tmp_path) -> None:
+    monkeypatch.setenv(GEMINI_API_KEY_ENV, "sk-test")
+    monkeypatch.setenv(GEMINI_LIVE_ENV, "true")
+    monkeypatch.delenv(GROQ_API_KEY_ENV, raising=False)
+    monkeypatch.delenv(GROQ_KEY_ENV, raising=False)
+    monkeypatch.delenv(GROQ_LIVE_ENV, raising=False)
+    ledger_copy = tmp_path / "ledger"
+    write_ledger(load_ledger(), ledger_copy)
+    summary = run_daily_loop(
+        ledger_root=ledger_copy,
+        runs_dir=tmp_path / "runs",
+        run_date="2026-10-06",
+        offline=False,
+        update_ledger=False,
+        hypothesis_ids=["H011"],
+        evaluate_fn=_cheaper_cost_evaluate,
+        cache_dir=tmp_path / "cache",
+    )
+    row = summary["hypotheses"][0]
+    assert row["id"] == "H011"
+    assert row["fold_eligible"] is True
+    assert row["status"] == "accepted"
+    assert row["verdict"] == "fold_eligible"
+    assert summary["offline"] is False
+    assert summary["production"]["enable_bow_scout_gemini_confirm"] is False
+
+
+def test_seeded_gap_hypotheses_stay_open_and_not_fold_eligible(
+    monkeypatch, tmp_path
+) -> None:
+    monkeypatch.delenv(GEMINI_API_KEY_ENV, raising=False)
+    monkeypatch.delenv(GEMINI_LIVE_ENV, raising=False)
+    monkeypatch.delenv(GROQ_API_KEY_ENV, raising=False)
+    monkeypatch.delenv(GROQ_KEY_ENV, raising=False)
+    monkeypatch.delenv(GROQ_LIVE_ENV, raising=False)
+    ledger_copy = tmp_path / "ledger"
+    write_ledger(load_ledger(), ledger_copy)
+    summary = run_daily_loop(
+        ledger_root=ledger_copy,
+        runs_dir=tmp_path / "runs",
+        run_date="2026-10-06",
+        offline=True,
+        update_ledger=True,
+        hypothesis_ids=["H015", "H016", "H017"],
+        evaluate_fn=_fake_evaluate,
+        cache_dir=tmp_path / "cache",
+    )
+    assert [row["id"] for row in summary["hypotheses"]] == ["H015", "H016", "H017"]
+    for row in summary["hypotheses"]:
+        assert row["status"] == "open"
+        assert row["verdict"] == "seeded"
+        assert row["fold_eligible"] is False
+    h015 = json.loads(
+        (tmp_path / "runs" / "2026-10-06" / "H015.json").read_text(encoding="utf-8")
+    )
+    assert h015["extras"]["eval_excludes_self_promo"] is True
+    assert h015["extras"]["silent_baseline_change"] is False
+    reloaded = load_ledger(ledger_copy)
+    for hid in ("H015", "H016", "H017"):
+        item = next(row for row in reloaded.hypotheses if row.id == hid)
+        assert item.status == "open"
+        assert item.last_result is not None
+        assert item.last_result.verdict == "seeded"
+
+
+def test_self_promo_fixture_is_not_ad_positive_in_corpus_v1() -> None:
+    from podcast_processor.experiments.bow_scout import overlap_seconds
+    from podcast_processor.experiments.eval_harness import RECOMMENDED_CONFIG
+    from podcast_processor.experiments.fixtures import self_promo_vs_sponsor
+
+    episode = self_promo_vs_sponsor()
+    span_start, span_end = 180.0, 195.0
+    overlap = sum(
+        overlap_seconds(ad.start, ad.end, span_start, span_end)
+        for ad in episode.labeled_ads
+    )
+    assert overlap == 0.0
+    assert RECOMMENDED_CONFIG.include_self_promo is False
+    assert any("Notion" in ad.notes for ad in episode.labeled_ads)

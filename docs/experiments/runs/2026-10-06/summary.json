@@ -1,0 +1,38 @@
+{
+  "generated_at": "2026-10-06T15:59:04.098029+00:00",
+  "run_date": "2026-10-06",
+  "offline": true,
+  "live_provider": "gemini",
+  "live_blocked": null,
+  "daily_budget_usd": 0.5,
+  "spent_usd": 0.0,
+  "production": {
+    "enable_bow_scout_gemini_confirm": false,
+    "ad_detection_default_strategy": "llm"
+  },
+  "hypotheses": [
+    {
+      "id": "H013",
+      "status": "measured",
+      "verdict": "process_ok",
+      "result_path": "docs/experiments/runs/2026-10-06/H013.json",
+      "fold_eligible": false
+    },
+    {
+      "id": "H014",
+      "status": "measured",
+      "verdict": "process_ok",
+      "result_path": "docs/experiments/runs/2026-10-06/H014.json",
+      "fold_eligible": false
+    },
+    {
+      "id": "H011",
+      "status": "rejected",
+      "verdict": "rejected",
+      "result_path": "docs/experiments/runs/2026-10-06/H011.json",
+      "fold_eligible": false
+    }
+  ],
+  "fold_policy": "accepted = fold-eligible on the experiment package only. Cost hypotheses are never fold-eligible from a mock-only confirm run (H013: live Gemini confirm required). Do not set enable_bow_scout_gemini_confirm. Do not loosen gates.json. Snapshot updates require --update-baseline plus RESULTS notes.",
+  "notes": "Live H013 (separate machine, gemini): 0 calls, $0, process_ok, frozen F1/recall/hit 1.0, scout tokens 5429. This agent: enforced live-confirm cost-fold in daily_loop; resolved H014 (self-promo counts as ads); rejected H011 (TightPromo drops Soft Skills 531 self-promo window). No fold. Frozen snapshot/gates unchanged. Seeded H015/H016/H017."
+}

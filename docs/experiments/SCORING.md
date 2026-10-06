@@ -37,9 +37,11 @@ Given candidate eval payloads in the same shape as `evaluate_all()`:
 
 | Action | When it is allowed |
 | --- | --- |
-| Fold into experiment package (`RECOMMENDED_CONFIG`, candidate detector) | Survivor exists, primary metric improved, production flag still `False` |
+| Fold into experiment package (`RECOMMENDED_CONFIG`, candidate detector) | Survivor exists, primary metric improved, production flag still `False`. **Cost** folds also need a live Gemini/Groq confirm pass (H013); a mock-only cost win is never fold-eligible. |
 | Flip `enable_bow_scout_gemini_confirm` / Feed strategy | Never from the daily loop |
 | Rewrite `snapshot.json` / corpus v1 | Explicit `--write-corpus --update-baseline` plus RESULTS notes |
 | Loosen `gates.json` tolerances | Never |
+
+H012 showed why the cost live-confirm gate exists: mock pad 8/1 passed frozen ε (5043 tok) while live recall 0.862 / F1 0.915 failed. The daily loop (`cost_fold_eligible`) therefore keeps mock-only cost survivors at `measured` / `no_win` until `--live` confirm also passes.
 
 The scorer does not mutate production `CueDetector` or `AdClassifier`.

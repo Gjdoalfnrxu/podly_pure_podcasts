@@ -1,0 +1,56 @@
+{
+  "hypothesis_id": "H013",
+  "status": "measured",
+  "verdict": "process_ok",
+  "scored": {
+    "name": "H013",
+    "rejected": false,
+    "gate_failures": [],
+    "detection_f1": 1.0,
+    "detection_recall": 1.0,
+    "ad_hit_rate": 1.0,
+    "token_reduction_pct": 91.95117144828863,
+    "scout_input_tokens": 5429.0,
+    "config": {
+      "threshold": 0.5,
+      "pad_seconds": 12.0,
+      "pad_segments": 2,
+      "merge_gap_seconds": 8.0,
+      "include_scout_extras": true,
+      "include_self_promo": false
+    },
+    "enforced_in_fold_policy": true
+  },
+  "candidates": [
+    {
+      "name": "H013",
+      "rejected": false,
+      "gate_failures": [],
+      "detection_f1": 1.0,
+      "detection_recall": 1.0,
+      "ad_hit_rate": 1.0,
+      "token_reduction_pct": 91.95117144828863,
+      "scout_input_tokens": 5429.0,
+      "config": {
+        "threshold": 0.5,
+        "pad_seconds": 12.0,
+        "pad_segments": 2,
+        "merge_gap_seconds": 8.0,
+        "include_scout_extras": true,
+        "include_self_promo": false
+      }
+    }
+  ],
+  "extras": {
+    "kind": "process_gate",
+    "rule": "live_confirm_required_for_cost_fold",
+    "requires_live_confirm_for_cost_fold": true,
+    "enforced_in_fold_policy": true,
+    "promotes_to_corpus": false,
+    "fold_eligible": false,
+    "production_flag": false
+  },
+  "live_llm": false,
+  "corpus_version": "v1",
+  "notes": "Live 2026-10-06 (separate machine): 0 confirm calls, $0. Baseline gates passed; frozen recommended F1/recall/hit 1.0, scout tokens 5429. Fold policy implemented in daily_loop.cost_fold_eligible so a mock-only cost win can never be fold_eligible."
+}

@@ -36,6 +36,9 @@ def test_committed_ledger_seeds_and_priority_order() -> None:
         "H012",
         "H013",
         "H014",
+        "H015",
+        "H016",
+        "H017",
     ]
     by_id = {item.id: item for item in ledger.hypotheses}
     assert by_id["H001"].status == "measured"
@@ -48,24 +51,33 @@ def test_committed_ledger_seeds_and_priority_order() -> None:
     assert by_id["H008"].status == "accepted"
     assert by_id["H009"].status == "accepted"
     assert by_id["H010"].status == "measured"
-    assert by_id["H011"].status == "measured"
+    assert by_id["H011"].status == "rejected"
     assert by_id["H012"].status == "measured"
-    assert by_id["H013"].status == "open"
-    assert by_id["H014"].status == "blocked"
+    assert by_id["H013"].status == "measured"
+    assert by_id["H014"].status == "measured"
+    assert by_id["H015"].status == "open"
+    assert by_id["H016"].status == "open"
+    assert by_id["H017"].status == "open"
     assert by_id["H011"].last_result is not None
     assert by_id["H011"].last_result.passed_gates is True
+    assert by_id["H011"].last_result.verdict == "rejected"
     assert by_id["H011"].last_result.score is not None
-    assert by_id["H011"].last_result.score.get("fold_held") is True
-    assert by_id["H011"].last_result.score.get("fold_eligible") is True
+    assert by_id["H011"].last_result.score.get("fold_eligible") is False
     assert by_id["H012"].last_result is not None
     assert by_id["H012"].last_result.verdict == "no_win"
+    assert by_id["H013"].last_result is not None
+    assert by_id["H013"].last_result.verdict == "process_ok"
+    assert by_id["H014"].last_result is not None
+    assert by_id["H014"].last_result.verdict == "process_ok"
     assert by_id["H001"].last_result is not None
     assert by_id["H001"].last_result.score is not None
     assert by_id["H001"].last_result.score.get("live_baseline_windows") == 26
     assert by_id["H001"].last_result.score.get("live_tight_windows") == 15
     ranked = rank_open_hypotheses(ledger.hypotheses)
-    assert [item.id for item in ranked] == ["H013"]
+    assert [item.id for item in ranked] == ["H015", "H016", "H017"]
     assert ranked[0].metric_primary == "confidence"
+    assert ranked[1].metric_primary == "detection"
+    assert ranked[2].metric_primary == "detection"
     assert {item.metric_primary for item in ledger.hypotheses} <= set(METRIC_PRIORITY)
 
 
@@ -104,7 +116,7 @@ def test_update_last_result_roundtrip(tmp_path: Path) -> None:
     assert "H001" in md_file.read_text(encoding="utf-8")
     open_ids = [row.id for row in rank_open_hypotheses(reloaded.hypotheses)]
     assert "H001" not in open_ids
-    assert "H013" in open_ids
+    assert "H015" in open_ids
 
 
 def test_rejects_bad_primary() -> None:
