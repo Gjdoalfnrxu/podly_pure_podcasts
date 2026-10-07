@@ -17,6 +17,7 @@ merged in time order.
 
 from __future__ import annotations
 
+import bisect
 import gc
 import logging
 import math
@@ -24,6 +25,7 @@ import re
 import time
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
+from difflib import SequenceMatcher
 from typing import Any, NamedTuple, Protocol, runtime_checkable
 
 import ffmpeg
@@ -40,6 +42,10 @@ SAMPLE_RATE = 16000
 _MIN_UNCOVERED_FRACTION = 0.5
 _MIN_SEGMENT_SECONDS = 0.05
 _HAS_WORD = re.compile(r"\w")
+_WORD = re.compile(r"[\w']+")
+# Character similarity above which a recovered phrase counts as a repeat of the
+# neighbouring segment's edge words ("God bless." vs "Dog bless." is 0.78).
+_DUPLICATE_RATIO = 0.75
 
 
 @runtime_checkable
@@ -178,32 +184,64 @@ def _uncovered_parts(
     return parts
 
 
+def _words(text: str) -> list[str]:
+    return _WORD.findall(text.lower())
+
+
+def _repeats_neighbour(
+    text: str, before: Segment | None, after: Segment | None
+) -> bool:
+    """True when ``text`` re-reads the end of ``before`` or start of ``after``.
+
+    Whisper's segment end times run early, so a short "gap" after a segment
+    often holds the tail of that same sentence; the padded clip then
+    transcribes it a second time.
+    """
+    words = _words(text)
+    if not words:
+        return True
+    phrase = " ".join(words)
+    n = len(words)
+    for neighbour, edge in ((before, slice(-n, None)), (after, slice(0, n))):
+        if neighbour is None:
+            continue
+        near = " ".join(_words(neighbour.text)[edge])
+        if near and SequenceMatcher(None, phrase, near).ratio() >= _DUPLICATE_RATIO:
+            return True
+    return False
+
+
 def merge_recovered(
     existing: Sequence[Segment], recovered: Sequence[Segment]
 ) -> tuple[list[Segment], list[Segment]]:
-    """Merge recovered segments into ``existing`` without any overlap.
+    """Merge recovered segments into ``existing`` without overlap or repeats.
 
     A recovered segment mostly inside already-covered time (existing or an
     earlier accepted recovery) is dropped; otherwise its times are trimmed to
-    its longest uncovered stretch. Returns (merged sorted list, added).
+    its longest uncovered stretch. One that repeats the words at the edge of
+    its neighbouring segment is dropped too. Returns (merged sorted, added).
     """
-    covered = _covered_spans(existing)
+    merged = sorted(existing, key=lambda s: (s.start, s.end))
     added: list[Segment] = []
     for seg in sorted(recovered, key=lambda s: (s.start, s.end)):
         duration = seg.end - seg.start
         if duration < _MIN_SEGMENT_SECONDS:
             continue
-        parts = _uncovered_parts(seg.start, seg.end, covered)
+        parts = _uncovered_parts(seg.start, seg.end, _covered_spans(merged))
         free = sum(e - s for s, e in parts)
         if free < duration * _MIN_UNCOVERED_FRACTION:
             continue
         start, end = max(parts, key=lambda p: p[1] - p[0])
         if end - start < _MIN_SEGMENT_SECONDS:
             continue
+        idx = bisect.bisect_left([m.start for m in merged], start)
+        before = merged[idx - 1] if idx > 0 else None
+        after = merged[idx] if idx < len(merged) else None
+        if _repeats_neighbour(seg.text, before, after):
+            continue
         kept = Segment(start=start, end=end, text=seg.text)
+        merged.insert(idx, kept)
         added.append(kept)
-        covered = _covered_spans([*existing, *added])
-    merged = sorted([*existing, *added], key=lambda s: (s.start, s.end))
     return merged, added
 
 
