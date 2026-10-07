@@ -1,6 +1,6 @@
 """Ad cuts must cover untranscribed audio that borders an ad.
 
-Drives the real AudioProcessor.process_audio -> get_ad_segments -> AdMerger ->
+Drives the real AudioProcessor.process_audio -> get_ad_windows -> AdMerger ->
 refined-boundaries -> merge_ad_segments path against an in-memory DB; only the
 audio I/O (duration probe, ffmpeg clip) is patched.
 """
