@@ -33,7 +33,7 @@ from podcast_processor.token_rate_limiter import (
 from podcast_processor.transcribe import Segment
 from podcast_processor.word_boundary_refiner import WordBoundaryRefiner
 from shared.config import Config, TestWhisperConfig
-from shared.llm_utils import model_uses_max_completion_tokens
+from shared.llm_utils import llm_request_extras, model_uses_max_completion_tokens
 
 
 class ClassifyParams:
@@ -56,6 +56,10 @@ class ClassifyException(Exception):
     """Custom exception for classification errors."""
 
 
+# One call plus two re-asks when the answer is not valid JSON.
+UNPARSEABLE_RESPONSE_ATTEMPTS = 3
+
+
 class AdClassifier:
     """Handles the classification of ad segments in podcast transcripts."""
 
@@ -72,6 +76,8 @@ class AdClassifier:
         self.model_call_query = model_call_query or ModelCall.query
         self.identification_query = identification_query or Identification.query
         self.db_session = db_session or db.session
+        # (first_seq, last_seq) of chunks the last classify() could not classify.
+        self.unclassified_ranges: list[tuple[int, int]] = []
 
         # Initialize rate limiter for the configured model
         self.rate_limiter: TokenRateLimiter | None
@@ -157,6 +163,7 @@ class AdClassifier:
         )
 
         total_segments = len(transcript_segments)
+        self.unclassified_ranges = []
 
         try:
             current_index = 0
@@ -213,6 +220,15 @@ class AdClassifier:
             # Pass 2: Refine boundaries
             if self.boundary_refiner:
                 self._refine_boundaries(transcript_segments, post)
+
+            if self.unclassified_ranges:
+                self.logger.warning(
+                    "Ad classification for post %s finished with %d unclassified "
+                    "chunk(s) %s; ads there may be missed.",
+                    post.id,
+                    len(self.unclassified_ranges),
+                    self.unclassified_ranges,
+                )
 
         except ClassifyException as e:
             self.logger.error(f"Classification failed for post {post.id}: {e}")
@@ -316,21 +332,37 @@ class AdClassifier:
             self.logger.error("ModelCall object is unexpectedly None. Skipping chunk.")
             return []
 
-        if self._should_call_llm(model_call):
-            self._perform_llm_call(
-                model_call=model_call,
-                system_prompt=system_prompt,
-            )
+        # An unparseable answer is re-asked (the model or server can emit
+        # corrupt JSON intermittently) instead of counting as "no ads".
+        for _ in range(UNPARSEABLE_RESPONSE_ATTEMPTS):
+            if self._should_call_llm(model_call):
+                self._perform_llm_call(
+                    model_call=model_call,
+                    system_prompt=system_prompt,
+                )
 
-        if model_call.status == "success" and model_call.response:
-            return self._process_successful_response(
+            if model_call.status != "success" or not model_call.response:
+                self.logger.info(
+                    f"LLM call for ModelCall {model_call.id} was not successful (status: {model_call.status}). No identifications to process."
+                )
+                break
+            matched = self._process_successful_response(
                 model_call=model_call,
                 current_chunk_db_segments=chunk_segments,
             )
-        if model_call.status != "success":
-            self.logger.info(
-                f"LLM call for ModelCall {model_call.id} was not successful (status: {model_call.status}). No identifications to process."
-            )
+            if matched is not None:
+                return matched
+
+        self.unclassified_ranges.append((first_seq_num, last_seq_num))
+        self.logger.warning(
+            "Segments %s-%s of post %s could not be classified (ModelCall %s, "
+            "status %s); ads in this range may be missed.",
+            first_seq_num,
+            last_seq_num,
+            post.id,
+            model_call.id,
+            model_call.status,
+        )
         return []
 
     def _build_chunk_payload(
@@ -657,6 +689,7 @@ class AdClassifier:
             completion_args["max_tokens"] = self.config.openai_max_tokens
 
         completion_args["response_format"] = {"type": "json_object"}
+        completion_args.update(llm_request_extras(self.config))
 
         return completion_args
 
@@ -765,8 +798,12 @@ class AdClassifier:
         *,
         model_call: ModelCall,
         current_chunk_db_segments: list[TranscriptSegment],
-    ) -> list[TranscriptSegment]:
-        """Process a successful LLM response and create Identification records."""
+    ) -> list[TranscriptSegment] | None:
+        """Process a successful LLM response and create Identification records.
+
+        Returns None when the response cannot be parsed; the ModelCall is then
+        marked failed so it is requested again.
+        """
         self.logger.info(
             f"LLM call for ModelCall {model_call.id} was successful. Parsing response."
         )
@@ -785,12 +822,26 @@ class AdClassifier:
                     f"Created {created_identification_count} new Identification records for ModelCall {model_call.id}."
                 )
             return matched_segments
-        except (ValidationError, AssertionError) as e:
+        except (ValidationError, AssertionError, ValueError) as e:
             self.logger.error(
                 f"Error processing LLM response for ModelCall {model_call.id}: {e}",
                 exc_info=True,
             )
-        return []
+            self._mark_unparseable(model_call, e)
+            return None
+
+    def _mark_unparseable(self, model_call: ModelCall, error: Exception) -> None:
+        message = f"Unparseable LLM response: {str(error)[:300]}"
+        res = writer_client.update(
+            "ModelCall",
+            model_call.id,
+            {"status": "failed", "error_message": message},
+            wait=True,
+        )
+        if not res or not res.success:
+            raise RuntimeError(getattr(res, "error", "Failed to update ModelCall"))
+        model_call.status = "failed"
+        model_call.error_message = message
 
     def _create_identifications(
         self,
@@ -1040,11 +1091,7 @@ class AdClassifier:
                 else:
                     response = litellm.completion(**completion_args)
 
-                response_first_choice = response.choices[0]
-                assert isinstance(response_first_choice, Choices)
-                content = response_first_choice.message.content
-                assert content is not None
-                raw_response_content = content
+                raw_response_content = _response_content(response)
 
                 success_res = writer_client.update(
                     "ModelCall",
@@ -1085,10 +1132,17 @@ class AdClassifier:
                         f"Non-retryable LLM error for ModelCall {model_call_obj.id} (attempt {current_attempt_num}): {e}",
                         exc_info=True,
                     )
+                    # An empty answer is usually config (thinking ate the token
+                    # budget): leave it re-askable on the next run, not permanent.
+                    failed_status = (
+                        "failed"
+                        if isinstance(e, LLMEmptyResponseError)
+                        else "failed_permanent"
+                    )
                     fail_res = writer_client.update(
                         "ModelCall",
                         model_call_obj.id,
-                        {"status": "failed_permanent", "error_message": str(e)},
+                        {"status": failed_status, "error_message": str(e)},
                         wait=True,
                     )
                     if not fail_res or not fail_res.success:
@@ -1096,7 +1150,7 @@ class AdClassifier:
                             getattr(fail_res, "error", "Failed to update ModelCall")
                         ) from e
                     # Update local object to reflect database state
-                    model_call_obj.status = "failed_permanent"
+                    model_call_obj.status = failed_status
                     model_call_obj.error_message = str(e)
                     raise  # Re-raise non-retryable exceptions immediately
 
@@ -1544,3 +1598,33 @@ class AdClassifier:
             raise RuntimeError(
                 getattr(res, "error", "Failed to replace identifications")
             )
+
+
+class LLMEmptyResponseError(RuntimeError):
+    """The LLM answered with no content (e.g. a thinking model hit max_tokens)."""
+
+
+def describe_empty_response(choice: Any) -> str:
+    message = getattr(choice, "message", None)
+    finish_reason = getattr(choice, "finish_reason", None)
+    reasoning = getattr(message, "reasoning_content", None) or ""
+    hint = ""
+    if reasoning or finish_reason == "length":
+        hint = (
+            " The model spent its output budget before answering; disable thinking "
+            '(e.g. LLM_EXTRA_BODY={"chat_template_kwargs": {"enable_thinking": false}} '
+            "on vLLM) or raise OPENAI_MAX_TOKENS."
+        )
+    return (
+        f"LLM returned no content (finish_reason={finish_reason}, "
+        f"reasoning_content={len(reasoning)} chars).{hint}"
+    )
+
+
+def _response_content(response: Any) -> str:
+    choice = response.choices[0]
+    assert isinstance(choice, Choices)
+    content = choice.message.content
+    if not content:
+        raise LLMEmptyResponseError(describe_empty_response(choice))
+    return content

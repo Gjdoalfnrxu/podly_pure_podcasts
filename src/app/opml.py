@@ -6,8 +6,12 @@ XXE and entity-expansion payloads (billion laughs) fail before any expansion.
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
+from datetime import UTC, datetime
+from email.utils import format_datetime
 from typing import NoReturn
+from xml.etree import ElementTree as ET
 from xml.parsers import expat
 
 
@@ -70,3 +74,32 @@ def parse_opml(data: bytes) -> list[OpmlFeed]:
     if not root or root[0].lower() != "opml":
         raise OpmlParseError("Document is not OPML (root element must be <opml>)")
     return feeds
+
+
+# Characters XML 1.0 forbids outright; escaping cannot represent them.
+_XML_ILLEGAL = re.compile("[\x00-\x08\x0b\x0c\x0e-\x1f\ufffe\uffff\ud800-\udfff]")
+
+
+def _xml_safe(value: str) -> str:
+    return _XML_ILLEGAL.sub("", value)
+
+
+def build_opml(feeds: list[OpmlFeed], title: str = "Podly feeds") -> bytes:
+    """Serialise feeds as an OPML 2.0 document (attributes XML-escaped)."""
+    root = ET.Element("opml", version="2.0")
+    head = ET.SubElement(root, "head")
+    ET.SubElement(head, "title").text = _xml_safe(title)
+    ET.SubElement(head, "dateCreated").text = format_datetime(datetime.now(UTC))
+    body = ET.SubElement(root, "body")
+    for feed in feeds:
+        name = _xml_safe(feed.title or "") or _xml_safe(feed.url)
+        ET.SubElement(
+            body,
+            "outline",
+            type="rss",
+            text=name,
+            title=name,
+            xmlUrl=_xml_safe(feed.url),
+        )
+    ET.indent(root)
+    return ET.tostring(root, encoding="utf-8", xml_declaration=True)
