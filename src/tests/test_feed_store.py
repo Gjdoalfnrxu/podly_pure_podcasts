@@ -219,7 +219,8 @@ def test_fetch_feed_bytes_wall_clock_beats_drip(prefix, unit, tls, monkeypatch):
 
 def test_fetch_feed_bytes_wall_clock_beats_tls_handshake_drip(monkeypatch):
     """Server accepts TCP then drips a TLS record that never completes, so the
-    client is stuck inside the handshake (before urllib3 wraps the socket)."""
+    client is stuck inside the handshake. CPython already bounds a handshake by
+    the socket timeout as a whole, so this pins behaviour rather than the dup."""
     monkeypatch.setenv("REQUESTS_CA_BUNDLE", TLS_CERT)
 
     def handshake_drip(conn, base, stop):

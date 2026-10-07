@@ -15,7 +15,10 @@ is in memory: a restart loses it, not the subscriptions already made.
 Each feed fetch on the import path has a hard wall-clock limit of 30 s that
 covers DNS, connect, TLS, redirects (at most 5), headers and body, plus a
 64 MB cap. The fetch runs in a worker thread; on expiry the import moves on
-and the sockets the fetch opened are shut down so the worker exits. The plain
+and a watchdog shuts down the connections the fetch opened (HTTP, HTTPS, and
+HTTP(S) proxies from `HTTP_PROXY`/`HTTPS_PROXY`), so the worker exits. Behind
+a SOCKS proxy the import is still bounded, but the worker can outlive the
+limit until its socket times out. The plain
 `feedparser.parse(url)` used elsewhere is unchanged. A running import that
 makes no progress for 5 minutes is treated as dead and no longer blocks a new
 one. If the importing user is deleted mid-import, the job stops with an error.
