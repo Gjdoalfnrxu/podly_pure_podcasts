@@ -6,6 +6,11 @@ from app.models import Identification, ModelCall, Post, TranscriptSegment
 from app.writer.client import writer_client
 from podcast_processor.ad_merger import AdMerger
 from podcast_processor.audio import clip_segments_with_fade, get_audio_duration_ms
+from podcast_processor.untranscribed_gaps import (
+    AdWindow,
+    extend_outer_edges,
+    gap_extended_windows,
+)
 from shared.config import Config
 
 
@@ -25,6 +30,7 @@ class AudioProcessor:
         self.config = config
         self._identification_query_provided = identification_query is not None
         self.identification_query = identification_query or Identification.query
+        self._transcript_segment_query_provided = transcript_segment_query is not None
         self.transcript_segment_query = (
             transcript_segment_query or TranscriptSegment.query
         )
@@ -33,6 +39,12 @@ class AudioProcessor:
         self.ad_merger = AdMerger()
 
     def get_ad_segments(self, post: Post) -> list[tuple[float, float]]:
+        """Transcribed ad windows (no untranscribed-gap extension), in seconds."""
+        return [(w.start, w.end) for w in self.get_ad_windows(post)]
+
+    def get_ad_windows(
+        self, post: Post, audio_duration_seconds: float | None = None
+    ) -> list[AdWindow]:
         """
         Retrieves ad segments from the database for a given post.
 
@@ -41,9 +53,12 @@ class AudioProcessor:
 
         Args:
             post: The Post object to retrieve ad segments for
+            audio_duration_seconds: Source audio length; lets an ad that runs
+                into untranscribed audio at the episode end be cut to the end
 
         Returns:
-            A list of tuples containing start and end times (in seconds) of ad segments
+            Ad windows sorted by start, each with the transcribed start/end and
+            the cut edges extended over adjacent untranscribed gaps
         """
         self.logger.info(f"Retrieving ad segments from database for post {post.id}.")
 
@@ -114,10 +129,31 @@ class AudioProcessor:
             f"Merged {len(ad_segments_with_text)} segments into {len(ad_groups)} groups for post {post.id}"
         )
 
-        # Convert to time tuples for merge_ad_segments()
-        ad_segments_times = [(g.start_time, g.end_time) for g in ad_groups]
-        ad_segments_times.sort(key=lambda x: x[0])
-        return ad_segments_times
+        # After refinement: refinement clamps to the group's transcribed span,
+        # so extending first would be clamped straight back. The refined edge
+        # is also what keeps a theme bed after an ad-labelled intro (see
+        # untranscribed_gaps module docstring).
+        windows = gap_extended_windows(
+            ad_groups,
+            self._transcript_spans(post),
+            audio_duration_seconds=audio_duration_seconds,
+            post_id=post.id,
+            logger=self.logger,
+        )
+        return sorted(windows, key=lambda w: w.start)
+
+    def _transcript_spans(self, post: Post) -> list[tuple[float, float]]:
+        query = (
+            self.transcript_segment_query
+            if self._transcript_segment_query_provided
+            else self.db_session.query(TranscriptSegment)
+        )
+        rows = (
+            query.filter(TranscriptSegment.post_id == post.id)
+            .with_entities(TranscriptSegment.start_time, TranscriptSegment.end_time)
+            .all()
+        )
+        return [(float(start), float(end)) for start, end in rows]
 
     def _apply_refined_boundaries(self, post: Post, ad_groups: Any) -> None:
         post_row = self._safe_get_post_row(post)
@@ -211,6 +247,7 @@ class AudioProcessor:
         ad_segments: list[tuple[float, float]],
         min_ad_segment_length_seconds: float,
         min_ad_segment_separation_seconds: float,
+        gap_windows: list[AdWindow] | None = None,
     ) -> list[tuple[int, int]]:
         """
         Merges nearby ad segments and filters out segments that are too short.
@@ -220,6 +257,11 @@ class AudioProcessor:
             ad_segments: List of ad segments as (start, end) tuples in seconds
             min_ad_segment_length_seconds: Minimum length of an ad segment to retain
             min_ad_segment_separation_seconds: Minimum separation between segments before merging
+            gap_windows: Untranscribed-gap extensions of ``ad_segments``. Merging,
+                length filtering and the near-end rule use the transcribed
+                windows; only the outer edges of the surviving windows are then
+                extended. A short last window kept by the near-end restore is
+                not extended.
 
         Returns:
             List of merged ad segments as (start, end) tuples in milliseconds
@@ -247,14 +289,29 @@ class AudioProcessor:
             ad_segments, min_length=min_ad_segment_length_seconds
         )
         ad_segments = self._restore_last_segment_if_needed(ad_segments, last_segment)
+        # The near-end rule must measure from the transcribed ad edge, so it
+        # runs before the gap extension.
         ad_segments = self._extend_last_segment_to_end_if_needed(
             ad_segments,
             audio_duration_seconds=audio_duration_seconds,
             min_separation=min_ad_segment_separation_seconds,
         )
+        if gap_windows:
+            if (
+                last_segment is not None
+                and last_segment[1] - last_segment[0] < min_ad_segment_length_seconds
+            ):
+                # Kept only by the near-end restore, below the minimum length:
+                # it must not pull a gap into the cut either.
+                gap_windows = [
+                    w
+                    for w in gap_windows
+                    if not (w.start >= last_segment[0] and w.end <= last_segment[1])
+                ]
+            ad_segments = extend_outer_edges(ad_segments, gap_windows)
 
         self.logger.info(f"Joined ad segments into: {ad_segments}")
-        return [(int(start * 1000), int(end * 1000)) for start, end in ad_segments]
+        return [(round(start * 1000), round(end * 1000)) for start, end in ad_segments]
 
     def _get_last_segment_if_near_end(
         self,
@@ -327,17 +384,20 @@ class AudioProcessor:
         Returns:
             The merged ad segments that were removed, as millisecond windows.
         """
-        ad_segments = self.get_ad_segments(post)
-
         duration_ms = get_audio_duration_ms(post.unprocessed_audio_path)
         if duration_ms is None:
             raise ValueError(
                 f"Could not determine duration for audio: {post.unprocessed_audio_path}"
             )
 
+        ad_windows = self.get_ad_windows(
+            post, audio_duration_seconds=duration_ms / 1000.0
+        )
+
         merged_ad_segments = self.merge_ad_segments(
             duration_ms=duration_ms,
-            ad_segments=ad_segments,
+            ad_segments=[(w.start, w.end) for w in ad_windows],
+            gap_windows=ad_windows,
             min_ad_segment_length_seconds=float(
                 self.config.output.min_ad_segment_length_seconds
             ),
