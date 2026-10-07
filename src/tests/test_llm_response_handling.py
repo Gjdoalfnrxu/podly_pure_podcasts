@@ -293,7 +293,8 @@ def test_empty_answer_is_not_retried_even_if_counts_look_like_status_codes(
     the retry loop treat it as a rate limit (5 x ~100 s on the live box)."""
     stub = stub_llm([_answer(None, finish="length", reasoning="x" * 4290)])
     test_config.llm_max_retry_attempts = 5
-    with app.app_context():
+    # No real backoff sleeps: if it were retried, fail fast on the count below.
+    with app.app_context(), mock.patch("podcast_processor.ad_classifier.time.sleep"):
         call = _model_call(app)
         classifier = AdClassifier(config=test_config)
         assert _chunk(classifier, call, _segments()) == []
