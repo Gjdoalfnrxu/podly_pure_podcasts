@@ -46,6 +46,11 @@ _WORD = re.compile(r"[\w']+")
 # Character similarity above which a recovered phrase counts as a repeat of the
 # neighbouring segment's edge words ("God bless." vs "Dog bless." is 0.78).
 _DUPLICATE_RATIO = 0.75
+# Whisper's own failed-decode thresholds (logprob_threshold,
+# compression_ratio_threshold), applied per segment since there is no fallback.
+_MIN_AVG_LOGPROB = -1.0
+_MAX_COMPRESSION_RATIO = 2.4
+_RETRY_PASSES = 2
 
 
 @runtime_checkable
@@ -333,10 +338,13 @@ class WhisperGapFiller:
         seconds_run = 0.0
         model = self.model_loader(s.model_name)
         try:
-            # Pass 2 retries what is still uncovered with no padding: a clip
-            # that opens on the tail of already-transcribed speech can make
-            # whisper emit that fragment and then jump a whole 30s window.
-            for pass_no, padding in enumerate((s.padding_seconds, 0.0), start=1):
+            # Later passes retry what is still uncovered, unpadded and starting
+            # where the last recovered speech ended: a clip that opens on the
+            # tail of a sentence can make whisper emit that fragment and then
+            # jump the rest of its 30s window. Windows are never re-run with
+            # the same bounds, so a silent stretch costs at most two attempts.
+            paddings = (s.padding_seconds, *([0.0] * _RETRY_PASSES))
+            for pass_no, padding in enumerate(paddings, start=1):
                 remaining = find_gaps(merged, duration, s.min_gap_seconds)
                 planned = plan_windows(
                     remaining, duration, padding, s.max_window_seconds
@@ -394,11 +402,18 @@ class WhisperGapFiller:
             fp16=False,
             language=self.settings.language,
             condition_on_previous_text=False,
+            # No temperature fallback: sampled re-decodes of a short clip of
+            # silence or music are where hallucinated words come from.
+            temperature=0.0,
         )
         out: list[Segment] = []
         for raw in result.get("segments") or []:
             text = str(raw.get("text", ""))
             if not _HAS_WORD.search(text):
+                continue
+            if raw.get("avg_logprob", 0.0) < _MIN_AVG_LOGPROB:
+                continue
+            if raw.get("compression_ratio", 0.0) > _MAX_COMPRESSION_RATIO:
                 continue
             start = window.start + float(raw["start"])
             end = min(window.start + float(raw["end"]), window.end)

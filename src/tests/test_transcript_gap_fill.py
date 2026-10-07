@@ -253,6 +253,7 @@ def test_fill_recovers_start_interior_and_end_speech(episode: str) -> None:
         assert call["fp16"] is False
         assert call["condition_on_previous_text"] is False
         assert call["language"] == "en"
+        assert call["temperature"] == 0.0
 
 
 def test_fill_is_noop_without_gaps(episode: str) -> None:
@@ -333,6 +334,48 @@ def test_unpadded_retry_recovers_speech_whisper_jumped_over(tmp_path: Path) -> N
     assert recovered[0].start == pytest.approx(12.0, abs=TOL)
     assert recovered[0].end == pytest.approx(38.0, abs=TOL)
     assert len(loader.model.calls) == 2
+
+
+def test_retry_walks_past_fragment_when_gap_starts_mid_speech(
+    tmp_path: Path,
+) -> None:
+    """Post 1025 shape: the primary segment's end time runs early, so the gap
+    opens on speech. Pass 2 recovers only the fragment; pass 3 starts after it
+    and gets the ad."""
+    path = _write_wav(tmp_path / "mid.wav", 50.0, [(0.0, 10.0), (12.0, 38.0)])
+    primary = [_seg(0.0, 9.5, "show"), _seg(40.0, 50.0, "show again")]
+    loader = StubLoader(JumpingWhisperModel())
+
+    merged = _filler(loader).fill(1025, path, primary)
+
+    recovered = [s for s in merged if s.text.startswith(" ~")]
+    assert [(round(s.start, 1), round(s.end, 1)) for s in recovered] == [
+        (9.5, 10.0),
+        (12.0, 38.0),
+    ]
+    assert len(loader.model.calls) == 3
+
+
+def test_low_confidence_and_looping_segments_are_dropped(episode: str) -> None:
+    class ShakyModel:
+        def transcribe(self, audio: Any, **kwargs: Any) -> dict[str, Any]:
+            return {
+                "segments": [
+                    {"start": 0.5, "end": 1.0, "text": " So", "avg_logprob": -1.9},
+                    {
+                        "start": 1.0,
+                        "end": 1.5,
+                        "text": " the the the the",
+                        "avg_logprob": -0.2,
+                        "compression_ratio": 3.1,
+                    },
+                    {"start": 1.5, "end": 2.5, "text": " Hi", "avg_logprob": -0.4},
+                ]
+            }
+
+    primary = [_seg(4.0, 30.0)]
+    merged = _filler(StubLoader(ShakyModel())).fill(1, episode, primary)
+    assert [s.text for s in merged] == [" Hi", "primary"]
 
 
 def test_fill_keeps_repeated_ad_lines(tmp_path: Path) -> None:
