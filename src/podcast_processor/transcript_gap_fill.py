@@ -12,7 +12,9 @@ little padding, and transcribes it on its own with local whisper. A short clip
 gives whisper a fresh context, which recovers speech even when the primary
 transcriber was the same local model. Recovered segments are offset back to
 episode time, trimmed so they never overlap what is already transcribed, and
-merged in time order.
+merged in time order. Whatever is still uncovered is retried unpadded from
+where recovered speech stops, because a clip opening mid-sentence can make
+whisper skip the rest of its 30s window the same way the primary pass did.
 """
 
 from __future__ import annotations
