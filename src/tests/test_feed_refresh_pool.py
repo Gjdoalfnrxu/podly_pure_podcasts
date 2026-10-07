@@ -101,6 +101,9 @@ def test_polling_many_feeds_does_not_exhaust_pool(small_pool_app):
                 start = time.monotonic()
                 statuses.append(client.get(f"/feed/{feed_id}").status_code)
                 assert time.monotonic() - start < 1.5, "request waited on the pool"
+                # Like a real client between polls: let the refresh it kicked off
+                # start and take its connection before the next request.
+                time.sleep(0.3)
             assert statuses == [200] * N_FEEDS
             assert blocker.max_running <= feed_routes._BACKGROUND_REFRESH_WORKERS
         finally:
