@@ -8,9 +8,9 @@ from sqlalchemy import case
 from app.db_guard import db_guard, reset_session
 from app.extensions import db as _db
 from app.extensions import scheduler
-from app.feeds import refresh_feed
+from app.feed_refresh_all import refresh_all_feeds
 from app.job_manager import JobManager as SingleJobManager
-from app.models import Feed, JobsManagerRun, Post, ProcessingJob
+from app.models import JobsManagerRun, Post, ProcessingJob
 from app.processor import get_processor
 from app.writer.client import writer_client
 from podcast_processor.podcast_processor import ProcessorException
@@ -543,9 +543,7 @@ class JobsManager:
         Refresh feeds and enqueue per-post processing into internal worker pool.
         """
         with _scheduler_app_context():
-            feeds = Feed.query.all()
-            for feed in feeds:
-                refresh_feed(feed)
+            refresh_all_feeds()
 
             # Clean up posts with missing audio files
             self._cleanup_inconsistent_posts()
