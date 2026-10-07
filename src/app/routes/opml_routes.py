@@ -1,33 +1,28 @@
-"""OPML subscription import: ``POST /api/feeds/import-opml``.
+"""OPML subscription import.
 
-Accepts a multipart upload (field ``file``) or a raw XML request body. Each
-feed goes through the same ``subscribe_to_feed`` path as ``POST /feed``.
+``POST /api/feeds/import-opml`` accepts a multipart upload (field ``file``) or
+a raw XML body, validates and parses it synchronously, then runs the import in
+a background job and returns 202 with the job state. Poll
+``GET /api/feeds/import-opml/<import_id>`` until ``status`` is not "running".
+Each feed goes through the same ``subscribe_to_feed`` path as ``POST /feed``.
 
 Options (form field or query string):
-  process_latest=true|false  default true (same as a normal add: the latest
-      episode of each newly-joined feed is queued for processing). false adds
-      the feeds without queueing anything and un-whitelists the backlog of
-      feeds created by this import; future episodes follow normal settings.
+  process_latest=true|false  default true, same as a normal add (the latest
+      episode of each newly-joined feed is queued). false: feeds new to the
+      server are stored with no episodes whitelisted and nothing is queued
+      for them. Feeds that already existed are refreshed as usual, which can
+      whitelist newly released episodes per the auto-whitelist settings.
 """
 
-import logging
-from typing import IO, Any
+from typing import IO
 
 from flask import Blueprint, current_app, jsonify, request
 from flask.typing import ResponseReturnValue
 
-from app.extensions import db
-from app.models import User
 from app.opml import OpmlParseError, parse_opml
+from app.opml_import import ImportAlreadyRunningError, get_import, start_import
 from app.routes.feed_routes import _require_user_or_error
-from app.routes.feed_subscribe import (
-    is_subscribed,
-    start_enqueue_pending_jobs,
-    subscribe_to_feed,
-)
 from app.routes.feed_utils import fix_url
-
-logger = logging.getLogger("global_logger")
 
 opml_bp = Blueprint("opml", __name__)
 
@@ -95,26 +90,6 @@ def _unique_urls(data: bytes) -> list[str]:
     return urls
 
 
-def _import_urls(
-    urls: list[str], user: User | None, process_latest: bool
-) -> dict[str, Any]:
-    added: list[str] = []
-    skipped_existing: list[str] = []
-    failed: list[dict[str, str]] = []
-    for url in urls:
-        if is_subscribed(url, user):
-            skipped_existing.append(url)
-            continue
-        try:
-            subscribe_to_feed(url, user, process_latest=process_latest)
-            added.append(url)
-        except Exception as exc:  # noqa: BLE001
-            db.session.rollback()
-            logger.warning("OPML import: failed to add %s: %s", url, exc)
-            failed.append({"url": url, "error": str(exc) or exc.__class__.__name__})
-    return {"added": added, "skipped_existing": skipped_existing, "failed": failed}
-
-
 @opml_bp.route("/api/feeds/import-opml", methods=["POST"])
 def import_opml() -> ResponseReturnValue:
     settings = current_app.config.get("AUTH_SETTINGS")
@@ -148,14 +123,23 @@ def import_opml() -> ResponseReturnValue:
             400,
         )
 
-    summary = _import_urls(urls, user, process_latest)
-    if summary["added"] and process_latest:
-        start_enqueue_pending_jobs()
+    try:
+        job = start_import(urls, getattr(user, "id", None), process_latest)
+    except ImportAlreadyRunningError as exc:
+        return jsonify({"error": str(exc)}), 409
+    return jsonify(job.to_dict()), 202
 
-    logger.info(
-        "OPML import: %d added, %d already subscribed, %d failed",
-        len(summary["added"]),
-        len(summary["skipped_existing"]),
-        len(summary["failed"]),
-    )
-    return jsonify({**summary, "process_latest": process_latest})
+
+@opml_bp.route("/api/feeds/import-opml/<string:import_id>", methods=["GET"])
+def import_opml_status(import_id: str) -> ResponseReturnValue:
+    settings = current_app.config.get("AUTH_SETTINGS")
+    user = None
+    if settings and settings.require_auth:
+        user, error = _require_user_or_error()
+        if error:
+            return error
+
+    job = get_import(import_id)
+    if job is None or job.user_id != getattr(user, "id", None):
+        return jsonify({"error": "Import not found."}), 404
+    return jsonify(job.to_dict())

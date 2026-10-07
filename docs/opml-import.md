@@ -5,32 +5,49 @@ OPML export. Same auth as `POST /feed` (session login when auth is enabled).
 
 Input: multipart field `file`, or the raw XML as the request body. Max 2 MB,
 max 500 unique feeds. DOCTYPE/entity declarations are rejected (no XXE, no
-entity expansion).
+entity expansion). The file is validated synchronously (400/413 on bad input);
+the import itself runs in a background thread and the POST returns `202` with
+the job state. Poll `GET /api/feeds/import-opml/<import_id>` until `status` is
+`done` or `error`. One import per user at a time (`409` otherwise). Job status
+is in memory: a restart loses it, not the subscriptions already made.
+
+Each feed fetch is bounded (30 s overall per fetch, 64 MB cap), unlike the
+plain `feedparser.parse(url)` used elsewhere, so one dead host cannot stall
+the import.
 
 Every `<outline>` with an `xmlUrl` is used, including ones nested in
 categories. URLs are normalised the same way as the single add, then deduped.
-Feeds the user already follows are skipped. The rest go through
-`subscribe_to_feed` (`app/routes/feed_subscribe.py`), the same function
-`POST /feed` uses. One bad feed does not stop the rest.
+Feeds the user already follows are skipped, including feeds stored under
+their post-redirect URL. The rest go through `subscribe_to_feed`
+(`app/routes/feed_subscribe.py`), the same function `POST /feed` uses. One bad
+feed does not stop the rest.
 
-Response:
+Job state:
 
 ```json
-{"added": [], "skipped_existing": [], "failed": [{"url": "", "error": ""}], "process_latest": true}
+{"import_id": "", "status": "running|done|error", "total": 0, "processed": 0,
+ "added": [], "skipped_existing": [], "failed": [{"url": "", "error": ""}],
+ "process_latest": true, "error": null}
 ```
 
 ## process_latest
 
-Form field or query param, default `true`.
+Form field or query param. API default `true` (same as `POST /feed`); the UI
+checkbox defaults to unticked for bulk imports.
 
 - `true`: same as adding each feed by hand. With auto-whitelist on, each new
   feed's latest episode (and up to "episodes to whitelist from archive") is
   queued, so N feeds queue about N episodes.
-- `false`: nothing is queued. A feed created by the import stores its whole
-  backlog un-whitelisted, in the same writer call that would otherwise create
-  the jobs, so there is no race with the job worker. Episodes released later
-  follow the normal auto-whitelist settings. Feeds that already existed on the
-  server (shared with other users) are refreshed as normal and not changed.
+- `false`: feeds that are new to the server store their whole backlog
+  un-whitelisted, in the same writer call that would otherwise create the
+  jobs, so nothing is queued for them and there is no race with the job
+  worker. Feeds that already exist on the server (added by another user) are
+  refreshed as a normal add would, and that refresh can whitelist newly
+  released episodes per the auto-whitelist settings. Episodes released later
+  follow the normal settings either way.
 
-The UI has this as the "Process the latest episode of each feed" checkbox in
-Add Feed > Import OPML.
+## Server threads
+
+waitress serves with `SERVER_THREADS` (default 1). The import no longer holds
+a request thread, but podcast-app polling, the UI and audio downloads still
+share the pool; 4 is a reasonable value for a small instance.

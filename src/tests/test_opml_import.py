@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import io
+import threading
+import time
 from collections.abc import Generator
 from types import SimpleNamespace
 from unittest import mock
@@ -12,8 +14,10 @@ from app.auth import AuthSettings
 from app.auth.middleware import init_auth_middleware
 from app.auth.state import failure_rate_limiter
 from app.extensions import db
+from app.feed_fetch import FetchedFeed
 from app.models import Feed, User, UserFeed
 from app.opml import OpmlParseError, parse_opml
+from app.opml_import import FEED_FETCH_TIMEOUT_SECONDS
 from app.routes.auth_routes import auth_bp
 from app.routes.feed_routes import feed_bp
 from app.routes.opml_routes import MAX_OPML_BYTES, opml_bp
@@ -60,18 +64,31 @@ def _opml(*urls: str) -> bytes:
     return f"<opml version='2.0'><body>{outlines}</body></opml>".encode()
 
 
-def _fake_add_or_refresh(fail_urls: frozenset[str] = frozenset()):
-    def _impl(url: str, *, whitelist_archive: bool = True) -> Feed:
+def _fake_fetch_and_store(fail_urls: frozenset[str] = frozenset()):
+    def _impl(
+        url: str, *, whitelist_archive: bool = True, fetch_timeout: float | None = None
+    ) -> tuple[Feed, bool]:
         if url in fail_urls:
             raise ValueError(f"Invalid feed URL: {url}")
         feed = Feed.query.filter_by(rss_url=url).first()
-        if feed is None:
-            feed = Feed(title=f"Feed {url}", rss_url=url)
-            db.session.add(feed)
-            db.session.commit()
-        return feed
+        if feed is not None:
+            return feed, False
+        feed = Feed(title=f"Feed {url}", rss_url=url)
+        db.session.add(feed)
+        db.session.commit()
+        return feed, True
 
     return _impl
+
+
+class _SyncThread:
+    """Runs the import job inline so in-memory SQLite stays on one connection."""
+
+    def __init__(self, target, args=(), **_kwargs):
+        self._target, self._args = target, args
+
+    def start(self) -> None:
+        self._target(*self._args)
 
 
 def _fake_writer_action(name: str, params: dict, wait: bool = True):
@@ -89,8 +106,6 @@ def _fake_writer_action(name: str, params: dict, wait: bool = True):
             success=True,
             data={"created": existing is None, "previous_count": previous},
         )
-    if name == "toggle_whitelist_all_for_feed":
-        return SimpleNamespace(success=True, data={"updated_count": 0})
     # Login bookkeeping (update_user_last_active) also goes through the writer.
     return SimpleNamespace(success=True, data={})
 
@@ -100,18 +115,22 @@ def patched():
     """Patch the I/O edges of the shared subscribe path (network fetch, writer, threads)."""
     with (
         mock.patch(
-            "app.routes.feed_subscribe.add_or_refresh_feed",
-            side_effect=_fake_add_or_refresh(),
+            "app.routes.feed_subscribe.fetch_and_store_feed",
+            side_effect=_fake_fetch_and_store(),
         ) as add,
         mock.patch("app.routes.feed_subscribe.whitelist_latest_for_first_member") as wl,
         mock.patch("app.routes.feed_subscribe.Thread") as thread,
+        mock.patch("app.opml_import.Thread", _SyncThread),
+        mock.patch("app.opml_import._enqueue_pending_jobs_async") as enqueue,
         # writer_client is one shared singleton across modules.
         mock.patch(
             "app.writer.client.writer_client.action",
             side_effect=_fake_writer_action,
         ) as writer,
     ):
-        yield SimpleNamespace(add=add, whitelist=wl, thread=thread, writer=writer)
+        yield SimpleNamespace(
+            add=add, whitelist=wl, thread=thread, enqueue=enqueue, writer=writer
+        )
 
 
 def _client(app: Flask):
@@ -135,6 +154,19 @@ def _upload(client, data: bytes, **form):
         data={"file": (io.BytesIO(data), "subs.opml"), **form},
         content_type="multipart/form-data",
     )
+
+
+def _import(client, data: bytes, **form) -> dict:
+    """POST an import, expect 202, then read the job via the status endpoint."""
+    resp = _upload(client, data, **form)
+    assert resp.status_code == 202, resp.data
+    started = resp.get_json()
+    status = client.get(f"{ENDPOINT}/{started['import_id']}")
+    assert status.status_code == 200, status.data
+    body = status.get_json()
+    assert body["status"] == "done"
+    assert body["processed"] == body["total"]
+    return body
 
 
 # ---------------------------------------------------------------- parser
@@ -171,10 +203,8 @@ def test_parse_opml_rejects_non_opml_root():
 
 def test_import_nested_and_dedupes(app, patched):
     with app.app_context():
-        resp = _upload(_client(app), NESTED_OPML)
+        body = _import(_client(app), NESTED_OPML)
 
-        assert resp.status_code == 200, resp.data
-        body = resp.get_json()
         # a and b appear twice (b once without scheme -> fix_url normalises it)
         assert body["added"] == [
             "https://a.example.com/feed.xml",
@@ -183,14 +213,16 @@ def test_import_nested_and_dedupes(app, patched):
         ]
         assert body["skipped_existing"] == []
         assert body["failed"] == []
+        # Each unique, normalised URL reaches the shared subscribe path once,
+        # with a bounded fetch.
+        assert [c.args[0] for c in patched.add.call_args_list] == body["added"]
         assert [c.kwargs for c in patched.add.call_args_list] == [
-            {"whitelist_archive": True}
+            {"whitelist_archive": True, "fetch_timeout": FEED_FETCH_TIMEOUT_SECONDS}
         ] * 3
-        assert {f.rss_url for f in Feed.query.all()} == set(body["added"])
         # Same post-add behaviour as POST /feed: latest episode queued per new feed,
         # one enqueue kick for the whole batch.
         assert patched.whitelist.call_count == 3
-        patched.thread.assert_called_once()
+        patched.enqueue.assert_called_once()
 
 
 def test_import_skips_already_subscribed(app, patched):
@@ -198,12 +230,11 @@ def test_import_skips_already_subscribed(app, patched):
         db.session.add(Feed(title="old", rss_url="https://a.example.com/feed.xml"))
         db.session.commit()
 
-        resp = _upload(
+        body = _import(
             _client(app),
             _opml("https://a.example.com/feed.xml", "https://new.example.com/f"),
         )
 
-        body = resp.get_json()
         assert body["skipped_existing"] == ["https://a.example.com/feed.xml"]
         assert body["added"] == ["https://new.example.com/f"]
         assert [c.args[0] for c in patched.add.call_args_list] == [
@@ -212,11 +243,11 @@ def test_import_skips_already_subscribed(app, patched):
 
 
 def test_per_feed_failure_does_not_abort_batch(app, patched):
-    patched.add.side_effect = _fake_add_or_refresh(
+    patched.add.side_effect = _fake_fetch_and_store(
         frozenset({"https://broken.example.com/f"})
     )
     with app.app_context():
-        resp = _upload(
+        body = _import(
             _client(app),
             _opml(
                 "https://ok1.example.com/f",
@@ -226,8 +257,6 @@ def test_per_feed_failure_does_not_abort_batch(app, patched):
             ),
         )
 
-        assert resp.status_code == 200
-        body = resp.get_json()
         assert body["added"] == [
             "https://ok1.example.com/f",
             "https://ok2.example.com/f",
@@ -280,11 +309,13 @@ def test_oversize_raw_body_without_content_length_rejected(app, patched):
 
 def test_raw_xml_body_accepted(app, patched):
     with app.app_context():
-        resp = _client(app).post(
+        client = _client(app)
+        resp = client.post(
             ENDPOINT, data=_opml("https://raw.example.com/f"), content_type="text/xml"
         )
-        assert resp.status_code == 200, resp.data
-        assert resp.get_json()["added"] == ["https://raw.example.com/f"]
+        assert resp.status_code == 202, resp.data
+        status = client.get(f"{ENDPOINT}/{resp.get_json()['import_id']}")
+        assert status.get_json()["added"] == ["https://raw.example.com/f"]
 
 
 def test_missing_file_returns_400(app, patched):
@@ -295,23 +326,21 @@ def test_missing_file_returns_400(app, patched):
 
 def test_process_latest_false_queues_nothing(app, patched):
     with app.app_context():
-        resp = _upload(
+        body = _import(
             _client(app),
             _opml("https://n1.example.com/f", "https://n2.example.com/f"),
             process_latest="false",
         )
 
-        assert resp.status_code == 200, resp.data
-        body = resp.get_json()
         assert body["process_latest"] is False
         assert body["added"] == ["https://n1.example.com/f", "https://n2.example.com/f"]
         # Backlog stored un-whitelisted in the same writer call that creates jobs.
-        assert [c.kwargs for c in patched.add.call_args_list] == [
-            {"whitelist_archive": False},
-            {"whitelist_archive": False},
+        assert [c.kwargs["whitelist_archive"] for c in patched.add.call_args_list] == [
+            False,
+            False,
         ]
         patched.whitelist.assert_not_called()
-        patched.thread.assert_not_called()
+        patched.enqueue.assert_not_called()
 
 
 def test_invalid_process_latest_returns_400(app, patched):
@@ -330,7 +359,7 @@ def test_single_add_feed_uses_shared_subscribe_path(app, patched):
         resp = client.post("/feed", data={"url": "https://single.example.com/f"})
         assert resp.status_code == 302
         patched.add.assert_called_once_with(
-            "https://single.example.com/f", whitelist_archive=True
+            "https://single.example.com/f", whitelist_archive=True, fetch_timeout=None
         )
         patched.whitelist.assert_called_once()
         patched.thread.assert_called_once()
@@ -405,7 +434,7 @@ def test_authenticated_import_skips_only_own_subscriptions(auth_app, patched):
         admin_id = admin.id
 
     _login(client)
-    resp = _upload(
+    body = _import(
         client,
         _opml(
             "https://mine.example.com/f",
@@ -414,8 +443,6 @@ def test_authenticated_import_skips_only_own_subscriptions(auth_app, patched):
         ),
     )
 
-    assert resp.status_code == 200, resp.data
-    body = resp.get_json()
     assert body["skipped_existing"] == ["https://mine.example.com/f"]
     assert body["added"] == [
         "https://theirs.example.com/f",
@@ -440,11 +467,120 @@ def test_authenticated_import_reports_allowance_per_feed(auth_app, patched):
         db.session.commit()
 
     _login(client, "bob")
-    resp = _upload(
+    body = _import(
         client, _opml("https://one.example.com/f", "https://two.example.com/f")
     )
 
-    body = resp.get_json()
     assert body["added"] == ["https://one.example.com/f"]
     assert body["failed"][0]["url"] == "https://two.example.com/f"
     assert "allows 1 feeds" in body["failed"][0]["error"]
+
+
+# ---------------------------------------------------------------- background job
+
+
+def test_post_returns_202_before_import_finishes(tmp_path):
+    """Real thread + file DB: the request returns while feeds are still being added."""
+    app = Flask(__name__)
+    app.config.update(
+        SQLALCHEMY_DATABASE_URI=f"sqlite:///{tmp_path / 'opml.db'}",
+        SQLALCHEMY_TRACK_MODIFICATIONS=False,
+    )
+    db.init_app(app)
+    with app.app_context():
+        db.create_all()
+    release = threading.Event()
+    fake = _fake_fetch_and_store()
+
+    def slow_fetch(url, **kwargs):
+        assert release.wait(5)
+        return fake(url, **kwargs)
+
+    with (
+        mock.patch(
+            "app.routes.feed_subscribe.fetch_and_store_feed", side_effect=slow_fetch
+        ),
+        mock.patch("app.routes.feed_subscribe.whitelist_latest_for_first_member"),
+        mock.patch("app.opml_import._enqueue_pending_jobs_async"),
+    ):
+        client = _client(app)
+        with app.app_context():
+            resp = _upload(client, _opml("https://t1.example.com/f"))
+            assert resp.status_code == 202
+            started = resp.get_json()
+            assert started["status"] == "running"
+            assert started["total"] == 1
+
+            release.set()
+            deadline = time.monotonic() + 5
+            while True:
+                body = client.get(f"{ENDPOINT}/{started['import_id']}").get_json()
+                if body["status"] != "running" or time.monotonic() > deadline:
+                    break
+                time.sleep(0.05)
+
+        assert body["status"] == "done"
+        assert body["added"] == ["https://t1.example.com/f"]
+        with app.app_context():
+            assert Feed.query.filter_by(rss_url="https://t1.example.com/f").count() == 1
+
+
+def test_second_import_while_running_returns_409(app, patched):
+    from app.opml_import import _JOBS, ImportJob
+
+    _JOBS["stuck"] = ImportJob(id="stuck", user_id=None, urls=[], process_latest=True)
+    try:
+        with app.app_context():
+            resp = _upload(_client(app), _opml("https://a.example.com/f"))
+            assert resp.status_code == 409
+            patched.add.assert_not_called()
+    finally:
+        _JOBS.pop("stuck", None)
+
+
+def test_unknown_import_id_returns_404(app, patched):
+    with app.app_context():
+        assert _client(app).get(f"{ENDPOINT}/nope").status_code == 404
+
+
+def test_import_status_is_private_to_its_user(auth_app, patched):
+    client = _client(auth_app)
+    _login(client, "admin")
+    resp = _upload(client, _opml("https://a.example.com/f"))
+    import_id = resp.get_json()["import_id"]
+    assert client.get(f"{ENDPOINT}/{import_id}").status_code == 200
+
+    other = auth_app.test_client()
+    _login(other, "bob")
+    assert other.get(f"{ENDPOINT}/{import_id}").status_code == 404
+    assert auth_app.test_client().get(f"{ENDPOINT}/{import_id}").status_code == 401
+
+
+def test_redirected_feed_reimport_is_skipped_not_failed(app):
+    """End to end through real fetch_and_store_feed: an OPML URL that redirects is
+    stored under its final URL; importing it again must report skipped_existing."""
+    from tests.test_feed_store import RSS, _fake_writer
+
+    def fake_bytes(url, timeout):
+        return FetchedFeed(
+            content=RSS, final_url="https://new.example.com/rss", headers={}
+        )
+
+    with (
+        mock.patch("app.feeds.fetch_feed_bytes", side_effect=fake_bytes),
+        mock.patch("app.writer.client.writer_client.action", side_effect=_fake_writer),
+        mock.patch("app.feeds.refresh_feed"),
+        mock.patch("app.routes.feed_subscribe.whitelist_latest_for_first_member"),
+        mock.patch("app.opml_import.Thread", _SyncThread),
+        mock.patch("app.opml_import._enqueue_pending_jobs_async"),
+    ):
+        with app.app_context():
+            client = _client(app)
+            opml = _opml("https://old.example.com/rss")
+            first = _import(client, opml)
+            second = _import(client, opml)
+
+    assert first["added"] == ["https://old.example.com/rss"]
+    assert second["failed"] == []
+    assert second["added"] == []
+    assert second["skipped_existing"] == ["https://old.example.com/rss"]

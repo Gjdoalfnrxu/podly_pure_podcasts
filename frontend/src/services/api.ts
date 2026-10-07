@@ -101,6 +101,11 @@ export const feedsApi = {
     return response.data;
   },
 
+  getOpmlImport: async (importId: string): Promise<OpmlImportResult> => {
+    const response = await api.get(`/api/feeds/import-opml/${importId}`);
+    return response.data;
+  },
+
   deleteFeed: async (feedId: number): Promise<void> => {
     await api.delete(`/feed/${feedId}`);
   },

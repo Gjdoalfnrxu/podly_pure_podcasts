@@ -17,6 +17,11 @@ export interface Feed {
 }
 
 export interface OpmlImportResult {
+  import_id: string;
+  status: 'running' | 'done' | 'error';
+  total: number;
+  processed: number;
+  error: string | null;
   added: string[];
   skipped_existing: string[];
   failed: { url: string; error: string }[];

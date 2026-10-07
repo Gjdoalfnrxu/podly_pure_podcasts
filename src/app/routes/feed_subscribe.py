@@ -5,6 +5,7 @@ so the two cannot drift.
 """
 
 import logging
+from dataclasses import dataclass
 from threading import Thread
 from typing import Any, cast
 
@@ -13,7 +14,7 @@ from flask import Flask, current_app
 from flask.typing import ResponseReturnValue
 
 from app.auth import is_auth_enabled
-from app.feeds import add_or_refresh_feed
+from app.feeds import fetch_and_store_feed
 from app.jobs_manager import get_jobs_manager
 from app.models import Feed, User, UserFeed
 from app.routes.feed_utils import (
@@ -54,17 +55,30 @@ def is_subscribed(url: str, user: User | None) -> bool:
     )
 
 
+@dataclass(frozen=True)
+class SubscribeResult:
+    feed: Feed
+    already_subscribed: bool
+
+
 def subscribe_to_feed(
-    url: str, user: User | None, *, process_latest: bool = True
-) -> Feed:
+    url: str,
+    user: User | None,
+    *,
+    process_latest: bool = True,
+    fetch_timeout: float | None = None,
+) -> SubscribeResult:
     """Add/refresh ``url`` and link it to ``user``.
 
     ``url`` must already be normalised with ``fix_url``. With
-    ``process_latest=False`` nothing is queued: a feed created by this call
-    stores its backlog un-whitelisted (so the writer creates no jobs) and the
-    latest episode is not whitelisted. Episodes released later still follow
-    the normal auto-whitelist settings. Feeds that already existed (shared
-    with other users) are refreshed exactly as a normal add would.
+    ``process_latest=False`` a feed created by this call stores its backlog
+    un-whitelisted (so the writer creates no jobs) and the latest episode is
+    not queued. A feed that already existed on the server is refreshed exactly
+    as a normal add would, which can whitelist newly released episodes per the
+    auto-whitelist settings.
+
+    ``already_subscribed`` is True when the user (or, without auth, the
+    server) already had this feed, e.g. under its post-redirect URL.
 
     Raises InvalidFeedUrlError, FeedAllowanceError, or whatever the
     underlying fetch/writer raises.
@@ -77,22 +91,21 @@ def subscribe_to_feed(
         if allowance_error:
             raise FeedAllowanceError(allowance_error)
 
-    feed = add_or_refresh_feed(url, whitelist_archive=process_latest)
-
-    if not process_latest:
-        if user:
-            ensure_user_feed_membership(feed, user.id)
-        return feed
+    feed, feed_created = fetch_and_store_feed(
+        url, whitelist_archive=process_latest, fetch_timeout=fetch_timeout
+    )
 
     if user:
         created, previous_count = ensure_user_feed_membership(feed, user.id)
-        if created and previous_count == 0:
+        if process_latest and created and previous_count == 0:
             whitelist_latest_for_first_member(feed, getattr(user, "id", None))
-    elif not is_auth_enabled():
+        return SubscribeResult(feed, already_subscribed=not created)
+
+    if process_latest and not is_auth_enabled():
         # In no-auth mode, if this feed has no members, trigger whitelisting for the latest post.
         if UserFeed.query.filter_by(feed_id=feed.id).count() == 0:
             whitelist_latest_for_first_member(feed, None)
-    return feed
+    return SubscribeResult(feed, already_subscribed=not feed_created)
 
 
 def _enqueue_pending_jobs_async(app: Flask) -> None:

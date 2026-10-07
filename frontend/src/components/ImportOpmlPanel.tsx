@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { feedsApi } from '../services/api';
 import type { OpmlImportResult } from '../types';
 import { diagnostics, emitDiagnosticError } from '../utils/diagnostics';
@@ -28,10 +28,29 @@ function UrlList({ title, urls, tone }: { title: string; urls: string[]; tone: s
 
 export default function ImportOpmlPanel({ onImported, onDone, disabled }: ImportOpmlPanelProps) {
   const [file, setFile] = useState<File | null>(null);
-  const [processLatest, setProcessLatest] = useState(true);
+  // Bulk imports default to not queueing anything; see the checkbox help text.
+  const [processLatest, setProcessLatest] = useState(false);
   const [isImporting, setIsImporting] = useState(false);
   const [error, setError] = useState('');
   const [result, setResult] = useState<OpmlImportResult | null>(null);
+  const mounted = useRef(true);
+
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+    };
+  }, []);
+
+  const pollUntilDone = async (initial: OpmlImportResult): Promise<OpmlImportResult> => {
+    let current = initial;
+    while (current.status === 'running' && mounted.current) {
+      await new Promise((resolve) => setTimeout(resolve, 1500));
+      current = await feedsApi.getOpmlImport(current.import_id);
+      if (mounted.current) setResult(current);
+    }
+    return current;
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -41,8 +60,12 @@ export default function ImportOpmlPanel({ onImported, onDone, disabled }: Import
     setResult(null);
     try {
       diagnostics.add('info', 'OPML import request', { size: file.size, processLatest });
-      const summary = await feedsApi.importOpml(file, processLatest);
-      setResult(summary);
+      const started = await feedsApi.importOpml(file, processLatest);
+      setResult(started);
+      const summary = await pollUntilDone(started);
+      if (summary.status === 'error') {
+        setError(summary.error || 'Import stopped with an error.');
+      }
       diagnostics.add('info', 'OPML import done', {
         added: summary.added.length,
         skipped: summary.skipped_existing.length,
@@ -98,10 +121,12 @@ export default function ImportOpmlPanel({ onImported, onDone, disabled }: Import
             disabled={disabled}
           />
           <span>
-            Process the latest episode of each feed (same as adding one feed).
+            Process the latest episode of each new feed (same as adding one feed).
             <span className="block text-xs text-gray-500">
-              Untick to import without queueing any episodes; new episodes released later still
-              follow your auto-process settings.
+              Unticked: feeds new to this server are added with no episodes queued. Feeds that
+              already exist on this server are refreshed as usual, which can queue newly released
+              episodes if auto-processing is on. Episodes released later follow your
+              auto-process settings either way.
             </span>
           </span>
         </label>
@@ -114,12 +139,16 @@ export default function ImportOpmlPanel({ onImported, onDone, disabled }: Import
             disabled={isImporting || !file || !!disabled}
             className="bg-blue-600 hover:bg-blue-700 disabled:bg-gray-400 text-white px-4 py-2 rounded-md font-medium transition-colors sm:w-auto w-full"
           >
-            {isImporting ? 'Importing...' : 'Import'}
+            {isImporting
+              ? result
+                ? `Importing ${result.processed}/${result.total}...`
+                : 'Uploading...'
+              : 'Import'}
           </button>
         </div>
       </form>
 
-      {result && (
+      {result && result.status !== 'running' && (
         <div className="space-y-3 p-3 border border-gray-200 rounded-md bg-gray-50" data-testid="opml-import-result">
           <p className="text-sm text-gray-800">
             Added {result.added.length}, already subscribed {result.skipped_existing.length}, failed{' '}
