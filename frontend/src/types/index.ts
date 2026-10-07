@@ -89,6 +89,8 @@ export interface LaneStatus {
   month_cloud_jobs: number;
   cloud_concurrency: number;
   queues: Record<string, { pending: number; running: number }>;
+  // Per pipeline stage ('transcribe' | 'llm'), counted server-side.
+  stages: Record<string, { pending: number; running: number }>;
 }
 
 export interface CloudLaneSettings {

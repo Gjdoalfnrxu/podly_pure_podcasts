@@ -9,7 +9,7 @@ Now each job runs in two **stages**, and each stage has its own worker threads:
 | Stage | Work | Workers | Setting |
 | --- | --- | --- | --- |
 | `transcribe` | download, Whisper | 1 local (+2 cloud lane) | `PODLY_TRANSCRIBE_WORKERS` |
-| `llm` | ad detection, audio cut, chapters | 4 | `PODLY_LLM_WORKERS` |
+| `llm` | ad detection, audio cut, chapters | 4, at most `LLM_MAX_CONCURRENT_CALLS` | `PODLY_LLM_WORKERS` |
 
 When episode A's transcript is stored, A goes back in the queue for the `llm`
 stage and the transcriber starts episode B straight away. Up to 4 episodes are
@@ -17,8 +17,10 @@ in ad detection at once. Inside one episode the LLM chunks still run one after
 another (each chunk overlaps the previous one), as before.
 
 The code: `src/app/pipeline.py` (settings, stage names, priorities, pool size),
-`src/app/pipeline_workers.py` (worker threads), `dequeue_job` /
-`advance_job_stage` / `route_job` / `requeue_interrupted_jobs` in
+`src/app/pipeline_workers.py` (worker threads), `src/app/pipeline_recovery.py`
+(hand-off writes and what happens when they fail), `dequeue_job` /
+`advance_job_stage` / `route_job` / `requeue_interrupted_jobs` /
+`requeue_orphaned_jobs` / `fail_job_if_running` in
 `src/app/writer/actions/jobs.py`, and the `stage` argument of
 `PodcastProcessor.process`.
 
@@ -70,16 +72,39 @@ is finished in the transcribe stage, so it cannot bounce between stages.
 | audio cut | running | 4 | 90% | Processing audio |
 
 The Jobs page shows each active job's stage and a count of running and waiting
-jobs per stage. The API (`/api/jobs/active`, `/api/jobs/all`) has a `stage`
-field.
+jobs per stage. The counts come from `/api/lanes/status` (`stages`), counted in
+SQL, so they stay right when more jobs are queued than the job list shows. The
+API (`/api/jobs/active`, `/api/jobs/all`) has a `stage` field.
 
 ## Restarts
 
-On startup, jobs that were running go back to pending in the same stage, and
-pending jobs stay queued. Jobs that were in the LLM stage keep their transcript
-and skip Whisper. Re-queued jobs go to the local lane (re-queues never use the
-paid cloud lane); waiting jobs keep their lane. (2.5.0 deleted pending and
-running jobs, and nothing came back until the next feed refresh.)
+On startup, before any worker thread starts, jobs that were running go back to
+pending in the same stage, and pending jobs stay queued. Jobs that were in the
+LLM stage keep their transcript and skip Whisper. Re-queued jobs go to the local
+lane (re-queues never use the paid cloud lane); waiting jobs keep their lane.
+(2.5.0 deleted pending and running jobs, and nothing came back until the next
+feed refresh.)
+
+A job is re-queued by a restart at most twice
+(`PIPELINE_MAX_RESTART_REQUEUES`, counted in `processing_job.restart_requeues`).
+If a third restart finds it running, it is marked failed instead: an episode
+that gets the container killed (for example out of memory) must not run again
+on every boot. Reprocessing it creates a new job with a fresh count.
+
+## When a job-state write fails
+
+Between stages a job is still `running` until the hand-off write lands, and
+while it is it holds a slot of its pool (the local transcriber has one) and
+blocks its post. So:
+
+- A failed hand-off write (`advance_job_stage`, or `requeue_job_local` for a
+  cloud fallback) is tried 3 times. If it never lands, the job is marked failed
+  (only if it is still running) and the error is logged at ERROR.
+- If even that fails, or a `dequeue_job` reply is lost (the writer may still
+  have marked a job running after the 10 s wait gave up), the pool sweeps
+  before its next claim: running jobs of that pool whose post no worker thread
+  holds go back to pending (`requeue_orphaned_jobs`). The writer runs commands
+  in order, so the sweep runs after the lost dequeue.
 
 ## Audio cut
 
@@ -92,10 +117,17 @@ wall time and 47 s CPU time per episode (3 runs: 32.0/48.0, 30.1/47.3,
 ## LLM calls
 
 `LLM_MAX_CONCURRENT_CALLS` is one limit shared by all LLM-stage workers. If it is
-lower than `PODLY_LLM_WORKERS`, the extra workers wait for it and episodes do not
-overlap in the LLM. Set it to at least the number of LLM workers (the server must
-handle that many requests at once). Podly logs a warning at startup when it is
-lower.
+lower than `PODLY_LLM_WORKERS` at startup, Podly runs only that many LLM-stage
+workers and logs a warning; with a limit of 1, episodes go through ad detection
+one at a time (transcription still overlaps with it). To run episodes' ad
+detection in parallel, raise the limit (the LLM server must handle that many
+requests at once).
+
+A call waiting for the shared slot waits as long as it takes and logs every
+30 s; it never gives up and skips the chunk. (Before, a wait over 30 s marked
+the chunk `failed_permanent` and the episode finished with that chunk's ads
+left in.) The worker count is fixed at startup, so lowering the limit in the
+settings later makes the extra workers wait, not fail.
 
 ## Database connections
 
@@ -109,14 +141,16 @@ its DB session when a stage run ends.
 
 ## Upgrading and rolling back
 
-Migration `d7e3f1a2b4c5` adds `processing_job.stage` and
-`processing_job.priority` (both additive). To go back to an image without it,
-run the downgrade inside this image first:
+Migrations `d7e3f1a2b4c5` (`processing_job.stage`, `processing_job.priority`)
+and `1903c9ed442e` (`processing_job.restart_requeues`) only add columns. To go
+back to an image without them, run the downgrade inside this image first:
 
     docker exec -u appuser -w /app -e PYTHONPATH=/app/src \
       -e PODLY_RUN_STARTUP=false -e PODLY_DISABLE_SCHEDULER=true \
       podly /app/.venv/bin/flask --app "app:create_app" db downgrade c1a0de1a9e5f
 
-(Smoke-tested in a throwaway `podly-cain:parallel` container: the downgrade
-removes both columns and sets the revision to `c1a0de1a9e5f`; `db upgrade` adds
-them back.)
+(`d7e3f1a2b4c5` was smoke-tested in a throwaway `podly-cain:parallel`
+container: the downgrade removes both columns and sets the revision to
+`c1a0de1a9e5f`; `db upgrade` adds them back. `1903c9ed442e` was generated with
+`flask db migrate` and round-tripped upgrade/downgrade/upgrade on a seeded
+SQLite DB with the rows kept; it has not been run in a container yet.)

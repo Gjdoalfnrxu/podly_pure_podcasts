@@ -60,6 +60,10 @@ class JobsManager:
             get_run_id=self._get_run_id,
             status_manager=self._status_manager,
         )
+        # Re-queue what a stop left running BEFORE any worker can claim: a job
+        # claimed first would be flipped back to pending mid-run (and a cloud
+        # job stripped of its lane while it uploads).
+        self.startup_requeue = self.requeue_interrupted_jobs()
         self._workers.start()
 
         # Initialize run via writer
@@ -579,7 +583,8 @@ class JobsManager:
         """Startup: put jobs a stop left running back in their stage's queue.
 
         Pending jobs stay queued. Jobs that were in the LLM stage keep their
-        transcript and skip Whisper.
+        transcript and skip Whisper. Jobs re-queued by too many restarts fail.
+        Runs from __init__ before the workers start.
         """
         try:
             with _scheduler_app_context():
@@ -587,19 +592,30 @@ class JobsManager:
                 if not (result and result.success):
                     raise RuntimeError(getattr(result, "error", None) or "no result")
                 count = int((result.data or {}).get("requeued") or 0)
+                failed = list((result.data or {}).get("failed") or [])
                 pending = ProcessingJob.query.filter(
                     ProcessingJob.status == "pending"
                 ).count()
         except Exception as e:  # noqa: BLE001
             logger.error(f"Error re-queueing interrupted jobs: {e}")
             return {"status": "error", "message": f"Failed to re-queue jobs: {e!s}"}
+        if failed:
+            logger.error(
+                "Startup: failed %d job(s) interrupted by repeated restarts: %s",
+                len(failed),
+                failed,
+            )
         if pending:
             self._wake_worker()
         return {
             "status": "success",
             "requeued_jobs": count,
+            "failed_jobs": failed,
             "pending_jobs": pending,
-            "message": f"Re-queued {count} interrupted jobs; {pending} jobs queued",
+            "message": (
+                f"Re-queued {count} interrupted jobs; {len(failed)} failed after "
+                f"repeated restarts; {pending} jobs queued"
+            ),
         }
 
     def start_refresh_all_feeds(

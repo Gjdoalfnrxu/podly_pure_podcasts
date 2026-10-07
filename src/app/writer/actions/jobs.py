@@ -8,6 +8,7 @@ from app.jobs_manager_run_service import recalculate_run_counts
 from app.lanes import LANE_CLOUD, LANE_LOCAL
 from app.models import ProcessingJob
 from app.pipeline import STAGE_LLM, STAGE_TRANSCRIBE
+from shared import defaults as DEFAULTS
 
 
 def _pool_clause(stage: str, lane: str) -> Any:
@@ -125,17 +126,76 @@ def requeue_interrupted_jobs_action(params: dict[str, Any]) -> dict[str, Any]:
     """Startup: jobs left running by a stop go back to pending, same stage.
 
     A job that was in the LLM stage keeps stage "llm" (its transcript is in the
-    DB), so it skips Whisper. Pending jobs are left as they are.
+    DB), so it skips Whisper. Pending jobs are left as they are. A job already
+    re-queued ``max_requeues`` times fails instead: if it is what kills the
+    process (OOM), re-queueing it again would crash-loop the container.
     """
-    del params
+    max_requeues = int(
+        params.get("max_requeues", DEFAULTS.PIPELINE_MAX_RESTART_REQUEUES)
+    )
     interrupted = ProcessingJob.query.filter(ProcessingJob.status == "running").all()
+    failed: list[str] = []
+    now = datetime.now(UTC).replace(tzinfo=None)
     for job in interrupted:
+        count = job.restart_requeues or 0
+        if count >= max_requeues:
+            job.status = "failed"
+            job.step_name = "Failed: interrupted by repeated restarts"
+            job.error_message = (
+                f"Interrupted by {count + 1} restarts; not re-queued again "
+                "(it may be what stops the server, e.g. out of memory)"
+            )
+            job.completed_at = now
+            failed.append(job.id)
+            continue
+        job.restart_requeues = count + 1
         job.status = "pending"
         job.step_name = "Re-queued after restart"
         _requeue_off_cloud(job)
     if interrupted:
         recalculate_run_counts(db.session)
-    return {"requeued": len(interrupted)}
+    return {"requeued": len(interrupted) - len(failed), "failed": failed}
+
+
+def requeue_orphaned_jobs_action(params: dict[str, Any]) -> dict[str, Any]:
+    """Re-queue running jobs of one pool that no worker thread owns.
+
+    ``owned_post_guids`` are the posts the worker process is running. Any other
+    running job of the pool was claimed by a dequeue whose reply never arrived
+    (or its hand-off could not be written), so nothing will ever finish it.
+    Not counted as a restart re-queue: the job did not crash anything.
+    """
+    stage = params.get("stage") or STAGE_TRANSCRIBE
+    lane = params.get("lane") or LANE_LOCAL
+    owned = [str(g) for g in params.get("owned_post_guids") or []]
+    query = ProcessingJob.query.filter(
+        ProcessingJob.status == "running", _pool_clause(stage, lane)
+    )
+    if owned:
+        query = query.filter(ProcessingJob.post_guid.not_in(owned))
+    orphans = query.all()
+    for job in orphans:
+        job.status = "pending"
+        job.step_name = "Re-queued: no worker owned it"
+        _requeue_off_cloud(job)
+    if orphans:
+        recalculate_run_counts(db.session)
+    return {"job_ids": [job.id for job in orphans]}
+
+
+def fail_job_if_running_action(params: dict[str, Any]) -> dict[str, Any]:
+    """Fail a job only if it is still running (a cancel or finish meanwhile
+    wins)."""
+    job = db.session.get(ProcessingJob, params.get("job_id"))
+    if job is None or job.status != "running":
+        return {"failed": False, "status": getattr(job, "status", None)}
+    job.status = "failed"
+    job.error_message = params.get("error_message") or "failed"
+    job.step_name = "Failed"
+    job.completed_at = datetime.now(UTC).replace(tzinfo=None)
+    if job.jobs_manager_run_id:
+        recalculate_run_counts(db.session)
+    return {"failed": True, "status": job.status}
 
 
 def cleanup_stale_jobs_action(params: dict[str, Any]) -> dict[str, Any]:

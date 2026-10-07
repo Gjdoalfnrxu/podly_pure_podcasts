@@ -485,8 +485,8 @@ def _start_scheduler_and_jobs(app: Flask) -> None:
     _clear_scheduler_jobstore()
     setup_scheduler(app)
 
-    jobs_manager = get_jobs_manager()
-    requeue_result = jobs_manager.requeue_interrupted_jobs()
+    # Creating the manager re-queues interrupted jobs, then starts the workers.
+    requeue_result = get_jobs_manager().startup_requeue
     if requeue_result["status"] == "success":
         app_logger.info(f"Startup: {requeue_result['message']}")
     else:

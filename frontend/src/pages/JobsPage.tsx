@@ -281,7 +281,7 @@ export default function JobsPage() {
   return (
     <div className="space-y-4">
       <LaneSummary />
-      <StageSummary jobs={jobs} />
+      <StageSummary />
 
       <div className="rounded border border-gray-200 bg-white p-4 shadow-sm">
         <div className="flex flex-wrap items-center justify-between gap-3">
@@ -602,13 +602,19 @@ function StageBadge({ stage, status }: { stage?: string; status: string }) {
   );
 }
 
-function StageSummary({ jobs }: { jobs: Job[] }) {
-  const counts = { transcribe: { running: 0, pending: 0 }, llm: { running: 0, pending: 0 } };
-  for (const job of jobs) {
-    if (job.status !== 'running' && job.status !== 'pending') continue;
-    const stage = job.stage === 'llm' ? 'llm' : 'transcribe';
-    counts[stage][job.status] += 1;
-  }
+// Counted by the server: the jobs list on this page is capped (100/200 rows).
+function StageSummary() {
+  const { data } = useQuery({
+    queryKey: ['lane-status'],
+    queryFn: lanesApi.getStatus,
+    refetchInterval: 10000,
+  });
+  if (!data) return null;
+  const empty = { pending: 0, running: 0 };
+  const counts = {
+    transcribe: data.stages?.transcribe ?? empty,
+    llm: data.stages?.llm ?? empty,
+  };
   return (
     <div className="rounded border border-gray-200 bg-white p-3 shadow-sm text-xs text-gray-700 flex flex-wrap gap-x-6 gap-y-1">
       <span>

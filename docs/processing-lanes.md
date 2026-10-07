@@ -129,7 +129,8 @@ database is still at `c1a0de1a9e5f`.
   If the provider answers with an error status (4xx/5xx), the chunk is counted
   as not billed.
 - **Restarts.** On startup, jobs that were running are put back in their
-  queue; re-queued jobs go to the local lane (re-queues never use the cloud
+  queue (at most twice per job, then it fails; see `docs/pipeline.md`);
+  re-queued jobs go to the local lane (re-queues never use the cloud
   lane). Jobs that were still waiting keep their lane, so a manual cloud
   request that was waiting during a restart still goes to the cloud lane. A
   cloud call cut off by a restart stays `reserved` and keeps counting its

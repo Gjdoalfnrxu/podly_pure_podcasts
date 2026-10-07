@@ -34,6 +34,8 @@ class CommandExecutor:
             "advance_job_stage",
             "route_job",
             "requeue_interrupted_jobs",
+            "requeue_orphaned_jobs",
+            "fail_job_if_running",
         ):
             self.register_action(name, getattr(writer_actions, f"{name}_action"))
         self.register_action(

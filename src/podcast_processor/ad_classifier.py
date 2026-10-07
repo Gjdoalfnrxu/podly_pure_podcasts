@@ -19,6 +19,7 @@ from podcast_processor.cue_detector import CueDetector
 from podcast_processor.llm_concurrency_limiter import (
     ConcurrencyContext,
     LLMConcurrencyLimiter,
+    LLMSlotTimeoutError,
     get_concurrency_limiter,
 )
 from podcast_processor.model_output import (
@@ -58,6 +59,8 @@ class ClassifyException(Exception):
 
 # One call plus two re-asks when the answer is not valid JSON.
 UNPARSEABLE_RESPONSE_ATTEMPTS = 3
+# How often a call waiting for the shared LLM slot logs that it is still waiting.
+LLM_SLOT_WAIT_LOG_SECONDS = 30.0
 
 
 class AdClassifier:
@@ -1021,7 +1024,7 @@ class AdClassifier:
 
     def _is_retryable_error(self, error: Exception) -> bool:
         """Determine if an error should be retried."""
-        if isinstance(error, InternalServerError):
+        if isinstance(error, (InternalServerError, LLMSlotTimeoutError)):
             return True
 
         # Check for retryable HTTP errors in other exception types
@@ -1086,7 +1089,13 @@ class AdClassifier:
 
                 # Use concurrency limiter if available
                 if self.concurrency_limiter:
-                    with ConcurrencyContext(self.concurrency_limiter, timeout=30.0):
+                    # Block for the shared slot: with more LLM-stage workers than
+                    # LLM_MAX_CONCURRENT_CALLS a timeout here would drop the chunk.
+                    with ConcurrencyContext(
+                        self.concurrency_limiter,
+                        timeout=LLM_SLOT_WAIT_LOG_SECONDS,
+                        block=True,
+                    ):
                         response = litellm.completion(**completion_args)
                 else:
                     response = litellm.completion(**completion_args)

@@ -14,6 +14,7 @@ from app.extensions import db
 from app.lane_store import load_lane_settings, month_spent_usd
 from app.lanes import LANE_CLOUD, LANE_LOCAL, cloud_unavailable_reason, month_start
 from app.models import CloudLaneUsage, ProcessingJob
+from app.pipeline import STAGE_LLM, STAGE_TRANSCRIBE
 from app.routes.config_routes import _mask_secret
 from app.writer.client import writer_client
 from shared import defaults as DEFAULTS
@@ -38,6 +39,25 @@ def _queue_counts() -> dict[str, dict[str, int]]:
     return counts
 
 
+def _stage_counts() -> dict[str, dict[str, int]]:
+    """Running/waiting jobs per pipeline stage, counted in SQL (the Jobs page
+    list is capped, so it cannot be counted client-side)."""
+    stage = func.coalesce(ProcessingJob.stage, STAGE_TRANSCRIBE)
+    rows = (
+        db.session.query(stage, ProcessingJob.status, func.count())
+        .filter(ProcessingJob.status.in_(["pending", "running"]))
+        .group_by(stage, ProcessingJob.status)
+        .all()
+    )
+    counts = {
+        STAGE_TRANSCRIBE: {"pending": 0, "running": 0},
+        STAGE_LLM: {"pending": 0, "running": 0},
+    }
+    for stage_name, status, count in rows:
+        counts.setdefault(stage_name, {"pending": 0, "running": 0})[status] = count
+    return counts
+
+
 @lane_bp.route("/api/lanes/status", methods=["GET"])
 def lane_status() -> ResponseReturnValue:
     settings = load_lane_settings()
@@ -56,6 +76,7 @@ def lane_status() -> ResponseReturnValue:
             "month_cloud_jobs": int(usage_count or 0),
             "cloud_concurrency": DEFAULTS.CLOUD_LANE_CONCURRENCY,
             "queues": _queue_counts(),
+            "stages": _stage_counts(),
         }
     )
 

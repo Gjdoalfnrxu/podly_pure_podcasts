@@ -13,6 +13,11 @@ from typing import Any
 logger = logging.getLogger(__name__)
 
 
+class LLMSlotTimeoutError(RuntimeError):
+    """No LLM call slot freed up in time. Nothing was sent to the model, so the
+    call is safe to retry; it is not a failure of the request itself."""
+
+
 class LLMConcurrencyLimiter:
     """Controls the number of concurrent LLM API calls using a semaphore."""
 
@@ -71,42 +76,79 @@ class LLMConcurrencyLimiter:
         """Get the number of currently active LLM calls."""
         return self.max_concurrent_calls - self._semaphore._value
 
+    def acquire_blocking(self, log_every: float) -> float:
+        """Wait for a slot however long it takes; returns seconds waited.
+
+        A waiter must never give up: the caller would lose that LLM call (and
+        with it the chunk's ad detection). Logs every ``log_every`` seconds.
+        """
+        waited = 0.0
+        while not self._semaphore.acquire(timeout=log_every):
+            waited += log_every
+            logger.warning(
+                "Still waiting for an LLM concurrency slot after %.0fs "
+                "(%d of %d in use)",
+                waited,
+                self.get_active_calls(),
+                self.max_concurrent_calls,
+            )
+        return waited
+
 
 # Global concurrency limiter instance
 _CONCURRENCY_LIMITER: LLMConcurrencyLimiter | None = None
+_CONCURRENCY_LIMITER_LOCK = threading.Lock()
 
 
 def get_concurrency_limiter(max_concurrent_calls: int = 3) -> LLMConcurrencyLimiter:
-    """Get or create the global concurrency limiter instance."""
+    """Get or create the global concurrency limiter instance.
+
+    Locked: several LLM-stage workers build their AdClassifier at the same
+    moment, and each must get the same semaphore or the cap is exceeded.
+    """
     global _CONCURRENCY_LIMITER
-    if (
-        _CONCURRENCY_LIMITER is None
-        or _CONCURRENCY_LIMITER.max_concurrent_calls != max_concurrent_calls
-    ):
-        _CONCURRENCY_LIMITER = LLMConcurrencyLimiter(max_concurrent_calls)
-    return _CONCURRENCY_LIMITER
+    with _CONCURRENCY_LIMITER_LOCK:
+        if (
+            _CONCURRENCY_LIMITER is None
+            or _CONCURRENCY_LIMITER.max_concurrent_calls != max_concurrent_calls
+        ):
+            _CONCURRENCY_LIMITER = LLMConcurrencyLimiter(max_concurrent_calls)
+        return _CONCURRENCY_LIMITER
 
 
 class ConcurrencyContext:
     """Context manager for controlling LLM API call concurrency."""
 
-    def __init__(self, limiter: LLMConcurrencyLimiter, timeout: float | None = None):
+    def __init__(
+        self,
+        limiter: LLMConcurrencyLimiter,
+        timeout: float | None = None,
+        *,
+        block: bool = False,
+    ):
         """
         Initialize the context manager.
 
         Args:
             limiter: The concurrency limiter to use
-            timeout: Maximum time to wait for a slot
+            timeout: Maximum time to wait for a slot; with ``block`` it is only
+                the interval between "still waiting" log lines
+            block: Wait until a slot is free instead of raising on timeout
         """
         self.limiter = limiter
         self.timeout = timeout
+        self.block = block
         self.acquired = False
 
     def __enter__(self) -> "ConcurrencyContext":
         """Acquire a concurrency slot."""
+        if self.block and self.timeout is not None:
+            self.limiter.acquire_blocking(log_every=self.timeout)
+            self.acquired = True
+            return self
         self.acquired = self.limiter.acquire(timeout=self.timeout)
         if not self.acquired:
-            raise RuntimeError(
+            raise LLMSlotTimeoutError(
                 f"Could not acquire LLM concurrency slot within {self.timeout}s"
             )
         return self

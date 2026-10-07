@@ -20,6 +20,7 @@ from app.extensions import db as _db
 from app.lanes import LANE_CLOUD, LANE_LOCAL
 from app.models import Post, ProcessingJob
 from app.pipeline import AUDIO_CUT_SLOTS, STAGE_LLM, STAGE_TRANSCRIBE, PipelineSettings
+from app.pipeline_recovery import hand_off, requeue_orphans
 from app.writer.client import writer_client
 from podcast_processor.podcast_processor import (
     NeedsTranscription,
@@ -72,20 +73,21 @@ class _CloudSetupFailed:
         raise CloudLaneFallback(self.fallback_reason)
 
 
-def _warn_if_llm_calls_capped(settings: PipelineSettings) -> None:
-    """LLM_MAX_CONCURRENT_CALLS is one process-wide semaphore shared by all LLM
-    stage workers; below the worker count it serialises their calls."""
+def configured_llm_call_limit() -> int:
+    """LLM_MAX_CONCURRENT_CALLS from the runtime config (0 = no limit)."""
     from app.runtime_config import config
 
-    calls = int(getattr(config, "llm_max_concurrent_calls", 0) or 0)
-    if 0 < calls < settings.llm_workers:
-        logger.warning(
-            "[PIPELINE] LLM_MAX_CONCURRENT_CALLS=%d is below PODLY_LLM_WORKERS=%d: "
-            "only %d LLM calls run at once across all episodes",
-            calls,
-            settings.llm_workers,
-            calls,
-        )
+    return int(getattr(config, "llm_max_concurrent_calls", 0) or 0)
+
+
+def effective_llm_workers(llm_workers: int, llm_call_limit: int) -> int:
+    """LLM-stage threads to run: never more than the process-wide LLM call
+    limit, so no episode's chunk ever has to queue behind another episode for
+    the shared slot. (Waiters block rather than drop the chunk, see
+    AdClassifier._call_model, but extra threads would only sit waiting.)"""
+    if llm_call_limit <= 0:
+        return llm_workers
+    return min(llm_workers, llm_call_limit)
 
 
 @dataclass
@@ -112,8 +114,10 @@ class PipelineWorkers:
         get_run_id: Callable[[], str | None],
         status_manager: ProcessingStatusManager,
         processor_factory: ProcessorFactory = default_processor_factory,
+        llm_call_limit: Callable[[], int] = configured_llm_call_limit,
     ) -> None:
         self.settings = settings
+        self._llm_call_limit = llm_call_limit
         self._app_context = app_context
         self._get_run_id = get_run_id
         self._status_manager = status_manager
@@ -124,6 +128,10 @@ class PipelineWorkers:
         # the in-process writer fallback used by tests.
         self._claim_lock = threading.Lock()
         self._inflight: set[str] = set()
+        # (stage, lane) pools that may hold a running job no thread owns: a
+        # dequeue whose reply was lost, or a job whose hand-off and fail
+        # writes both failed. Swept under _claim_lock before the next claim.
+        self._needs_orphan_sweep: set[tuple[str, str]] = set()
         self.pools = [
             StagePool(STAGE_TRANSCRIBE, LANE_LOCAL, settings.transcribe_workers),
             StagePool(STAGE_TRANSCRIBE, LANE_CLOUD, settings.cloud_workers),
@@ -133,7 +141,7 @@ class PipelineWorkers:
     # ------------------------------------------------------------ lifecycle
     def start(self) -> None:
         AUDIO_CUT_SLOTS.reset(self.settings.audio_cut_concurrency)
-        _warn_if_llm_calls_capped(self.settings)
+        self._cap_llm_pool()
         for pool in self.pools:
             for i in range(pool.size):
                 thread = threading.Thread(
@@ -149,9 +157,26 @@ class PipelineWorkers:
             "audio-cut=%d",
             self.settings.transcribe_workers,
             self.settings.cloud_workers,
-            self.settings.llm_workers,
+            self._llm_pool.size,
             self.settings.audio_cut_concurrency,
         )
+
+    @property
+    def _llm_pool(self) -> StagePool:
+        return next(p for p in self.pools if p.stage == STAGE_LLM)
+
+    def _cap_llm_pool(self) -> None:
+        calls = self._llm_call_limit()
+        size = effective_llm_workers(self.settings.llm_workers, calls)
+        if size < self.settings.llm_workers:
+            logger.warning(
+                "[PIPELINE] LLM_MAX_CONCURRENT_CALLS=%d is below PODLY_LLM_WORKERS=%d: "
+                "running %d LLM-stage worker(s)",
+                calls,
+                self.settings.llm_workers,
+                size,
+            )
+        self._llm_pool.size = size
 
     def stop(self, timeout: float = 5.0) -> None:
         self._stop_event.set()
@@ -192,6 +217,8 @@ class PipelineWorkers:
     def claim(self, pool: StagePool) -> tuple[str, str] | None:
         """Claim the next job for ``pool`` and mark its post in flight."""
         with self._claim_lock, self._app_context():
+            if not self._sweep_orphans(pool):
+                return None
             try:
                 result = writer_client.action(
                     "dequeue_job",
@@ -205,7 +232,10 @@ class PipelineWorkers:
                     wait=True,
                 )
             except Exception as exc:  # noqa: BLE001
+                # The writer may still run the dequeue after we gave up on the
+                # reply, leaving a running job with no thread: sweep first.
                 logger.error("Error dequeuing job for %s: %s", pool.name, exc)
+                self._needs_orphan_sweep.add((pool.stage, pool.lane))
                 return None
             if not (result and result.success and result.data):
                 return None
@@ -221,6 +251,17 @@ class PipelineWorkers:
         )
         return data["job_id"], data["post_guid"]
 
+    def _sweep_orphans(self, pool: StagePool) -> bool:
+        """Caller holds _claim_lock. False if a sweep is still owed: do not
+        claim, the orphan still counts against max_running."""
+        key = (pool.stage, pool.lane)
+        if key not in self._needs_orphan_sweep:
+            return True
+        if not requeue_orphans(pool.name, pool.stage, pool.lane, self._inflight):
+            return False
+        self._needs_orphan_sweep.discard(key)
+        return True
+
     # ------------------------------------------------------------ one stage run
     def run_stage(self, job_id: str, post_guid: str, stage: str, lane: str) -> None:
         """Run one stage of a claimed job, then hand it on or let it finish.
@@ -232,14 +273,26 @@ class PipelineWorkers:
         try:
             outcome, cloud_transcriber = self._execute(job_id, post_guid, stage, lane)
             if cloud_transcriber is not None and cloud_transcriber.fallback_reason:
-                self._fall_back_to_local(job_id, cloud_transcriber.fallback_reason)
+                self._fall_back_to_local(
+                    job_id, cloud_transcriber.fallback_reason, stage, lane
+                )
             elif outcome == "transcribed":
                 self._advance(
-                    job_id, STAGE_LLM, 2, "Transcribed; waiting for ad detection", 50.0
+                    job_id,
+                    STAGE_LLM,
+                    2,
+                    "Transcribed; waiting for ad detection",
+                    50.0,
+                    (stage, lane),
                 )
             elif outcome == "needs_transcription":
                 self._advance(
-                    job_id, STAGE_TRANSCRIBE, 1, "No transcript; re-queued", 25.0
+                    job_id,
+                    STAGE_TRANSCRIBE,
+                    1,
+                    "No transcript; re-queued",
+                    25.0,
+                    (stage, lane),
                 )
         finally:
             with self._claim_lock:
@@ -347,41 +400,57 @@ class PipelineWorkers:
                 exc_info=True,
             )
 
-    def _advance(
-        self, job_id: str, stage: str, step: int, step_name: str, progress: float
-    ) -> None:
-        with self._app_context():
-            result = writer_client.action(
-                "advance_job_stage",
-                {
-                    "job_id": job_id,
-                    "stage": stage,
-                    "step": step,
-                    "step_name": step_name,
-                    "progress": progress,
-                },
-                wait=True,
-            )
-        advanced = bool(
-            result and result.success and (result.data or {}).get("advanced")
-        )
-        logger.info(
-            "[PIPELINE] job_id=%s -> stage=%s advanced=%s", job_id, stage, advanced
-        )
+    def _hand_off(
+        self, action: str, params: dict[str, Any], job_id: str, pool: tuple[str, str]
+    ) -> dict[str, Any] | None:
+        data, stuck = hand_off(self._app_context, action, params, job_id)
+        if stuck:
+            with self._claim_lock:
+                self._needs_orphan_sweep.add(pool)
+        return data
 
-    def _fall_back_to_local(self, job_id: str, reason: str) -> None:
-        with self._app_context():
-            result = writer_client.action(
-                "requeue_job_local",
-                {"job_id": job_id, "reason": f"cloud fallback: {reason}"[:500]},
-                wait=True,
-            )
-        requeued = bool(
-            result and result.success and (result.data or {}).get("requeued")
-        )
-        logger.warning(
-            "[LANE] cloud job %s fell back to local (%s), requeued=%s",
+    def _advance(
+        self,
+        job_id: str,
+        stage: str,
+        step: int,
+        step_name: str,
+        progress: float,
+        pool: tuple[str, str],
+    ) -> None:
+        data = self._hand_off(
+            "advance_job_stage",
+            {
+                "job_id": job_id,
+                "stage": stage,
+                "step": step,
+                "step_name": step_name,
+                "progress": progress,
+            },
             job_id,
-            reason,
-            requeued,
+            pool,
         )
+        if data is not None:
+            logger.info(
+                "[PIPELINE] job_id=%s -> stage=%s advanced=%s",
+                job_id,
+                stage,
+                bool(data.get("advanced")),
+            )
+
+    def _fall_back_to_local(
+        self, job_id: str, reason: str, stage: str, lane: str
+    ) -> None:
+        data = self._hand_off(
+            "requeue_job_local",
+            {"job_id": job_id, "reason": f"cloud fallback: {reason}"[:500]},
+            job_id,
+            (stage, lane),
+        )
+        if data is not None:
+            logger.warning(
+                "[LANE] cloud job %s fell back to local (%s), requeued=%s",
+                job_id,
+                reason,
+                bool(data.get("requeued")),
+            )
