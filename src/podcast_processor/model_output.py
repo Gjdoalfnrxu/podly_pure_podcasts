@@ -128,6 +128,11 @@ def _merge_duplicate_ad_segments(text: str) -> str:
 def clean_and_parse_model_output(model_output: str) -> AdSegmentPredictionList:
     start_marker, end_marker = "{", "}"
 
+    # Reasoning models served without a reasoning parser put their thinking
+    # (which may contain braces) before the answer.
+    if "</think>" in model_output:
+        model_output = model_output.rsplit("</think>", 1)[1]
+
     assert model_output.count(start_marker) >= 1, (
         f"No opening brace found in: {model_output[:200]}"
     )

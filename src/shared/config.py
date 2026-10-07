@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field, model_validator
 
@@ -79,6 +79,14 @@ class Config(BaseModel):
     llm_max_concurrent_calls: int = Field(
         default=DEFAULTS.LLM_DEFAULT_MAX_CONCURRENT_CALLS,
         description="Maximum concurrent LLM calls to prevent rate limiting",
+    )
+    llm_extra_body: dict[str, Any] | None = Field(
+        default=None,
+        description=(
+            "Extra JSON merged into the LLM request body (env LLM_EXTRA_BODY), e.g. "
+            '{"chat_template_kwargs": {"enable_thinking": false}} for Qwen3-style '
+            "models on vLLM"
+        ),
     )
     llm_max_retry_attempts: int = Field(
         default=DEFAULTS.LLM_DEFAULT_MAX_RETRY_ATTEMPTS,
