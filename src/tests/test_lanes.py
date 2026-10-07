@@ -6,10 +6,12 @@ action functions and commits), so budget accounting is the production code.
 
 from __future__ import annotations
 
+import dataclasses
 import threading
 from datetime import UTC, datetime
 from pathlib import Path
 from types import SimpleNamespace
+from typing import Any
 from unittest import mock
 
 import pytest
@@ -35,19 +37,27 @@ AUDIO = Path(__file__).parent / "data" / "count_0_99.mp3"  # 66.048 s
 AUDIO_SECONDS = 66.048
 
 
-def _settings(**overrides) -> LaneSettings:
-    base = {
-        "enabled": True,
-        "api_key": "test-key",
-        "base_url": "http://stub.invalid/v1",
-        "model": "whisper-large-v3-turbo",
-        "language": "en",
-        "usd_per_hour": 0.04,
-        "monthly_cap_usd": 1.0,
-        "max_episode_minutes": None,
-    }
-    base.update(overrides)
-    return LaneSettings(**base)
+_BASE_SETTINGS = LaneSettings(
+    enabled=True,
+    api_key="test-key",
+    base_url="http://stub.invalid/v1",
+    model="whisper-large-v3-turbo",
+    language="en",
+    usd_per_hour=0.04,
+    monthly_cap_usd=1.0,
+    max_episode_minutes=None,
+)
+
+
+def _settings(**overrides: Any) -> LaneSettings:
+    return dataclasses.replace(_BASE_SETTINGS, **overrides)
+
+
+def _job_row(job_id: str) -> ProcessingJob:
+    db.session.expire_all()
+    job = db.session.get(ProcessingJob, job_id)
+    assert job is not None
+    return job
 
 
 def _act(name: str, **params):
@@ -151,6 +161,7 @@ def test_failed_call_counts_only_billed_chunks(app):
         )
         assert month_spent_usd() == 0.0
         row = db.session.get(CloudLaneUsage, usage["usage_id"])
+        assert row is not None
         assert row.status == "failed"
         assert row.cost_usd == 0.0
 
@@ -301,7 +312,7 @@ def test_cloud_transcriber_failure_settles_and_falls_back(app, tmp_path):
         assert row.status == "failed"
         assert row.cost_usd == 0.0
         assert "503" in (row.error or "")
-        assert t.fallback_reason.startswith("cloud transcription failed")
+        assert (t.fallback_reason or "").startswith("cloud transcription failed")
 
 
 # ------------------------------------------------------------------ jobs manager
@@ -343,27 +354,23 @@ def test_assign_lane_routes_manual_to_cloud_and_never_downgrades(app, manager):
         job_id = _post_with_job()
 
         manager._assign_lane("g1", job_id, manual=False)
-        db.session.expire_all()
-        assert db.session.get(ProcessingJob, job_id).lane == LANE_LOCAL
+        assert _job_row(job_id).lane == LANE_LOCAL
 
         manager._assign_lane("g1", job_id, manual=True)
-        db.session.expire_all()
-        job = db.session.get(ProcessingJob, job_id)
+        job = _job_row(job_id)
         assert job.lane == LANE_CLOUD
-        assert "est. $0.0200" in job.lane_reason  # 30 min at $0.04/h
+        assert "est. $0.0200" in (job.lane_reason or "")  # 30 min at $0.04/h
 
         # A later automatic trigger for the same pending job keeps it in cloud.
         manager._assign_lane("g1", job_id, manual=False)
-        db.session.expire_all()
-        assert db.session.get(ProcessingJob, job_id).lane == LANE_CLOUD
+        assert _job_row(job_id).lane == LANE_CLOUD
 
 
 def test_assign_lane_keeps_manual_local_when_cloud_disabled(app, manager):
     with app.app_context():
         job_id = _post_with_job()  # no settings row -> disabled
         manager._assign_lane("g1", job_id, manual=True)
-        db.session.expire_all()
-        job = db.session.get(ProcessingJob, job_id)
+        job = _job_row(job_id)
         assert job.lane == LANE_LOCAL
         assert job.lane_reason == "cloud lane disabled"
 
@@ -397,11 +404,10 @@ def test_failed_cloud_job_is_requeued_locally(app, manager):
         ):
             manager._process_job(job_id, "g1", lane=LANE_CLOUD)
 
-        db.session.expire_all()
-        job = db.session.get(ProcessingJob, job_id)
+        job = _job_row(job_id)
         assert job.status == "pending"
         assert job.lane == LANE_LOCAL
-        assert "cloud fallback" in job.lane_reason
+        assert "cloud fallback" in (job.lane_reason or "")
         assert job.error_message is None
         manager._work_event.set.assert_called()  # local worker woken
 
