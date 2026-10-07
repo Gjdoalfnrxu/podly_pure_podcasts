@@ -19,6 +19,7 @@ from .transcribe import (
     TestWhisperTranscriber,
     Transcriber,
 )
+from .transcript_gap_fill import WhisperGapFiller, gap_fill_settings_from_config
 
 
 class TranscriptionManager:
@@ -32,6 +33,7 @@ class TranscriptionManager:
         segment_query: Any | None = None,
         db_session: Any | None = None,
         transcriber: Transcriber | None = None,
+        gap_filler: WhisperGapFiller | None = None,
     ):
         self.logger = logger
         self.config = config
@@ -41,6 +43,7 @@ class TranscriptionManager:
         self._segment_query_provided = segment_query is not None
         self.segment_query = segment_query or TranscriptSegment.query
         self.db_session = db_session or db.session
+        self._gap_filler = gap_filler
 
     def _create_transcriber(self) -> Transcriber:
         """Create the appropriate transcriber based on configuration."""
@@ -58,6 +61,15 @@ class TranscriptionManager:
         if isinstance(self.config.whisper, GroqWhisperConfig):
             return GroqWhisperTranscriber(self.logger, self.config.whisper)
         raise ValueError(f"unhandled whisper config {self.config.whisper}")
+
+    def _get_gap_filler(self) -> WhisperGapFiller | None:
+        """Gap-filler for this run; settings are read per run so config edits apply."""
+        if self._gap_filler is not None:
+            return self._gap_filler
+        settings = gap_fill_settings_from_config(self.config)
+        if settings is None:
+            return None
+        return WhisperGapFiller(self.logger, settings)
 
     def _check_existing_transcription(
         self, post: Post
@@ -186,6 +198,12 @@ class TranscriptionManager:
             self.logger.info(
                 f"[TRANSCRIBE_COMPLETE] Transcription by {self.transcriber.model_name} for post {post.id} resulted in {len(pydantic_segments)} segments."
             )
+
+            gap_filler = self._get_gap_filler()
+            if gap_filler is not None:
+                pydantic_segments = gap_filler.fill(
+                    post.id, post.unprocessed_audio_path, pydantic_segments or []
+                )
 
             segments_payload = [
                 {

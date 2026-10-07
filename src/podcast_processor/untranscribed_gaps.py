@@ -23,7 +23,11 @@ import logging
 from collections.abc import Iterable, Sequence
 from typing import Any, NamedTuple
 
-MIN_UNTRANSCRIBED_GAP_SECONDS = 5.0
+from shared import defaults as DEFAULTS
+
+# Same as the shortest stretch transcript gap-fill retries: whatever gap-fill
+# leaves of a stretch it tried (partly filled, or nothing heard) still counts.
+MIN_UNTRANSCRIBED_GAP_SECONDS = DEFAULTS.WHISPER_GAP_FILL_MIN_GAP_SECONDS
 # Groq can return zero segments for a whole 6 MB chunk (~6 min). A gap longer
 # than these caps is more likely a transcription dropout than an ad, so it is
 # not extended at all (and a warning is logged).

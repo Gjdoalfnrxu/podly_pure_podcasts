@@ -159,6 +159,35 @@ class Config(BaseModel):
         deprecated=True,
         description="deprecated in favor of [Remote|Local]WhisperConfig",
     )
+    whisper_gap_fill_enabled: bool = Field(
+        default=DEFAULTS.WHISPER_GAP_FILL_ENABLED,
+        description=(
+            "Re-transcribe untranscribed stretches with local whisper after the "
+            "primary transcription (env WHISPER_GAP_FILL_ENABLED)"
+        ),
+    )
+    whisper_gap_fill_min_gap_seconds: float = Field(
+        default=DEFAULTS.WHISPER_GAP_FILL_MIN_GAP_SECONDS,
+        gt=0,
+        description="Shortest untranscribed stretch to re-transcribe (env WHISPER_GAP_FILL_MIN_GAP_SECONDS)",
+    )
+    whisper_gap_fill_padding_seconds: float = Field(
+        default=DEFAULTS.WHISPER_GAP_FILL_PADDING_SECONDS,
+        ge=0,
+        description="Audio added each side of a gap before re-transcribing (env WHISPER_GAP_FILL_PADDING_SECONDS)",
+    )
+    whisper_gap_fill_max_window_seconds: float = Field(
+        default=DEFAULTS.WHISPER_GAP_FILL_MAX_WINDOW_SECONDS,
+        gt=0,
+        description="Longest clip per re-transcription; longer gaps are chunked (env WHISPER_GAP_FILL_MAX_WINDOW_SECONDS)",
+    )
+    whisper_gap_fill_model: str | None = Field(
+        default=None,
+        description=(
+            "Local whisper model for gap-fill (env WHISPER_GAP_FILL_MODEL); "
+            "defaults to the effective local whisper model, else base.en"
+        ),
+    )
     automatically_whitelist_new_episodes: bool = (
         DEFAULTS.APP_AUTOMATICALLY_WHITELIST_NEW_EPISODES
     )

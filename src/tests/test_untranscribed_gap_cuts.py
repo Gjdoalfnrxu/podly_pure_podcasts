@@ -17,10 +17,13 @@ from flask import Flask
 from app.extensions import db
 from app.models import Feed, Identification, ModelCall, Post, TranscriptSegment
 from podcast_processor.audio_processor import AudioProcessor
+from podcast_processor.transcript_gap_fill import GapFillSettings
 from podcast_processor.untranscribed_gaps import (
     MAX_EDGE_UNTRANSCRIBED_GAP_SECONDS,
     MAX_INTERIOR_UNTRANSCRIBED_GAP_SECONDS,
+    MIN_UNTRANSCRIBED_GAP_SECONDS,
 )
+from shared import defaults as DEFAULTS
 from shared.config import Config
 
 POST_1025_FIXTURE = (
@@ -171,12 +174,12 @@ def test_gap_shorter_than_threshold_is_untouched(
         post = _seed_post(
             [
                 (0.0, 100.0, "content"),
-                (104.5, 125.0, "ad"),  # 4.5s gap, below the 5s threshold
+                (102.5, 125.0, "ad"),  # 2.5s gap, below the 3s threshold
                 (125.0, 145.0, "ad"),
                 (145.0, 400.0, "content"),
             ]
         )
-        assert _cut_windows(test_config, post, duration_s=400.0) == [(104500, 145000)]
+        assert _cut_windows(test_config, post, duration_s=400.0) == [(102500, 145000)]
 
 
 def test_gap_at_threshold_is_extended(app: Flask, test_config: Config) -> None:
@@ -184,12 +187,38 @@ def test_gap_at_threshold_is_extended(app: Flask, test_config: Config) -> None:
         post = _seed_post(
             [
                 (0.0, 100.0, "content"),
-                (105.0, 125.0, "ad"),  # exactly 5s gap
+                (103.0, 125.0, "ad"),  # exactly 3s gap
                 (125.0, 145.0, "ad"),
                 (145.0, 400.0, "content"),
             ]
         )
         assert _cut_windows(test_config, post, duration_s=400.0) == [(100000, 145000)]
+
+
+def test_threshold_matches_gap_fill_retry_threshold() -> None:
+    """Gap-fill retries every stretch >= its threshold; what it leaves of one
+    (part filled, or nothing heard) must still be cut beside an ad."""
+    assert MIN_UNTRANSCRIBED_GAP_SECONDS == DEFAULTS.WHISPER_GAP_FILL_MIN_GAP_SECONDS
+    assert GapFillSettings("base.en").min_gap_seconds == MIN_UNTRANSCRIBED_GAP_SECONDS
+
+
+def test_gap_left_after_gap_fill_fragment_is_still_cut(
+    app: Flask, test_config: Config
+) -> None:
+    """Post 1025 end: a 5.04s gap before the BNZ ad, of which gap-fill could
+    fill the first 1s with a mis-heard fragment. The 4.04s left is still cut."""
+    with app.app_context():
+        post = _seed_post(
+            [
+                (5000.0, 5102.6, "content"),
+                (5102.6, 5103.6, None),  # recovered " Yes.", unclassified
+                (5107.64, 5150.0, "ad"),
+                (5150.0, 5264.0, "content"),
+            ]
+        )
+        assert _cut_windows(test_config, post, duration_s=5264.729) == [
+            (5103600, 5150000)
+        ]
 
 
 def test_gap_after_ad_extends_forward_to_next_segment(
