@@ -285,3 +285,18 @@ def test_fetch_feed_bytes_times_out_on_silent_server():
         _assert_times_out_fast(f"{server.base}/feed.xml")
     finally:
         server.close()
+
+
+@pytest.mark.parametrize(
+    ("error", "reported"),
+    [
+        (requests.exceptions.ConnectTimeout, "after 10s"),
+        (requests.exceptions.ReadTimeout, "after 30s"),
+    ],
+)
+def test_fetch_feed_bytes_reports_the_limit_that_tripped(error, reported):
+    with (
+        mock.patch("app.feed_fetch._get", side_effect=error("boom")),
+        pytest.raises(FeedFetchTimeout, match=reported),
+    ):
+        fetch_feed_bytes("http://example.invalid/rss", 30)

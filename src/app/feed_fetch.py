@@ -23,6 +23,10 @@ from urllib3.connectionpool import HTTPConnectionPool, HTTPSConnectionPool
 
 MAX_FEED_BYTES = 64 * 1024 * 1024
 MAX_REDIRECTS = 5
+# Wall-clock limit for feed fetches that must not hang (OPML import, background
+# refreshes).
+FEED_FETCH_TIMEOUT_SECONDS = 30.0
+MAX_CONNECT_TIMEOUT_SECONDS = 10.0
 
 
 class FeedFetchTimeout(TimeoutError):
@@ -135,7 +139,7 @@ def _get(url: str, timeout: float, watch: _SocketWatch) -> FetchedFeed:
         _watched_session(watch) as session,
         session.get(
             url,
-            timeout=(min(10.0, timeout), timeout),
+            timeout=(_connect_timeout(timeout), timeout),
             headers={"User-Agent": feedparser.USER_AGENT},
             stream=True,
         ) as resp,
@@ -153,6 +157,10 @@ def _get(url: str, timeout: float, watch: _SocketWatch) -> FetchedFeed:
             final_url=resp.url,
             headers={k.lower(): v for k, v in resp.headers.items()},
         )
+
+
+def _connect_timeout(timeout: float) -> float:
+    return min(MAX_CONNECT_TIMEOUT_SECONDS, timeout)
 
 
 def fetch_feed_bytes(url: str, timeout: float) -> FetchedFeed:
@@ -175,7 +183,11 @@ def fetch_feed_bytes(url: str, timeout: float) -> FetchedFeed:
     if "error" in outcome:
         error = outcome["error"]
         # A socket timeout can fire just before the wall-clock join does;
-        # report both the same way.
+        # report both the same way, with the limit that actually tripped.
+        if isinstance(error, requests.exceptions.ConnectTimeout):
+            raise FeedFetchTimeout(
+                f"Connect timed out after {_connect_timeout(timeout):g}s fetching {url}"
+            ) from error
         if isinstance(error, requests.exceptions.Timeout):
             raise FeedFetchTimeout(
                 f"Timed out after {timeout:g}s fetching {url}"

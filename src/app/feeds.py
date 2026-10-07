@@ -346,7 +346,11 @@ def fetch_feed(url: str, *, timeout: float | None = None) -> feedparser.FeedPars
 def refresh_feed(feed: Feed, *, fetch_timeout: float | None = None) -> None:
     logger.info(f"Refreshing feed with ID: {feed.id}")
     feed_data = fetch_feed(feed.rss_url, timeout=fetch_timeout)
+    apply_feed_refresh(feed, feed_data)
 
+
+def apply_feed_refresh(feed: Feed, feed_data: feedparser.FeedParserDict) -> None:
+    """Write already-fetched ``feed_data`` into ``feed`` (no network I/O)."""
     updates = {}
     image_info = feed_data.feed.get("image")
     if image_info and "href" in image_info:
