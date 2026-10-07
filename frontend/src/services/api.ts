@@ -101,6 +101,20 @@ export const feedsApi = {
     return response.data;
   },
 
+  // Download the user's subscriptions as OPML (protected, ad-free feed URLs).
+  exportOpml: async (): Promise<void> => {
+    const response = await api.get('/api/feeds/export-opml', { responseType: 'blob' });
+    const blob = new Blob([response.data], { type: 'text/x-opml' });
+    const url = window.URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = 'podly-feeds.opml';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    window.URL.revokeObjectURL(url);
+  },
+
   getOpmlImport: async (importId: string): Promise<OpmlImportResult> => {
     const response = await api.get(`/api/feeds/import-opml/${importId}`);
     return response.data;

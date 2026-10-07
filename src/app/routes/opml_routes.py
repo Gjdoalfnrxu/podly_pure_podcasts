@@ -1,4 +1,4 @@
-"""OPML subscription import.
+"""OPML subscription import and export (``GET /api/feeds/export-opml``).
 
 ``POST /api/feeds/import-opml`` accepts a multipart upload (field ``file``) or
 a raw XML body, validates and parses it synchronously, then runs the import in
@@ -16,11 +16,13 @@ Options (form field or query string):
 
 from typing import IO
 
-from flask import Blueprint, current_app, jsonify, request
+from flask import Blueprint, Response, current_app, jsonify, request
 from flask.typing import ResponseReturnValue
 
-from app.opml import OpmlParseError, parse_opml
+from app.models import Feed, UserFeed
+from app.opml import OpmlFeed, OpmlParseError, build_opml, parse_opml
 from app.opml_import import ImportAlreadyRunningError, get_import, start_import
+from app.routes.feed_links import protected_feed_url, public_feed_url
 from app.routes.feed_routes import _require_user_or_error
 from app.routes.feed_utils import fix_url
 
@@ -144,3 +146,41 @@ def import_opml_status(import_id: str) -> ResponseReturnValue:
     if job is None or job.user_id != getattr(user, "id", None):
         return jsonify({"error": "Import not found."}), 404
     return jsonify(job.to_dict())
+
+
+@opml_bp.route("/api/feeds/export-opml", methods=["GET"])
+def export_opml() -> ResponseReturnValue:
+    """The user's subscriptions as OPML, each pointing at the same ad-free URL
+    "Copy protected feed" gives (tokens reused, not re-minted per export)."""
+    settings = current_app.config.get("AUTH_SETTINGS")
+    if settings and settings.require_auth:
+        user, error = _require_user_or_error()
+        if error:
+            return error
+        if user is None:
+            return jsonify({"error": "Authentication required."}), 401
+        feeds = (
+            Feed.query.join(UserFeed, UserFeed.feed_id == Feed.id)
+            .filter(UserFeed.user_id == user.id)
+            .order_by(Feed.title)
+            .all()
+        )
+        try:
+            entries = [
+                OpmlFeed(url=protected_feed_url(user.id, f.id).url, title=f.title)
+                for f in feeds
+            ]
+        except RuntimeError as exc:
+            return jsonify({"error": str(exc)}), 500
+    else:
+        feeds = Feed.query.order_by(Feed.title).all()
+        entries = [OpmlFeed(url=public_feed_url(f.id), title=f.title) for f in feeds]
+
+    return Response(
+        build_opml(entries),
+        mimetype="text/x-opml",
+        headers={
+            "Content-Disposition": 'attachment; filename="podly-feeds.opml"',
+            "Cache-Control": "no-store",
+        },
+    )
