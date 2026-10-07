@@ -2,8 +2,9 @@ import datetime
 import logging
 import secrets
 import time
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
-from threading import Lock, Thread
+from threading import Lock
 from typing import Any, cast
 from urllib.parse import urlencode
 
@@ -74,6 +75,17 @@ _MISSING = object()
 _BACKGROUND_REFRESH_LOCK = Lock()
 _BACKGROUND_REFRESH_LAST_KICKOFF: dict[int, float] = {}
 _AUTO_REFRESH_COOLDOWN_SECONDS = 60.0
+
+# Background single-feed refreshes run on a small fixed pool. Each refresh holds
+# a pooled DB connection for its whole run (including the upstream RSS fetch),
+# so one thread per feed let a reader polling N feeds check out N connections
+# and starve request threads (QueuePool size 5 + overflow 5). Feeds already
+# queued or running are coalesced.
+_BACKGROUND_REFRESH_WORKERS = 2
+_BACKGROUND_REFRESH_EXECUTOR = ThreadPoolExecutor(
+    max_workers=_BACKGROUND_REFRESH_WORKERS, thread_name_prefix="feed-refresh"
+)
+_BACKGROUND_REFRESH_PENDING: set[int] = set()
 
 
 def _parse_optional_feed_bool(
@@ -342,13 +354,22 @@ def _should_kickoff_async_refresh(feed_id: int) -> bool:
         return True
 
 
-def _spawn_async_refresh(app: Flask, feed_id: int) -> None:
-    Thread(
-        target=_refresh_feed_background,
-        args=(app, feed_id),
-        daemon=True,
-        name=f"feed-auto-refresh-{feed_id}",
-    ).start()
+def _spawn_async_refresh(app: Flask, feed_id: int) -> bool:
+    """Queue a background refresh; False if one is already queued/running."""
+    with _BACKGROUND_REFRESH_LOCK:
+        if feed_id in _BACKGROUND_REFRESH_PENDING:
+            return False
+        _BACKGROUND_REFRESH_PENDING.add(feed_id)
+    _BACKGROUND_REFRESH_EXECUTOR.submit(_run_queued_refresh, app, feed_id)
+    return True
+
+
+def _run_queued_refresh(app: Flask, feed_id: int) -> None:
+    try:
+        _refresh_feed_background(app, feed_id)
+    finally:
+        with _BACKGROUND_REFRESH_LOCK:
+            _BACKGROUND_REFRESH_PENDING.discard(feed_id)
 
 
 @feed_bp.route("/feed/<int:f_id>", methods=["GET"])
@@ -440,12 +461,7 @@ def refresh_feed_endpoint(f_id: int) -> ResponseReturnValue:
     feed_title = feed.title
     app = cast(Any, current_app)._get_current_object()
 
-    Thread(
-        target=_refresh_feed_background,
-        args=(app, f_id),
-        daemon=True,
-        name=f"feed-refresh-{f_id}",
-    ).start()
+    _spawn_async_refresh(app, f_id)
 
     return (
         jsonify(
