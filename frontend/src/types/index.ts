@@ -16,6 +16,13 @@ export interface Feed {
   auto_whitelist_new_episodes_override?: boolean | null;
 }
 
+export interface OpmlImportResult {
+  added: string[];
+  skipped_existing: string[];
+  failed: { url: string; error: string }[];
+  process_latest: boolean;
+}
+
 export interface FeedSettingsUpdate {
   ad_detection_strategy?: 'llm' | 'chapter' | 'chapter_insert';
   chapter_filter_strings?: string | null;

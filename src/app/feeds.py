@@ -434,7 +434,7 @@ number_of_episodes_to_whitelist_from_archive_of_new_feed setting: {entry.title}"
     logger.info(f"Feed with ID: {feed.id} refreshed")
 
 
-def add_or_refresh_feed(url: str) -> Feed:
+def add_or_refresh_feed(url: str, *, whitelist_archive: bool = True) -> Feed:
     feed_data = fetch_feed(url)
     if "title" not in feed_data.feed:
         logger.error("Invalid feed URL")
@@ -444,11 +444,15 @@ def add_or_refresh_feed(url: str) -> Feed:
     if feed:
         refresh_feed(feed)
     else:
-        feed = add_feed(feed_data)
+        feed = add_feed(feed_data, whitelist_archive=whitelist_archive)
     return feed
 
 
-def add_feed(feed_data: feedparser.FeedParserDict) -> Feed:
+def add_feed(
+    feed_data: feedparser.FeedParserDict, *, whitelist_archive: bool = True
+) -> Feed:
+    """Store a new feed. ``whitelist_archive=False`` stores every existing
+    episode un-whitelisted, so the writer creates no processing jobs for them."""
     logger.info(f"Storing feed: {feed_data.feed.title}")
     try:
         feed_dict = {
@@ -476,7 +480,9 @@ def add_feed(feed_data: feedparser.FeedParserDict) -> Feed:
                 p.whitelisted = False
             else:
                 num_posts_added += 1
-                p.whitelisted = config.automatically_whitelist_new_episodes
+                p.whitelisted = (
+                    whitelist_archive and config.automatically_whitelist_new_episodes
+                )
 
             post_data = {
                 "guid": p.guid,

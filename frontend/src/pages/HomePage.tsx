@@ -327,6 +327,10 @@ export default function HomePage() {
                   refetch();
                   refetchBilling();
                 }}
+                onImported={() => {
+                  refetch();
+                  refetchBilling();
+                }}
                 onUpgradePlan={handleChangePlan}
                 planLimitReached={planLimitReached}
               />

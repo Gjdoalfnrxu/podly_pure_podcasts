@@ -566,6 +566,30 @@ def test_add_feed(mock_post_class, mock_writer_client, mock_feed_data, mock_db_s
         assert result == mock_feed
 
 
+@pytest.mark.parametrize("whitelist_archive", [True, False])
+@mock.patch("app.feeds.writer_client")
+def test_add_feed_whitelist_archive_flag(
+    mock_writer_client, mock_feed_data, mock_db_session, whitelist_archive
+):
+    """whitelist_archive=False must store the backlog un-whitelisted in the same
+    writer call, since the writer creates processing jobs for whitelisted posts."""
+    mock_writer_client.action.return_value = SimpleNamespace(data={"feed_id": 1})
+    mock_db_session.get.return_value = MockFeed()
+
+    with (
+        mock.patch("app.feeds.config") as mock_config,
+        mock.patch("app.feeds.make_post", side_effect=lambda *_: MockPost()),
+    ):
+        mock_config.number_of_episodes_to_whitelist_from_archive_of_new_feed = 5
+        mock_config.automatically_whitelist_new_episodes = True
+        add_feed(mock_feed_data, whitelist_archive=whitelist_archive)
+
+    name, payload = mock_writer_client.action.call_args.args[:2]
+    assert name == "add_feed"
+    assert payload["posts"]
+    assert {p["whitelisted"] for p in payload["posts"]} == {whitelist_archive}
+
+
 def test_feed_item(mock_post, app):
     # Mock request context with Host header
     headers_dict = {"Host": "podly.com:5001"}

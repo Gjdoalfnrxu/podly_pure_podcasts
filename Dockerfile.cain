@@ -1,0 +1,24 @@
+# Thin overlay on the pinned upstream 2.5.0 image: adds OPML import.
+# Only the changed backend modules and the rebuilt frontend are replaced;
+# Python deps, venv and system packages come from the upstream image as-is.
+#   docker build -f Dockerfile.cain -t podly-cain:opml .
+ARG PODLY_BASE=ghcr.io/podly-pure-podcasts/podly-pure-podcasts:2.5.0-latest-amd64@sha256:132c49601444412302ca5de50b2c1e2d72898ea28fd3fce4ce0923cb01df1f13
+
+# Same toolchain as upstream's Dockerfile frontend stage.
+FROM node:18-alpine AS frontend-build
+WORKDIR /app
+COPY frontend/package*.json ./
+RUN npm ci
+COPY frontend/ ./
+RUN npm run build && test -f dist/index.html
+
+FROM ${PODLY_BASE}
+COPY src/app/opml.py /app/src/app/opml.py
+COPY src/app/routes/__init__.py \
+     src/app/routes/feed_routes.py \
+     src/app/routes/feed_subscribe.py \
+     src/app/routes/opml_routes.py \
+     /app/src/app/routes/
+# Drop the old hashed bundles so only the rebuilt index.html + assets ship.
+RUN rm -rf /app/src/app/static/assets
+COPY --from=frontend-build /app/dist /app/src/app/static
