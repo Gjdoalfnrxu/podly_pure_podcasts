@@ -83,6 +83,13 @@ _RETRY_PASSES = 2
 # speech there (typically the tail of a sentence the clip opened on), so the
 # retry starts after it. A rejected decode leaves its stretch open for retry.
 _FRAGMENT_REASONS = frozenset({"weak fragment", "repeats neighbour"})
+# ...except a 1-2 word segment ending this soon after its clip starts, whatever
+# the drop reason. Its decode's stats say little about it: on post 1025 the
+# same "F***" tail scored no-speech 0.58 or 0.65 as the window end moved by 1s.
+_OPENING_FRAGMENT_SECONDS = 2.0
+# A retry that would re-run a window whose decode emitted something starts
+# this much later instead: whisper may have stalled on the clip's opening.
+_RETRY_NUDGE_SECONDS = 1.0
 
 
 @runtime_checkable
@@ -390,19 +397,50 @@ def split_decode(
     return out, rejected
 
 
+def _opens_window(seg: Segment, window: Window) -> bool:
+    words = len(_words(seg.text))
+    return (
+        0 < words <= _FRAGMENT_MAX_WORDS
+        and seg.end - window.start <= _OPENING_FRAGMENT_SECONDS
+    )
+
+
 def heard_span(dropped: Dropped, window: Window) -> Segment | None:
     """The time a dropped segment should count as heard for retry planning.
 
-    Only fragments count; a zero-length point (e.g. timed past the clip end)
-    would split a later retry gap into pieces too short to retry.
+    Only fragments count: a fragment-type drop anywhere, or a short opening
+    fragment whatever its reason. A zero-length point (e.g. timed past the
+    clip end) would split a later retry gap into pieces too short to retry.
     """
-    if dropped.reason not in _FRAGMENT_REASONS:
-        return None
     seg = dropped.segment
+    if dropped.reason not in _FRAGMENT_REASONS and not _opens_window(seg, window):
+        return None
     start, end = max(seg.start, window.start), min(seg.end, window.end)
     if end - start < _MIN_SEGMENT_SECONDS:
         return None
     return Segment(start=start, end=end, text=seg.text)
+
+
+def _next_window(
+    window: Window,
+    attempted: Mapping[tuple[float, float], bool],
+    min_seconds: float,
+) -> Window | None:
+    """``window``, or a later start if those bounds already ran, or None.
+
+    A rerun of a decode that heard nothing is skipped. One that emitted only
+    junk is nudged forward, so a mis-judged opening fragment cannot pin every
+    retry to the same start.
+    """
+    while True:
+        key = (round(window.start, 2), round(window.end, 2))
+        if key not in attempted:
+            return window
+        if not attempted[key]:
+            return None
+        window = window._replace(start=window.start + _RETRY_NUDGE_SECONDS)
+        if window.end - window.start < min_seconds:
+            return None
 
 
 def load_audio_window(path: str, start: float, duration: float) -> np.ndarray:
@@ -483,7 +521,8 @@ class WhisperGapFiller:
         # Not stored, but retries start after them like after kept speech.
         heard: list[Segment] = []
         drops: Counter[str] = Counter()
-        attempted: set[tuple[float, float]] = set()
+        # Window bounds already run -> whether their decode emitted anything.
+        attempted: dict[tuple[float, float], bool] = {}
         windows_run = 0
         windows_failed = 0
         seconds_run = 0.0
@@ -493,19 +532,20 @@ class WhisperGapFiller:
             # where the last emitted speech or fragment ended: a clip that
             # opens on the tail of a sentence can make whisper emit that
             # fragment and then jump the rest of its 30s window. Windows are
-            # never re-run with the same bounds, so a silent stretch costs at
-            # most two attempts.
+            # never re-run with the same bounds (see ``_next_window``), so a
+            # silent stretch costs at most two attempts.
             paddings = (s.padding_seconds, *([0.0] * _RETRY_PASSES))
             for pass_no, padding in enumerate(paddings, start=1):
                 remaining = find_gaps([*merged, *heard], duration, s.min_gap_seconds)
                 planned = plan_windows(
                     remaining, duration, padding, s.max_window_seconds
                 )
-                for window in planned:
-                    key = (round(window.start, 2), round(window.end, 2))
-                    if key in attempted:
+                for planned_window in planned:
+                    window = _next_window(planned_window, attempted, s.min_gap_seconds)
+                    if window is None:
                         continue
-                    attempted.add(key)
+                    key = (round(window.start, 2), round(window.end, 2))
+                    attempted[key] = False
                     windows_run += 1
                     seconds_run += window.end - window.start
                     # One bad window (e.g. a corrupt frame ffmpeg cannot
@@ -533,6 +573,7 @@ class WhisperGapFiller:
                             exc_info=True,
                         )
                         continue
+                    attempted[key] = bool(found or rejected)
                     merged = result.merged
                     added.extend(result.added)
                     for dropped in (*rejected, *result.dropped):

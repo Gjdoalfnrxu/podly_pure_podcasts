@@ -473,12 +473,125 @@ def test_retry_walks_past_dropped_fragment(tmp_path: Path) -> None:
 
     merged = _filler(loader).fill(1025, path, primary)
 
-    assert [(round(s.start, 1), round(s.end, 1), s.text[:3]) for s in merged] == [
-        (0.0, 9.5, "sho"),
-        (12.0, 38.0, " ~ "),
-        (40.0, 50.0, "sho"),
+    assert [(s.start, s.end, s.text) for s in merged if "~" not in s.text] == [
+        (0.0, 9.5, "show"),
+        (40.0, 50.0, "show again"),
     ]
+    recovered = [s for s in merged if "~" in s.text]
+    assert [(round(s.start, 1), round(s.end, 1)) for s in recovered] == [(12.0, 38.0)]
+    assert recovered[0].text.startswith(" ~ recovered ad speech")
     assert len(loader.model.calls) == 3
+
+
+class TailFragmentModel(StubWhisperModel):
+    """Real post 1025 (base.en): a clip opening on the tail of "as good as far
+    as" yields only that tail, then whisper seeks past the pinata read. Opened
+    1s early (padded) it reads "As good as f-"; opened on the tail, "F***",
+    whose no-speech prob is 0.58-0.65 depending on where the window ends."""
+
+    def __init__(self, tail: str, **tail_stats: float) -> None:
+        super().__init__()
+        self.tail = tail
+        self.tail_stats = tail_stats
+
+    def transcribe(self, audio: np.ndarray, **kwargs: Any) -> dict[str, Any]:
+        result = super().transcribe(audio, **kwargs)
+        first = result["segments"][:1]
+        if not first or first[0]["start"] != 0.0:
+            return result
+        if first[0]["end"] > 1.0:
+            first[0].update(text=" As good as f-", avg_logprob=-0.71)
+            first[0].update(no_speech_prob=0.62)
+        else:
+            first[0].update(text=self.tail, **self.tail_stats)
+        return {"segments": first}
+
+
+@pytest.mark.parametrize("padding", [1.0, 0.0])
+@pytest.mark.parametrize(
+    ("no_speech", "logprob"),
+    [
+        (0.58, -0.87),  # window 2292.48-2321.48: "weak fragment"
+        (0.65, -0.86),  # window 2292.48-2322.48: "likely no speech"
+    ],
+)
+def test_pinata_read_recovered_whatever_the_tail_fragment_is_classed(
+    tmp_path: Path, padding: float, no_speech: float, logprob: float
+) -> None:
+    """Review r3 Major 1: the 1-word tail at the start of the retry window is
+    speech heard whether its decode is judged a weak fragment or likely no
+    speech, so the next retry starts after it and recovers the read."""
+    path = _write_wav(
+        tmp_path / "pinata.wav", 50.0, [(0.0, 10.5), (12.0, 38.0), (40.0, 50.0)]
+    )
+    primary = [_seg(0.0, 10.0, "as good as far"), _seg(40.0, 50.0, "xero")]
+    model = TailFragmentModel(" F***", avg_logprob=logprob, no_speech_prob=no_speech)
+
+    merged = _filler(StubLoader(model), padding_seconds=padding).fill(
+        1025, path, primary
+    )
+
+    assert [(s.start, s.end, s.text) for s in merged if "~" not in s.text] == [
+        (0.0, 10.0, "as good as far"),
+        (40.0, 50.0, "xero"),
+    ]
+    recovered = [s for s in merged if "~" in s.text]
+    assert [(round(s.start, 1), round(s.end, 1)) for s in recovered] == [(12.0, 38.0)]
+    # pass 3 (padded) / pass 2 (unpadded) opens just after the tail
+    assert model.calls[-1]["seconds"] == pytest.approx(29.5, abs=0.01)
+
+
+def test_retry_nudges_past_a_rejected_opening_it_cannot_place(tmp_path: Path) -> None:
+    """A retry that would re-run identical bounds (the rejected opening was
+    too long to count as a fragment) starts a second later instead of being
+    skipped, so one mis-classed tail cannot lose the read."""
+    path = _write_wav(
+        tmp_path / "nudge.wav", 50.0, [(0.0, 10.8), (13.0, 38.0), (40.0, 50.0)]
+    )
+    primary = [_seg(0.0, 10.0, "as good as far"), _seg(40.0, 50.0, "xero")]
+    # every opening reads "As good as f-" (4 words, likely no speech)
+    model = TailFragmentModel(" As good as f-", avg_logprob=-0.71, no_speech_prob=0.62)
+
+    merged = _filler(StubLoader(model), padding_seconds=0.0).fill(1025, path, primary)
+
+    recovered = [s for s in merged if "~" in s.text]
+    assert [(round(s.start, 1), round(s.end, 1)) for s in recovered] == [(13.0, 38.0)]
+    # pass 3 retries the 3s left before the read; it hears only the tail again
+    assert [c["seconds"] for c in model.calls] == pytest.approx([30.0, 29.0, 3.0])
+
+
+@pytest.mark.parametrize(
+    ("reason", "fragment_heard", "opening_heard"),
+    [
+        # judged on the segment: heard wherever it is in the window
+        ("weak fragment", True, True),
+        ("repeats neighbour", True, True),
+        # judged on the whole decode: heard only as a short opening fragment
+        ("likely no speech", False, True),
+        ("low confidence", False, True),
+        ("repetitive", False, True),
+    ],
+)
+def test_heard_span_by_drop_reason(
+    reason: str, fragment_heard: bool, opening_heard: bool
+) -> None:
+    window = gap_fill.Window(10.0, 40.0, 10.0, 40.0)
+
+    def heard(start: float, end: float, text: str) -> bool:
+        dropped = gap_fill.Dropped(_seg(start, end, text), reason)
+        return gap_fill.heard_span(dropped, window) is not None
+
+    assert heard(20.0, 20.5, " F***") is fragment_heard
+    assert heard(10.0, 10.5, " F***") is opening_heard
+    # an opening that is not fragment-shaped: too many words, or too long
+    assert heard(10.0, 11.2, " As good as f-") is fragment_heard
+    assert heard(10.0, 40.0, " Thank you.") is fragment_heard
+
+
+def test_heard_span_ignores_wordless_opening() -> None:
+    window = gap_fill.Window(10.0, 40.0, 10.0, 40.0)
+    dropped = gap_fill.Dropped(_seg(10.0, 10.5, " \u266a"), "no words")
+    assert gap_fill.heard_span(dropped, window) is None
 
 
 def _decode(
@@ -752,6 +865,13 @@ def test_fill_keeps_ad_line_that_repeats_primary_neighbour(tmp_path: Path) -> No
         (" When human beings try to find...", 0.02, -0.57, None),
         # a short line from a confident decode
         (" Hey Jane.", 0.12, -0.29, None),
+        # real three-tagline segment (post 1025, 2312.38): own zlib ratio 2.16
+        (
+            " This is your business. This is your business. This is your business.",
+            0.57,
+            -0.39,
+            None,
+        ),
     ],
 )
 def test_rejection_reason_on_real_post_1025_decodes(
