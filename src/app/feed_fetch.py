@@ -173,5 +173,12 @@ def fetch_feed_bytes(url: str, timeout: float) -> FetchedFeed:
         watch.kill()
         raise FeedFetchTimeout(f"Timed out after {timeout:g}s fetching {url}")
     if "error" in outcome:
-        raise outcome["error"]
+        error = outcome["error"]
+        # A socket timeout can fire just before the wall-clock join does;
+        # report both the same way.
+        if isinstance(error, requests.exceptions.Timeout):
+            raise FeedFetchTimeout(
+                f"Timed out after {timeout:g}s fetching {url}"
+            ) from error
+        raise error
     return outcome["value"]
