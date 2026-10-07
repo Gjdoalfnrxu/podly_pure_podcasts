@@ -436,8 +436,8 @@ def test_start_post_processing_routes_keep_transcript_job_to_llm(papp):
         real_action = writer_client.action
         actions: list[tuple[str, dict]] = []
 
-        def recording_action(name, params=None, **kw):
-            actions.append((name, params or {}))
+        def recording_action(name: str, params: dict[str, Any], **kw: Any) -> Any:
+            actions.append((name, params))
             return real_action(name, params, **kw)
 
         with (
