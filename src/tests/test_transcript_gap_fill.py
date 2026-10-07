@@ -336,7 +336,8 @@ def test_unpadded_retry_recovers_speech_whisper_jumped_over(tmp_path: Path) -> N
 
 
 def test_fill_keeps_repeated_ad_lines(tmp_path: Path) -> None:
-    """Two reads of the same ad line in one gap are both kept."""
+    """Two reads of the same ad line in one gap are both kept, even when the
+    second is merged after the first (later window)."""
 
     class EchoModel(StubWhisperModel):
         def transcribe(self, audio: np.ndarray, **kwargs: Any) -> dict[str, Any]:
@@ -345,10 +346,11 @@ def test_fill_keeps_repeated_ad_lines(tmp_path: Path) -> None:
                 seg["text"] = " This is your business."
             return result
 
+    # the gap is chunked so the two reads land in different windows
     path = _write_wav(
-        tmp_path / "echo.wav", 30.0, [(0, 10), (12, 15), (17, 20), (25, 30)]
+        tmp_path / "echo.wav", 140.0, [(0, 10), (30, 33), (70, 73), (130, 140)]
     )
-    primary = [_seg(0.0, 10.0, " intro"), _seg(25.0, 30.0, " outro")]
+    primary = [_seg(0.0, 10.0, " intro"), _seg(130.0, 140.0, " outro")]
 
     merged = _filler(StubLoader(EchoModel())).fill(1, path, primary)
 
