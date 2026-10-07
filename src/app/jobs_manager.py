@@ -1,24 +1,27 @@
-import contextlib
 import logging
 from datetime import UTC, datetime, timedelta
-from threading import Event, Lock, Thread
+from threading import Lock
 from typing import Any, cast
 
 from sqlalchemy import case
 
-from app.cloud_lane import CloudLaneFallback, build_cloud_processor, choose_lane
-from app.db_guard import db_guard, reset_session
+from app.cloud_lane import choose_lane
 from app.extensions import db as _db
 from app.extensions import scheduler
 from app.feeds import refresh_feed
 from app.job_manager import JobManager as SingleJobManager
-from app.lanes import LANE_CLOUD, LANE_LOCAL, LaneDecision
+from app.lanes import LANE_LOCAL, LaneDecision
 from app.models import Feed, JobsManagerRun, Post, ProcessingJob
-from app.processor import get_processor
+from app.pipeline import (
+    STAGE_LLM,
+    STAGE_TRANSCRIBE,
+    load_pipeline_settings,
+    priority_rank,
+)
+from app.pipeline_workers import PipelineWorkers
 from app.writer.client import writer_client
-from podcast_processor.podcast_processor import ProcessorException
 from podcast_processor.processing_status_manager import ProcessingStatusManager
-from shared import defaults as DEFAULTS
+from podcast_processor.transcription_manager import TranscriptionManager
 from shared.processing_paths import find_existing_processed_audio_path
 
 logger = logging.getLogger("global_logger")
@@ -36,11 +39,9 @@ class JobsManager:
     Centralized manager for starting, tracking, listing, and cancelling
     podcast processing jobs.
 
-    Owns a shared worker pool and coordinates with ProcessingStatusManager.
+    Owns the stage worker pools (app/pipeline_workers.py) and coordinates with
+    ProcessingStatusManager.
     """
-
-    # Class-level lock to ensure only one job processes at a time across ALL instances
-    _global_processing_lock = Lock()
 
     def __init__(self) -> None:
         # Status manager for DB interactions
@@ -52,25 +53,18 @@ class JobsManager:
         self._run_lock = Lock()
         self._run_id: str | None = None
 
-        # Persistent worker thread coordination
-        self._stop_event = Event()
-        self._work_event = Event()
-        self._worker_thread = Thread(
-            target=self._worker_loop, name="jobs-manager-worker", daemon=True
+        # Stage worker pools: transcribe (local + cloud lane) and LLM.
+        self._workers = PipelineWorkers(
+            load_pipeline_settings(),
+            app_context=_scheduler_app_context,
+            get_run_id=self._get_run_id,
+            status_manager=self._status_manager,
         )
-        self._worker_thread.start()
-        # Cloud fast lane: separate small worker pool, runs alongside local.
-        self._cloud_work_event = Event()
-        self._cloud_workers = [
-            Thread(
-                target=self._cloud_worker_loop,
-                name=f"jobs-manager-cloud-{i}",
-                daemon=True,
-            )
-            for i in range(DEFAULTS.CLOUD_LANE_CONCURRENCY)
-        ]
-        for worker in self._cloud_workers:
-            worker.start()
+        # Re-queue what a stop left running BEFORE any worker can claim: a job
+        # claimed first would be flipped back to pending mid-run (and a cloud
+        # job stripped of its lane while it uploads).
+        self.startup_requeue = self.requeue_interrupted_jobs()
+        self._workers.start()
 
         # Initialize run via writer
         with _scheduler_app_context():
@@ -94,13 +88,7 @@ class JobsManager:
             return self._run_id
 
     def _wake_worker(self) -> None:
-        self._work_event.set()
-        self._cloud_work_event.set()
-
-    def _wait_for_work(self, timeout: float = 5.0) -> None:
-        triggered = self._work_event.wait(timeout)
-        if triggered:
-            self._work_event.clear()
+        self._workers.wake()
 
     # ------------------------ Public API ------------------------
     def start_post_processing(
@@ -136,6 +124,7 @@ class JobsManager:
                 run_id = ensure_result.data.get("run_id")
             self._set_run_id(run_id)
             decision = self._decide_lane(post_guid, manual, needs_transcription)
+            stage = self._decide_stage(post_guid)
             start_result = SingleJobManager(
                 post_guid,
                 self._status_manager,
@@ -148,14 +137,17 @@ class JobsManager:
                 # Automatic re-queues never move an already queued job (so a
                 # manual cloud request is not downgraded); manual ones do.
                 override_queued_lane=manual,
+                stage=stage,
+                priority=priority_rank(priority),
             ).start_processing(priority)
             if start_result.get("status") == "started":
                 logger.info(
-                    "[LANE] job_id=%s post_guid=%s lane=%s reason=%s",
+                    "[LANE] job_id=%s post_guid=%s lane=%s reason=%s stage=%s",
                     start_result.get("job_id"),
                     post_guid,
                     decision.lane,
                     decision.reason,
+                    stage,
                 )
         if start_result.get("status") in {"started", "running"}:
             self._wake_worker()
@@ -175,6 +167,17 @@ class JobsManager:
         except Exception as exc:  # noqa: BLE001 - routing must never lose a job
             logger.error("Lane decision failed for %s: %s", post_guid, exc)
             return LaneDecision(LANE_LOCAL, f"lane decision failed: {exc}"[:200])
+
+    def _decide_stage(self, post_guid: str) -> str | None:
+        """Stage a job for this post starts in. None (unrouted) is treated as
+        the transcribe stage, which also reuses an existing transcript, so a
+        failure here never loses a job."""
+        try:
+            post = Post.query.filter_by(guid=post_guid).first()
+            return _initial_stage(post) if post is not None else None
+        except Exception as exc:  # noqa: BLE001
+            logger.error("Stage decision failed for %s: %s", post_guid, exc)
+            return None
 
     def enqueue_pending_jobs(
         self,
@@ -393,6 +396,7 @@ class JobsManager:
                         "error_message": job.error_message,
                         "lane": job.lane or LANE_LOCAL,
                         "lane_reason": job.lane_reason,
+                        "stage": job.stage or STAGE_TRANSCRIBE,
                     }
                 )
 
@@ -441,6 +445,7 @@ class JobsManager:
                         "error_message": job.error_message,
                         "lane": job.lane or LANE_LOCAL,
                         "lane_reason": job.lane_reason,
+                        "stage": job.stage or STAGE_TRANSCRIBE,
                     }
                 )
 
@@ -574,23 +579,44 @@ class JobsManager:
             logger.error(f"Error clearing all jobs: {e}")
             return {"status": "error", "message": f"Failed to clear jobs: {e!s}"}
 
-    def clear_active_jobs(self) -> dict[str, Any]:
-        """
-        Clear only pending and running jobs on startup.
-        Completed, failed, skipped, and cancelled jobs are preserved for history.
+    def requeue_interrupted_jobs(self) -> dict[str, Any]:
+        """Startup: put jobs a stop left running back in their stage's queue.
+
+        Pending jobs stay queued. Jobs that were in the LLM stage keep their
+        transcript and skip Whisper. Jobs re-queued by too many restarts fail.
+        Runs from __init__ before the workers start.
         """
         try:
-            result = writer_client.action("clear_active_jobs", {}, wait=True)
-            count = result.data if result and result.success else 0
-            logger.info(f"Cleared {count} active (pending/running) jobs on startup")
-            return {
-                "status": "success",
-                "cleared_jobs": count,
-                "message": f"Cleared {count} active jobs from database",
-            }
+            with _scheduler_app_context():
+                result = writer_client.action("requeue_interrupted_jobs", {}, wait=True)
+                if not (result and result.success):
+                    raise RuntimeError(getattr(result, "error", None) or "no result")
+                count = int((result.data or {}).get("requeued") or 0)
+                failed = list((result.data or {}).get("failed") or [])
+                pending = ProcessingJob.query.filter(
+                    ProcessingJob.status == "pending"
+                ).count()
         except Exception as e:  # noqa: BLE001
-            logger.error(f"Error clearing active jobs: {e}")
-            return {"status": "error", "message": f"Failed to clear active jobs: {e!s}"}
+            logger.error(f"Error re-queueing interrupted jobs: {e}")
+            return {"status": "error", "message": f"Failed to re-queue jobs: {e!s}"}
+        if failed:
+            logger.error(
+                "Startup: failed %d job(s) interrupted by repeated restarts: %s",
+                len(failed),
+                failed,
+            )
+        if pending:
+            self._wake_worker()
+        return {
+            "status": "success",
+            "requeued_jobs": count,
+            "failed_jobs": failed,
+            "pending_jobs": pending,
+            "message": (
+                f"Re-queued {count} interrupted jobs; {len(failed)} failed after "
+                f"repeated restarts; {pending} jobs queued"
+            ),
+        }
 
     def start_refresh_all_feeds(
         self,
@@ -658,247 +684,20 @@ class JobsManager:
 
     # ------------------------ Internal helpers ------------------------
 
-    def _dequeue_next_job(self, lane: str = LANE_LOCAL) -> tuple[str, str] | None:
-        """Return the next pending job id and post guid, or None if idle.
 
-        CRITICAL: This method atomically marks the job as "running" when dequeuing
-        to prevent race conditions where multiple jobs could be dequeued before
-        any is marked as running.
-        """
-        try:
-            run_id = self._get_run_id()
-            result = writer_client.action(
-                "dequeue_job",
-                {
-                    "run_id": run_id,
-                    "lane": lane,
-                    "max_running": (
-                        DEFAULTS.CLOUD_LANE_CONCURRENCY if lane == LANE_CLOUD else 1
-                    ),
-                },
-                wait=True,
-            )
+def _initial_stage(post: Post) -> str:
+    """Stage a newly queued job starts in (see app/pipeline.py)."""
+    strategy = getattr(post.feed, "ad_detection_strategy", None) or "llm"
+    if strategy == "chapter":
+        return STAGE_LLM  # no Whisper: cut by chapter markers
+    if strategy == "chapter_insert":
+        return STAGE_TRANSCRIBE  # may need Whisper; runs whole there
+    from app.runtime_config import config
 
-            if result and result.success and result.data:
-                job_id = result.data["job_id"]
-                post_guid = result.data["post_guid"]
-
-                logger.info(
-                    "[JOB_DEQUEUE] Successfully dequeued and marked running: job_id=%s post_guid=%s",
-                    job_id,
-                    post_guid,
-                )
-                return job_id, post_guid
-
-            return None
-        except Exception as e:  # noqa: BLE001
-            logger.error(f"Error dequeuing job: {e}")
-            return None
-
-    def _worker_loop(self) -> None:
-        """Background loop that continuously processes pending jobs.
-
-        CRITICAL: This runs in a single dedicated daemon thread. Combined with
-        the _global_processing_lock in _process_job, this ensures truly sequential
-        job execution with no parallelism.
-        """
-        import threading
-
-        logger.info(
-            "[WORKER_LOOP] Started single worker thread: thread_name=%s thread_id=%s",
-            threading.current_thread().name,
-            threading.current_thread().ident,
-        )
-        while not self._stop_event.is_set():
-            try:
-                job_details = self._dequeue_next_job()
-                if not job_details:
-                    self._wait_for_work()
-                    continue
-                job_id, post_guid = job_details
-                self._process_job(job_id, post_guid)
-            except Exception as exc:
-                logger.error("Worker loop error: %s", exc, exc_info=True)
-                reset_session(_db.session, logger, "worker_loop_exception", exc)
-
-    def _cloud_worker_loop(self) -> None:
-        """Cloud fast-lane worker; DEFAULTS.CLOUD_LANE_CONCURRENCY of these run."""
-        while not self._stop_event.is_set():
-            try:
-                job_details = self._dequeue_next_job(LANE_CLOUD)
-                if not job_details:
-                    if self._cloud_work_event.wait(5.0):
-                        self._cloud_work_event.clear()
-                    continue
-                job_id, post_guid = job_details
-                self._process_job(job_id, post_guid, lane=LANE_CLOUD)
-            except Exception as exc:
-                logger.error("Cloud worker loop error: %s", exc, exc_info=True)
-                reset_session(_db.session, logger, "cloud_worker_exception", exc)
-
-    def _process_job(self, job_id: str, post_guid: str, lane: str = LANE_LOCAL) -> None:
-        """Execute a single job using the processor.
-
-        Local jobs take the global processing lock (one CPU job at a time).
-        Cloud jobs use a fresh processor with the budgeted cloud transcriber and
-        do not take the lock; if the cloud lane fails they are re-queued locally.
-        """
-        lock = _lane_lock(lane)
-        cloud_transcriber = None
-        # Acquire global lock to ensure only one job runs at a time
-        logger.info(
-            "[JOB_PROCESS] Waiting for processing lock: job_id=%s post_guid=%s",
-            job_id,
-            post_guid,
-        )
-        with lock:
-            logger.info(
-                "[JOB_PROCESS] Acquired processing lock: job_id=%s post_guid=%s",
-                job_id,
-                post_guid,
-            )
-            with _scheduler_app_context():
-                with db_guard("process_job", _db.session, logger):
-                    try:
-                        # Clear any failed transaction state from prior work on this session.
-                        try:
-                            _db.session.rollback()
-                        except Exception:  # noqa: BLE001
-                            pass
-
-                        # Expire all cached objects to ensure fresh reads
-                        _db.session.expire_all()
-
-                        logger.debug(
-                            "Worker starting job_id=%s post_guid=%s", job_id, post_guid
-                        )
-                        worker_post = Post.query.filter_by(guid=post_guid).first()
-                        if not worker_post:
-                            logger.error(
-                                "Post with GUID %s not found; failing job %s",
-                                post_guid,
-                                job_id,
-                            )
-                            job = _db.session.get(ProcessingJob, job_id)
-                            if job:
-                                self._status_manager.update_job_status(
-                                    job,
-                                    "failed",
-                                    job.current_step or 0,
-                                    "Post not found",
-                                    0.0,
-                                )
-                            return
-
-                        def _cancelled() -> bool:
-                            # Expire the job before re-querying to get fresh state
-                            _db.session.expire_all()
-                            current_job = _db.session.get(ProcessingJob, job_id)
-                            return (
-                                current_job is None or current_job.status == "cancelled"
-                            )
-
-                        processor, cloud_transcriber = _processor_for(
-                            lane, job_id, post_guid
-                        )
-                        processor.process(
-                            worker_post, job_id=job_id, cancel_callback=_cancelled
-                        )
-                    except ProcessorException as exc:
-                        logger.info(
-                            "Job %s finished with processor exception: %s", job_id, exc
-                        )
-                    except Exception as exc:
-                        logger.error(
-                            "Unexpected error in job %s: %s", job_id, exc, exc_info=True
-                        )
-                        try:
-                            _db.session.expire_all()
-                            failed_job = _db.session.get(ProcessingJob, job_id)
-                            if failed_job and failed_job.status not in [
-                                "completed",
-                                "cancelled",
-                                "failed",
-                            ]:
-                                self._status_manager.update_job_status(
-                                    failed_job,
-                                    "failed",
-                                    failed_job.current_step or 0,
-                                    f"Job execution failed: {exc}",
-                                    failed_job.progress_percentage or 0.0,
-                                )
-                        except Exception as cleanup_error:
-                            logger.error(
-                                "Failed to update job status after error: %s",
-                                cleanup_error,
-                                exc_info=True,
-                            )
-                    finally:
-                        # Always clean up session state after job processing to release any locks
-                        try:
-                            _db.session.rollback()
-                        except Exception:  # noqa: BLE001
-                            pass
-                        try:
-                            _db.session.remove()
-                        except Exception as exc:  # noqa: BLE001
-                            logger.warning(
-                                "Failed to remove session after job: %s", exc
-                            )
-            if cloud_transcriber is not None and cloud_transcriber.fallback_reason:
-                self._fall_back_to_local(job_id, cloud_transcriber.fallback_reason)
-            logger.info(
-                "[JOB_PROCESS] Released processing lock: job_id=%s post_guid=%s",
-                job_id,
-                post_guid,
-            )
-
-    def _fall_back_to_local(self, job_id: str, reason: str) -> None:
-        with _scheduler_app_context():
-            result = writer_client.action(
-                "requeue_job_local",
-                {"job_id": job_id, "reason": f"cloud fallback: {reason}"[:500]},
-                wait=True,
-            )
-        requeued = bool(
-            result and result.success and (result.data or {}).get("requeued")
-        )
-        logger.warning(
-            "[LANE] cloud job %s fell back to local (%s), requeued=%s",
-            job_id,
-            reason,
-            requeued,
-        )
-        if requeued:
-            self._work_event.set()
-
-
-def _lane_lock(lane: str) -> Any:
-    if lane == LANE_LOCAL:
-        return JobsManager._global_processing_lock
-    return contextlib.nullcontext()
-
-
-class _CloudSetupFailed:
-    """Stands in for a cloud processor that could not be built: the job fails
-    and, because ``fallback_reason`` is set, is re-queued on the local lane."""
-
-    def __init__(self, reason: str) -> None:
-        self.fallback_reason = reason
-
-    def process(self, post: Any, job_id: str, cancel_callback: Any = None) -> None:
-        raise CloudLaneFallback(self.fallback_reason)
-
-
-def _processor_for(lane: str, job_id: str, post_guid: str) -> tuple[Any, Any]:
-    """Local: the shared processor. Cloud: a fresh one with the cloud transcriber."""
-    if lane == LANE_CLOUD:
-        try:
-            return build_cloud_processor(job_id, post_guid)
-        except Exception as exc:  # noqa: BLE001 - never lose the job
-            failed = _CloudSetupFailed(f"cloud setup failed: {exc}"[:300])
-            return failed, failed
-    return get_processor(), None
+    manager = TranscriptionManager(logger, config)
+    if manager.get_reusable_transcription(post):
+        return STAGE_LLM
+    return STAGE_TRANSCRIBE
 
 
 # Singleton accessor

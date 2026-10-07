@@ -25,8 +25,12 @@ class JobManager:
         lane: str | None = None,
         lane_reason: str | None = None,
         override_queued_lane: bool = False,
+        stage: str | None = None,
+        priority: int = 0,
     ) -> None:
         self.post_guid = post_guid
+        self._stage = stage
+        self._priority = priority
         self._lane = lane
         self._lane_reason = lane_reason
         self._override_queued_lane = override_queued_lane
@@ -78,6 +82,17 @@ class JobManager:
                     {"job_id": job.id, "lane": self._lane, "reason": self._lane_reason},
                     wait=True,
                 )
+            if (self._stage or self._priority) and job.status == "pending":
+                # Re-request of a queued job: re-stage it, raise its priority.
+                writer_client.action(
+                    "route_job",
+                    {
+                        "job_id": job.id,
+                        "stage": self._stage,
+                        "priority": self._priority,
+                    },
+                    wait=True,
+                )
             return job
         job_id = self._status_manager.generate_job_id()
         job = self._status_manager.create_job(
@@ -88,6 +103,8 @@ class JobManager:
             billing_user_id=self._billing_user_id,
             lane=self._lane,
             lane_reason=self._lane_reason,
+            stage=self._stage,
+            priority=self._priority,
         )
         self.job = job
         return job

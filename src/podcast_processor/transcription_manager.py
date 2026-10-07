@@ -142,6 +142,26 @@ class TranscriptionManager:
         """
         return self._check_existing_transcription(post)
 
+    def get_stored_transcription(self, post: Post) -> list[TranscriptSegment]:
+        """The post's stored transcript, whichever model wrote it.
+
+        Used by the LLM stage: the transcribe stage (local or cloud lane) has
+        just stored it, or the job was routed there because a reusable one
+        existed. replace_transcription writes all segments in one action, so a
+        non-empty result is complete.
+        """
+        segment_query = (
+            self.segment_query
+            if self._segment_query_provided
+            else self.db_session.query(TranscriptSegment)
+        )
+        segments: list[TranscriptSegment] = (
+            segment_query.filter_by(post_id=post.id)
+            .order_by(TranscriptSegment.sequence_num)
+            .all()
+        )
+        return segments
+
     def _get_or_create_whisper_model_call(self, post: Post) -> ModelCall:
         """Create or reuse the placeholder ModelCall row for a Whisper run via writer."""
         result = writer_client.action(

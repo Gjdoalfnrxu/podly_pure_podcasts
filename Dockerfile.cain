@@ -1,7 +1,8 @@
-# Thin overlay on the pinned upstream 2.5.0 image: adds OPML import.
+# Thin overlay on the pinned upstream 2.5.0 image: the fork's changes
+# (OPML, processing lanes, stage pipeline, fixes).
 # Only the changed backend modules and the rebuilt frontend are replaced;
 # Python deps, venv and system packages come from the upstream image as-is.
-#   docker build -f Dockerfile.cain -t podly-cain:opml .
+#   docker build -f Dockerfile.cain -t podly-cain:parallel .
 ARG PODLY_BASE=ghcr.io/podly-pure-podcasts/podly-pure-podcasts:2.5.0-latest-amd64@sha256:132c49601444412302ca5de50b2c1e2d72898ea28fd3fce4ce0923cb01df1f13
 
 # Same toolchain as upstream's Dockerfile frontend stage.
@@ -15,7 +16,8 @@ RUN npm run build && test -f dist/index.html
 FROM ${PODLY_BASE}
 # Must list every src/ file this branch changes:
 #   git diff --name-only v2.5.0 -- src ':!src/tests'  (upstream tag, not cain/2.5.0)
-COPY src/app/cloud_lane.py \
+COPY src/app/__init__.py \
+     src/app/cloud_lane.py \
      src/app/config_store.py \
      src/app/feed_fetch.py \
      src/app/feeds.py \
@@ -26,6 +28,9 @@ COPY src/app/cloud_lane.py \
      src/app/models.py \
      src/app/opml.py \
      src/app/opml_import.py \
+     src/app/pipeline.py \
+     src/app/pipeline_recovery.py \
+     src/app/pipeline_workers.py \
      /app/src/app/
 COPY src/app/routes/__init__.py \
      src/app/routes/feed_links.py \
@@ -41,10 +46,15 @@ COPY src/app/writer/actions/__init__.py \
      src/app/writer/actions/lanes.py \
      /app/src/app/writer/actions/
 COPY src/app/writer/executor.py /app/src/app/writer/
-COPY src/migrations/versions/c1a0de1a9e5f_cloud_fast_lane.py /app/src/migrations/versions/
+COPY src/migrations/versions/c1a0de1a9e5f_cloud_fast_lane.py \
+     src/migrations/versions/d7e3f1a2b4c5_pipeline_stage_priority.py \
+     src/migrations/versions/1903c9ed442e_pipeline_restart_requeue_count.py \
+     /app/src/migrations/versions/
 COPY src/podcast_processor/ad_classifier.py \
      src/podcast_processor/boundary_refiner.py \
+     src/podcast_processor/llm_concurrency_limiter.py \
      src/podcast_processor/model_output.py \
+     src/podcast_processor/podcast_processor.py \
      src/podcast_processor/processing_status_manager.py \
      src/podcast_processor/transcription_manager.py \
      src/podcast_processor/word_boundary_refiner.py \

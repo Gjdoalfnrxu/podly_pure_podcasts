@@ -4,7 +4,7 @@ Fixtures for pytest tests in the tests directory.
 
 import logging
 import sys
-from collections.abc import Generator
+from collections.abc import Generator, Iterator
 from pathlib import Path
 from unittest.mock import MagicMock
 
@@ -13,6 +13,7 @@ from flask import Flask
 
 from app.extensions import db
 from app.models import ProcessingJob, TranscriptSegment
+from app.pipeline import AUDIO_CUT_SLOTS
 from podcast_processor.ad_classifier import AdClassifier
 from podcast_processor.audio_processor import AudioProcessor
 from podcast_processor.podcast_downloader import PodcastDownloader
@@ -118,3 +119,25 @@ def mock_status_manager() -> MagicMock:
     status_manager.create_job.return_value = ProcessingJob(id="test_job_id")
     status_manager.cancel_existing_jobs.return_value = None
     return status_manager
+
+
+@pytest.fixture
+def papp(tmp_path, monkeypatch) -> Iterator[Flask]:
+    """Flask app on a SQLite file for the stage pipeline tests
+    (pipeline_harness.py); resets the process-wide audio cut slots after."""
+    monkeypatch.chdir(Path(__file__).resolve().parents[2])  # repo-relative prompts
+    monkeypatch.setenv("PODLY_INSTANCE_DIR", str(tmp_path / "instance"))
+    app = Flask(__name__)
+    app.config["SQLALCHEMY_DATABASE_URI"] = f"sqlite:///{tmp_path / 'pipeline.db'}"
+    app.config["SQLALCHEMY_ENGINE_OPTIONS"] = {
+        "connect_args": {"timeout": 60},
+        "pool_size": 30,
+    }
+    db.init_app(app)
+    with app.app_context():
+        db.create_all()
+    yield app
+    with app.app_context():
+        db.session.remove()
+        db.engine.dispose()
+    AUDIO_CUT_SLOTS.reset()

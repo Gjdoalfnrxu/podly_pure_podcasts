@@ -31,6 +31,11 @@ class CommandExecutor:
             "set_job_lane",
             "requeue_job_local",
             "update_cloud_lane_settings",
+            "advance_job_stage",
+            "route_job",
+            "requeue_interrupted_jobs",
+            "requeue_orphaned_jobs",
+            "fail_job_if_running",
         ):
             self.register_action(name, getattr(writer_actions, f"{name}_action"))
         self.register_action(

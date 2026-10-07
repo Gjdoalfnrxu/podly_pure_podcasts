@@ -321,6 +321,16 @@ class ProcessingJob(db.Model):  # type: ignore[name-defined, misc]
     # Processing lane: NULL/"local" = local CPU worker, "cloud" = paid fast lane.
     lane = db.Column(db.String(16), nullable=True)
     lane_reason = db.Column(db.Text, nullable=True)
+    # Pipeline stage (app/pipeline.py): NULL/"transcribe" or "llm". For a
+    # running job, the stage it is running in.
+    stage = db.Column(db.String(16), nullable=True)
+    # Queue order: higher first (2 interactive, 1 app download, 0 automatic).
+    priority = db.Column(db.Integer, nullable=False, default=0, server_default="0")
+    # Times a restart found this job running and re-queued it (see
+    # requeue_interrupted_jobs_action); past the limit the job fails instead.
+    restart_requeues = db.Column(
+        db.Integer, nullable=False, default=0, server_default="0"
+    )
 
     # Relationships
     post = db.relationship(

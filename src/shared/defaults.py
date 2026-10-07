@@ -68,3 +68,18 @@ CLOUD_LANE_MIN_BILLED_SECONDS = 10.0
 CLOUD_LANE_CHUNKSIZE_MB = 24
 CLOUD_LANE_TIMEOUT_SEC = 120
 CLOUD_LANE_CONCURRENCY = 2
+
+# Stage pipeline (app/pipeline.py). Env overrides: PODLY_TRANSCRIBE_WORKERS,
+# PODLY_LLM_WORKERS, PODLY_AUDIO_CUT_CONCURRENCY.
+# Local Whisper uses most of the CPU, so one transcription at a time.
+PIPELINE_TRANSCRIBE_WORKERS = 1
+# Ad detection + audio cut. Each job's chunks stay sequential; this is how many
+# episodes are in the LLM stage at once. Capped at LLM_MAX_CONCURRENT_CALLS when
+# that is lower (app/pipeline_workers.py), so no chunk waits on another episode.
+PIPELINE_LLM_WORKERS = 4
+# A job a restart finds running is re-queued at most this many times; the next
+# interruption fails it (an episode that OOM-kills the container must not loop).
+PIPELINE_MAX_RESTART_REQUEUES = 2
+# ffmpeg re-encode of a 60 min episode measured ~30 s wall / ~47 s CPU
+# (upstream 2.5.0 image, ffmpeg 7.1), so cuts run one at a time.
+PIPELINE_AUDIO_CUT_CONCURRENCY = 1

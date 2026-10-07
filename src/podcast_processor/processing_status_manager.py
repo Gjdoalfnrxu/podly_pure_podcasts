@@ -33,11 +33,13 @@ class ProcessingStatusManager:
         billing_user_id: int | None = None,
         lane: str | None = None,
         lane_reason: str | None = None,
+        stage: str | None = None,
+        priority: int = 0,
     ) -> ProcessingJob:
         """Create a new pending job record for the provided post.
 
-        The lane is part of the same insert, so a worker never sees the job
-        in the wrong queue."""
+        The lane, pipeline stage and priority are part of the same insert, so a
+        worker never sees the job in the wrong queue or at the wrong priority."""
         job_data = {
             "id": job_id,
             "jobs_manager_run_id": run_id,
@@ -51,6 +53,8 @@ class ProcessingStatusManager:
             "billing_user_id": billing_user_id,
             "lane": lane,
             "lane_reason": lane_reason,
+            "stage": stage,
+            "priority": priority,
         }
 
         writer_client.action("create_job", {"job_data": job_data}, wait=True)

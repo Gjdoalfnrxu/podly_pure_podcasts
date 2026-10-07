@@ -77,6 +77,8 @@ export interface Job {
   error_message: string | null;
   lane?: 'local' | 'cloud' | string;
   lane_reason?: string | null;
+  // Pipeline stage: 'transcribe' (download + Whisper) or 'llm' (ad detection + cut).
+  stage?: 'transcribe' | 'llm' | string;
 }
 
 export interface LaneStatus {
@@ -87,6 +89,8 @@ export interface LaneStatus {
   month_cloud_jobs: number;
   cloud_concurrency: number;
   queues: Record<string, { pending: number; running: number }>;
+  // Per pipeline stage ('transcribe' | 'llm'), counted server-side.
+  stages: Record<string, { pending: number; running: number }>;
 }
 
 export interface CloudLaneSettings {

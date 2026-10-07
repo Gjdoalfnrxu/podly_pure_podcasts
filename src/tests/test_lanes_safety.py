@@ -20,6 +20,7 @@ from app.extensions import db
 from app.lane_store import load_lane_settings
 from app.lanes import LANE_CLOUD, LANE_LOCAL
 from app.models import CloudLaneUsage, ModelCall, Post, ProcessingJob, TranscriptSegment
+from app.pipeline import STAGE_LLM, STAGE_TRANSCRIBE
 from app.routes.post_routes import post_bp
 from app.runtime_config import config as runtime_config
 from podcast_processor.transcription_manager import TranscriptionManager
@@ -35,6 +36,7 @@ from tests.test_lanes import (
     _post_with_job,
     _store_settings,
     _transcriber,
+    _workers,
     manager,  # noqa: F401 - pytest fixture
 )
 
@@ -232,33 +234,41 @@ class _Spy:
     def __init__(self) -> None:
         self.processed: list[str] = []
 
-    def process(self, post, job_id, cancel_callback=None):
+    def process(self, post, job_id, cancel_callback=None, stage=None):
         self.processed.append(job_id)
 
 
-def test_local_job_never_builds_the_paid_transcriber(app, manager):  # noqa: F811
+@pytest.mark.parametrize(
+    ("job_lane", "stage", "pool_lane"),
+    [
+        (None, STAGE_TRANSCRIBE, LANE_LOCAL),  # local Whisper
+        (LANE_CLOUD, STAGE_LLM, LANE_LOCAL),  # a cloud job's LLM stage
+    ],
+)
+def test_local_job_never_builds_the_paid_transcriber(app, job_lane, stage, pool_lane):
     with app.app_context():
         _store_settings()
-        job_id = _post_with_job(status="running", lane=None)
-        local = _Spy()
-        with (
-            mock.patch("app.jobs_manager.get_processor", return_value=local),
-            mock.patch(
-                "app.jobs_manager.build_cloud_processor",
-                wraps=cloud_lane.build_cloud_processor,
-            ) as build,
-            mock.patch.object(
-                cloud_lane.BudgetedCloudTranscriber,
-                "__init__",
-                autospec=True,
-                side_effect=AssertionError("paid transcriber built for a local job"),
-            ),
-            mock.patch("openai.OpenAI") as openai_client,
-        ):
-            manager._process_job(job_id, "g1", lane=LANE_LOCAL)
-        assert local.processed == [job_id]
-        build.assert_not_called()
-        openai_client.assert_not_called()
+        job_id = _post_with_job(status="running", lane=job_lane)
+    local = _Spy()
+    with (
+        mock.patch("app.pipeline_workers.PodcastProcessor", return_value=local),
+        mock.patch(
+            "app.pipeline_workers.build_cloud_processor",
+            wraps=cloud_lane.build_cloud_processor,
+        ) as build,
+        mock.patch.object(
+            cloud_lane.BudgetedCloudTranscriber,
+            "__init__",
+            autospec=True,
+            side_effect=AssertionError("paid transcriber built for a local job"),
+        ),
+        mock.patch("openai.OpenAI") as openai_client,
+    ):
+        _workers(app).run_stage(job_id, "g1", stage, pool_lane)
+    assert local.processed == [job_id]
+    build.assert_not_called()
+    openai_client.assert_not_called()
+    with app.app_context():
         assert CloudLaneUsage.query.count() == 0
 
 
@@ -285,26 +295,29 @@ def test_real_cloud_processor_transcribes_once_and_records_usage(
         assert (call.model_name, call.status) == (CLOUD_MODEL, "success")
 
 
-def test_cloud_worker_loop_runs_cloud_jobs_on_the_cloud_lane(app, manager):  # noqa: F811
-    calls: list[tuple] = []
+def test_cloud_worker_loop_runs_cloud_jobs_on_the_cloud_lane(app):
+    workers = _workers(app, transcribe_workers=1, cloud_workers=1)
+    cloud_pool = next(p for p in workers.pools if p.lane == LANE_CLOUD)
+    assert (cloud_pool.stage, cloud_pool.size) == (STAGE_TRANSCRIBE, 1)
+    claims: list[tuple[str, str]] = []
 
-    def dequeue(lane=LANE_LOCAL):
-        calls.append(("dequeue", lane))
-        if len(calls) == 1:
+    def claim(pool):
+        claims.append((pool.stage, pool.lane))
+        if len(claims) == 1:
             return ("j1", "g1")
-        manager._stop_event.set()
+        workers._stop_event.set()
         return None
 
     with (
-        mock.patch.object(manager, "_dequeue_next_job", side_effect=dequeue),
-        mock.patch.object(manager, "_process_job") as process,
+        mock.patch.object(workers, "claim", side_effect=claim),
+        mock.patch.object(workers, "run_stage") as run_stage,
     ):
-        worker = threading.Thread(target=manager._cloud_worker_loop, daemon=True)
+        worker = threading.Thread(target=workers._loop, args=(cloud_pool,), daemon=True)
         worker.start()
         worker.join(5)
     assert not worker.is_alive()
-    assert calls[0] == ("dequeue", LANE_CLOUD)
-    process.assert_called_once_with("j1", "g1", lane=LANE_CLOUD)
+    assert claims[0] == (STAGE_TRANSCRIBE, LANE_CLOUD)
+    run_stage.assert_called_once_with("j1", "g1", STAGE_TRANSCRIBE, LANE_CLOUD)
 
 
 def test_upload_time_length_limit_refuses_without_calling_api(app, tmp_path):
@@ -345,7 +358,7 @@ def test_cancel_during_cloud_call_is_not_requeued(app, tmp_path):
         )
         with pytest.raises(RuntimeError, match="connection dropped"):
             t.transcribe(_copy_audio(tmp_path))
-        assert t.fallback_reason is None  # so _process_job does not requeue
+        assert t.fallback_reason is None  # so run_stage does not requeue
         assert CloudLaneUsage.query.one().status == "failed"
 
 
@@ -362,14 +375,15 @@ def test_reservation_failure_falls_back(app, tmp_path):
         assert fake.calls == 0
 
 
-def test_cloud_setup_failure_requeues_locally(app, manager):  # noqa: F811
+def test_cloud_setup_failure_requeues_locally(app):
     with app.app_context():
         job_id = _post_with_job(status="running", lane=LANE_CLOUD)
-        with mock.patch(
-            "app.jobs_manager.build_cloud_processor",
-            side_effect=RuntimeError("settings unreadable"),
-        ):
-            manager._process_job(job_id, "g1", lane=LANE_CLOUD)
+    with mock.patch(
+        "app.pipeline_workers.build_cloud_processor",
+        side_effect=RuntimeError("settings unreadable"),
+    ):
+        _workers(app).run_stage(job_id, "g1", STAGE_TRANSCRIBE, LANE_CLOUD)
+    with app.app_context():
         job = _job_row(job_id)
         assert job.status == "pending"
         assert job.lane == LANE_LOCAL

@@ -13,6 +13,7 @@ from sqlalchemy.orm import object_session
 
 from app.extensions import db
 from app.models import Post, ProcessingJob, TranscriptSegment
+from app.pipeline import STAGE_LLM, STAGE_TRANSCRIBE, audio_cut_slot
 from app.writer.client import writer_client
 from podcast_processor.ad_classifier import AdClassifier
 from podcast_processor.audio import clip_segments_exact
@@ -147,7 +148,8 @@ class PodcastProcessor:
         post: Post,
         job_id: str,
         cancel_callback: Callable[[], bool] | None = None,
-    ) -> str:
+        stage: str | None = None,
+    ) -> str | None:
         """
         Process a podcast by downloading, transcribing, identifying ads, and removing ad segments.
         Updates the existing job record for tracking progress.
@@ -156,9 +158,14 @@ class PodcastProcessor:
             post: The Post object containing the podcast to process
             job_id: Job ID of the existing job to update (required)
             cancel_callback: Optional callback to check for cancellation
+            stage: None runs everything. STAGE_TRANSCRIBE stops once the
+                transcript is stored and returns None (the caller queues the
+                job for the LLM stage). STAGE_LLM uses the stored transcript
+                and never runs Whisper; it raises NeedsTranscription if there
+                is none.
 
         Returns:
-            Path to the processed audio file
+            Path to the processed audio file, or None if handed to the LLM stage
         """
         job = self.db_session.get(ProcessingJob, job_id)
         if not job:
@@ -192,9 +199,14 @@ class PodcastProcessor:
                 object_session(job) is not None,
             )
             # Update job to running status
-            self.status_manager.update_job_status(
-                job, "running", 0, "Starting processing"
-            )
+            if stage == STAGE_LLM:
+                self.status_manager.update_job_status(
+                    job, "running", 2, "Starting ad detection", 50.0
+                )
+            else:
+                self.status_manager.update_job_status(
+                    job, "running", 0, "Starting processing"
+                )
 
             # Validate post
             if not post.whitelisted:
@@ -255,7 +267,7 @@ class PodcastProcessor:
                     return processed_audio_path
 
                 # Perform the main processing steps
-                self._perform_processing_steps(
+                handed_off = self._perform_processing_steps(
                     post,
                     job,
                     processed_audio_path,
@@ -263,7 +275,11 @@ class PodcastProcessor:
                     cached_ad_detection_strategy,
                     cached_chapter_filter_strings,
                     cached_enable_llm_chapter_fallback_tagging,
+                    stage=stage,
                 )
+                if handed_off:
+                    self.logger.info(f"Transcribed podcast: {post}; ready for LLM")
+                    return None
 
                 self.logger.info(f"Processing podcast: {post} complete")
                 return processed_audio_path
@@ -277,6 +293,10 @@ class PodcastProcessor:
                 except Exception:  # noqa: BLE001
                     # Best-effort lock release; avoid masking original exceptions
                     pass
+
+        except NeedsTranscription:
+            # Not a failure: the caller sends the job back to the transcribe stage.
+            raise
 
         except ProcessorException as e:
             error_msg = str(e)
@@ -366,9 +386,12 @@ class PodcastProcessor:
         ad_detection_strategy: str = "llm",
         chapter_filter_strings: str | None = None,
         enable_llm_chapter_fallback_tagging: bool | None = None,
-    ) -> None:
+        stage: str | None = None,
+    ) -> bool:
         """
         Perform the main processing steps based on the ad detection strategy.
+        Returns True if the job stopped after transcription (STAGE_TRANSCRIBE).
+        Chapter strategies have no LLM stage split and always run to the end.
 
         Args:
             post: The Post object to process
@@ -382,18 +405,20 @@ class PodcastProcessor:
             self._perform_chapter_based_processing(
                 post, job, processed_audio_path, cancel_callback, chapter_filter_strings
             )
-        elif ad_detection_strategy == "chapter_insert":
+            return False
+        if ad_detection_strategy == "chapter_insert":
             self._perform_chapter_insertion_only_processing(
                 post, job, processed_audio_path, cancel_callback
             )
-        else:
-            self._perform_llm_based_processing(
-                post,
-                job,
-                processed_audio_path,
-                cancel_callback,
-                enable_llm_chapter_fallback_tagging,
-            )
+            return False
+        return self._perform_llm_based_processing(
+            post,
+            job,
+            processed_audio_path,
+            cancel_callback,
+            enable_llm_chapter_fallback_tagging,
+            stage=stage,
+        )
 
     def _resolve_llm_chapter_fallback_tagging_enabled(
         self,
@@ -421,16 +446,30 @@ class PodcastProcessor:
         processed_audio_path: str,
         cancel_callback: Callable[[], bool] | None = None,
         enable_llm_chapter_fallback_tagging: bool | None = None,
-    ) -> None:
+        stage: str | None = None,
+    ) -> bool:
         """
         Perform LLM-based ad detection: transcription, classification, and audio processing.
+        Returns True if it stopped after storing the transcript (STAGE_TRANSCRIBE).
         """
         # Step 2: Transcribe audio
-        self.status_manager.update_job_status(
-            job, "running", 2, "Transcribing audio", 50.0
-        )
-        transcript_segments = self.transcription_manager.transcribe(post)
+        if stage == STAGE_LLM:
+            transcript_segments = self.transcription_manager.get_stored_transcription(
+                post
+            )
+            if not transcript_segments:
+                raise NeedsTranscription(
+                    f"No stored transcript for post {post.id}; back to transcribe stage"
+                )
+        else:
+            self.status_manager.update_job_status(
+                job, "running", 2, "Transcribing audio", 50.0
+            )
+            transcript_segments = self.transcription_manager.transcribe(post)
         self._raise_if_cancelled(job, 2, cancel_callback)
+        # An empty transcript would bounce between stages; finish it here.
+        if stage == STAGE_TRANSCRIBE and transcript_segments:
+            return True
         unprocessed_audio_path = (
             str(post.unprocessed_audio_path) if post.unprocessed_audio_path else None
         )
@@ -444,9 +483,10 @@ class PodcastProcessor:
         self.status_manager.update_job_status(
             job, "running", 4, "Processing audio", 90.0
         )
-        removed_segments_ms = self.audio_processor.process_audio(
-            post, processed_audio_path
-        )
+        with audio_cut_slot():
+            removed_segments_ms = self.audio_processor.process_audio(
+                post, processed_audio_path
+            )
         removed_segments_sec = [
             (start_ms / 1000.0, end_ms / 1000.0)
             for start_ms, end_ms in removed_segments_ms
@@ -524,6 +564,7 @@ class PodcastProcessor:
             processed_audio_path,
             chapter_data=chapter_data_json,
         )
+        return False
 
     def _perform_chapter_insertion_only_processing(
         self,
@@ -784,11 +825,12 @@ class PodcastProcessor:
         ad_segments_ms = [(int(s * 1000), int(e * 1000)) for s, e in ad_segments]
 
         if ad_segments_ms:
-            clip_segments_exact(
-                ad_segments_ms=ad_segments_ms,
-                in_path=str(post.unprocessed_audio_path),
-                out_path=processed_audio_path,
-            )
+            with audio_cut_slot():
+                clip_segments_exact(
+                    ad_segments_ms=ad_segments_ms,
+                    in_path=str(post.unprocessed_audio_path),
+                    out_path=processed_audio_path,
+                )
         else:
             # No ads found, copy the original file
             shutil.copyfile(str(post.unprocessed_audio_path), processed_audio_path)
@@ -1202,3 +1244,7 @@ class PodcastProcessor:
 
 class ProcessorException(Exception):
     """Exception raised for podcast processing errors."""
+
+
+class NeedsTranscription(Exception):
+    """The LLM stage found no stored transcript; re-queue for transcription."""
