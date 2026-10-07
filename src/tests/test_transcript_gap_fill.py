@@ -1,0 +1,428 @@
+"""Gap-fill re-transcribes audio the primary transcription left uncovered.
+
+The real path runs end to end (ffprobe duration, ffmpeg window decode, offset,
+overlap trim, merge, TranscriptionManager storage); only the whisper model is
+stubbed. The stub "hears" speech wherever the decoded window is non-silent, so
+offsets and window bounds are checked against what is actually in the audio.
+"""
+
+from __future__ import annotations
+
+import logging
+import wave
+from collections.abc import Generator
+from itertools import pairwise
+from pathlib import Path
+from typing import Any
+
+import numpy as np
+import pytest
+from flask import Flask
+
+from app.extensions import db
+from app.models import Feed, Post, TranscriptSegment
+from podcast_processor import transcript_gap_fill as gap_fill
+from podcast_processor.transcribe import Segment, Transcriber
+from podcast_processor.transcript_gap_fill import (
+    SAMPLE_RATE,
+    GapFillSettings,
+    WhisperGapFiller,
+    find_gaps,
+    gap_fill_settings_from_config,
+    merge_recovered,
+    plan_windows,
+)
+from podcast_processor.transcription_manager import TranscriptionManager
+from shared.config import (
+    GroqWhisperConfig,
+    LocalWhisperConfig,
+    TestWhisperConfig,
+)
+from shared.test_utils import create_standard_test_config
+
+FRAME = 0.05  # stub model resolution, seconds
+TOL = 0.15
+
+
+def _write_wav(path: Path, duration: float, speech: list[tuple[float, float]]) -> str:
+    """Silent mono 16 kHz wav with a 440 Hz tone over each ``speech`` span."""
+    t = np.arange(int(duration * SAMPLE_RATE)) / SAMPLE_RATE
+    audio = np.zeros_like(t)
+    for start, end in speech:
+        mask = (t >= start) & (t < end)
+        audio[mask] = 0.5 * np.sin(2 * np.pi * 440 * t[mask])
+    with wave.open(str(path), "wb") as w:
+        w.setnchannels(1)
+        w.setsampwidth(2)
+        w.setframerate(SAMPLE_RATE)
+        w.writeframes((audio * 32767).astype(np.int16).tobytes())
+    return str(path)
+
+
+class StubWhisperModel:
+    """Returns one segment per non-silent run, timed relative to the clip."""
+
+    def __init__(self) -> None:
+        self.calls: list[dict[str, Any]] = []
+
+    def transcribe(self, audio: np.ndarray, **kwargs: Any) -> dict[str, Any]:
+        self.calls.append({"seconds": len(audio) / SAMPLE_RATE, **kwargs})
+        hop = int(FRAME * SAMPLE_RATE)
+        loud = [
+            float(np.sqrt(np.mean(audio[i : i + hop] ** 2))) > 0.05
+            for i in range(0, len(audio), hop)
+        ]
+        segments, run_start = [], None
+        for idx, flag in enumerate([*loud, False]):
+            if flag and run_start is None:
+                run_start = idx
+            elif not flag and run_start is not None:
+                segments.append(
+                    {
+                        "start": run_start * FRAME,
+                        "end": idx * FRAME,
+                        "text": f" speech {len(self.calls)}.{len(segments)}",
+                    }
+                )
+                run_start = None
+        return {"segments": segments}
+
+
+class StubLoader:
+    def __init__(self, model: Any | None = None) -> None:
+        self.model = model or StubWhisperModel()
+        self.names: list[str] = []
+
+    def __call__(self, name: str) -> Any:
+        self.names.append(name)
+        return self.model
+
+
+def _filler(loader: StubLoader, **overrides: Any) -> WhisperGapFiller:
+    settings = GapFillSettings(model_name="base.en", **overrides)
+    return WhisperGapFiller(logging.getLogger("test"), settings, model_loader=loader)
+
+
+def _seg(start: float, end: float, text: str = "primary") -> Segment:
+    return Segment(start=start, end=end, text=text)
+
+
+# --- gap detection ---------------------------------------------------------
+
+
+def test_find_gaps_includes_start_interior_and_end() -> None:
+    segs = [_seg(4, 10), _seg(20, 25)]
+    assert find_gaps(segs, 30.0, 3.0) == [(0.0, 4), (10, 20), (25, 30.0)]
+
+
+def test_find_gaps_threshold_and_overlapping_segments() -> None:
+    # 0-2 start gap is under threshold; overlapping segments form one span.
+    segs = [_seg(2, 8), _seg(5, 12), _seg(14, 20)]
+    assert find_gaps(segs, 21.0, 3.0) == []
+    assert find_gaps(segs, 21.0, 2.0) == [(0.0, 2), (12, 14)]
+
+
+def test_find_gaps_unknown_duration_has_no_end_gap() -> None:
+    assert find_gaps([_seg(0, 5)], None, 3.0) == []
+
+
+def test_find_gaps_empty_transcript_is_whole_file() -> None:
+    assert find_gaps([], 42.0, 3.0) == [(0.0, 42.0)]
+
+
+# --- window planning -------------------------------------------------------
+
+
+def test_plan_windows_padding_clamped_to_audio_bounds() -> None:
+    windows = plan_windows([(0.0, 4.0), (10.0, 20.0), (28.5, 30.0)], 30.0, 1.0, 60.0)
+    assert [(w.start, w.end) for w in windows] == [
+        (0.0, 5.0),
+        (9.0, 21.0),
+        (27.5, 30.0),
+    ]
+
+
+def test_plan_windows_chunks_long_gap() -> None:
+    windows = plan_windows([(100.0, 250.0)], 400.0, 1.0, 60.0)
+    assert len(windows) == 3
+    assert all(w.end - w.start <= 60.0 + 1e-9 for w in windows)
+    assert windows[0].start == 99.0 and windows[-1].end == 251.0
+    # pieces tile the gap with no hole
+    for prev, nxt in pairwise(windows):
+        assert nxt.start < prev.end
+
+
+# --- merge -----------------------------------------------------------------
+
+
+def test_merge_drops_mostly_covered_and_trims_partial_overlap() -> None:
+    existing = [_seg(0, 10), _seg(20, 30)]
+    recovered = [
+        _seg(9.0, 10.4, "padding re-read"),  # 1.0 of 1.4s covered -> drop
+        _seg(9.5, 14.0, "tail of gap"),  # 0.5s covered -> trim to 10-14
+        _seg(14.0, 19.0, "middle"),
+        _seg(18.8, 20.6, "head"),  # 0.8 of 1.8s covered -> trim to 19-20
+    ]
+    merged, added = merge_recovered(existing, recovered)
+    assert [(s.start, s.end, s.text) for s in added] == [
+        (10, 14.0, "tail of gap"),
+        (14.0, 19.0, "middle"),
+        (19.0, 20, "head"),
+    ]
+    assert [s.start for s in merged] == sorted(s.start for s in merged)
+    for a, b in pairwise(merged):
+        assert a.end <= b.start
+
+
+def test_merge_drops_duplicate_from_overlapping_chunks() -> None:
+    merged, added = merge_recovered([], [_seg(10, 15, "a"), _seg(10.2, 15.1, "a")])
+    assert [s.text for s in added] == ["a"]
+    assert len(merged) == 1
+
+
+# --- end to end through real audio ----------------------------------------
+
+
+@pytest.fixture
+def episode(tmp_path: Path) -> str:
+    # speech the primary missed: 0.5-2.5 (start), 13-17 (interior), 27-29 (end)
+    return _write_wav(
+        tmp_path / "ep.wav",
+        30.0,
+        [(0.5, 2.5), (4.0, 10.0), (13.0, 17.0), (20.0, 25.0), (27.0, 29.0)],
+    )
+
+
+def test_fill_recovers_start_interior_and_end_speech(episode: str) -> None:
+    primary = [_seg(4.0, 10.0, "a"), _seg(20.0, 25.0, "b")]
+    loader = StubLoader()
+
+    merged = _filler(loader).fill(1025, episode, primary)
+
+    recovered = [s for s in merged if s.text.startswith(" speech")]
+    spans = [(s.start, s.end) for s in recovered]
+    assert len(spans) == 3, spans
+    for (start, end), (want_start, want_end) in zip(
+        spans, [(0.5, 2.5), (13.0, 17.0), (27.0, 29.0)], strict=True
+    ):
+        assert start == pytest.approx(want_start, abs=TOL)
+        assert end == pytest.approx(want_end, abs=TOL)
+    assert [s.text for s in merged if not s.text.startswith(" speech")] == ["a", "b"]
+    assert [s.start for s in merged] == sorted(s.start for s in merged)
+    # one model load for the whole pass, fresh-context decoding per window
+    assert loader.names == ["base.en"]
+    assert len(loader.model.calls) == 3
+    for call in loader.model.calls:
+        assert call["fp16"] is False
+        assert call["condition_on_previous_text"] is False
+        assert call["language"] == "en"
+
+
+def test_fill_is_noop_without_gaps(episode: str) -> None:
+    primary = [_seg(0.0, 15.0, "a"), _seg(16.0, 28.0, "b")]
+    loader = StubLoader()
+
+    merged = _filler(loader).fill(7, episode, primary)
+
+    assert merged == primary
+    assert loader.names == []
+
+
+def test_fill_music_gap_yields_nothing_and_logs(
+    tmp_path: Path, caplog: pytest.LogCaptureFixture
+) -> None:
+    # 10-20 is "music" the model hears no words in (silence here)
+    path = _write_wav(tmp_path / "m.wav", 30.0, [(0.0, 10.0), (20.0, 30.0)])
+    primary = [_seg(0.0, 10.0, "a"), _seg(20.0, 30.0, "b")]
+    loader = StubLoader()
+
+    with caplog.at_level(logging.INFO, logger="test"):
+        merged = _filler(loader).fill(42, path, primary)
+
+    assert merged == primary
+    assert len(loader.model.calls) == 1
+    assert "Post 42: gap-fill window 9.0-21.0 (gap 10.0-20.0) yielded no speech" in (
+        caplog.text
+    )
+    assert "found 1 gaps totalling 10.0s" in caplog.text
+    assert "added 0 segments" in caplog.text
+
+
+def test_fill_long_gap_is_chunked_without_duplicates(tmp_path: Path) -> None:
+    path = _write_wav(tmp_path / "long.wav", 160.0, [(0, 5), (30, 130), (155, 160)])
+    primary = [_seg(0.0, 5.0, "a"), _seg(155.0, 160.0, "b")]
+    loader = StubLoader()
+
+    merged = _filler(loader, max_window_seconds=60.0).fill(1, path, primary)
+
+    assert len(loader.model.calls) == 3
+    assert max(c["seconds"] for c in loader.model.calls) <= 60.0 + 0.01
+    recovered = [s for s in merged if s.text.startswith(" speech")]
+    assert recovered[0].start == pytest.approx(30.0, abs=TOL)
+    assert recovered[-1].end == pytest.approx(130.0, abs=TOL)
+    covered = sum(s.end - s.start for s in recovered)
+    assert covered == pytest.approx(100.0, abs=3 * TOL)
+    for a, b in pairwise(merged):
+        assert a.end <= b.start + 1e-9
+
+
+def test_fill_keeps_primary_when_model_fails(episode: str) -> None:
+    def broken(name: str) -> Any:
+        raise RuntimeError("no model")
+
+    primary = [_seg(4.0, 10.0, "a")]
+    filler = WhisperGapFiller(
+        logging.getLogger("test"), GapFillSettings("base.en"), model_loader=broken
+    )
+    assert filler.fill(1, episode, primary) == primary
+
+
+def test_hallucinated_symbols_are_dropped(episode: str) -> None:
+    class MusicModel:
+        def transcribe(self, audio: Any, **kwargs: Any) -> dict[str, Any]:
+            return {"segments": [{"start": 0.0, "end": 2.0, "text": " ♪ ... ♪"}]}
+
+    primary = [_seg(0.0, 10.0), _seg(20.0, 30.0)]
+    merged = _filler(StubLoader(MusicModel())).fill(1, episode, primary)
+    assert merged == primary
+
+
+# --- settings --------------------------------------------------------------
+
+
+def test_settings_follow_effective_config() -> None:
+    cfg = create_standard_test_config()
+    cfg.whisper = LocalWhisperConfig(model="small.en")
+    assert gap_fill_settings_from_config(cfg).model_name == "small.en"  # type: ignore[union-attr]
+
+    cfg.whisper = GroqWhisperConfig(api_key="x")
+    s = gap_fill_settings_from_config(cfg)
+    assert s is not None and s.model_name == "base.en" and s.language == "en"
+
+    cfg.whisper_gap_fill_model = "tiny.en"
+    assert gap_fill_settings_from_config(cfg).model_name == "tiny.en"  # type: ignore[union-attr]
+
+    cfg.whisper_gap_fill_enabled = False
+    assert gap_fill_settings_from_config(cfg) is None
+
+    cfg.whisper_gap_fill_enabled = True
+    cfg.whisper = TestWhisperConfig()
+    assert gap_fill_settings_from_config(cfg) is None
+
+
+def test_env_overrides_reach_runtime_config(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from app.config_store import _apply_gap_fill_env_overrides
+
+    cfg = create_standard_test_config()
+    assert cfg.whisper_gap_fill_enabled is True
+    monkeypatch.setenv("WHISPER_GAP_FILL_ENABLED", "false")
+    monkeypatch.setenv("WHISPER_GAP_FILL_MIN_GAP_SECONDS", "5")
+    monkeypatch.setenv("WHISPER_GAP_FILL_PADDING_SECONDS", "0")
+    monkeypatch.setenv("WHISPER_GAP_FILL_MAX_WINDOW_SECONDS", "-1")
+    monkeypatch.setenv("WHISPER_GAP_FILL_MODEL", "tiny.en")
+    _apply_gap_fill_env_overrides(cfg)
+    assert cfg.whisper_gap_fill_enabled is False
+    assert cfg.whisper_gap_fill_min_gap_seconds == 5.0
+    assert cfg.whisper_gap_fill_padding_seconds == 0.0
+    assert cfg.whisper_gap_fill_max_window_seconds == 60.0  # invalid, ignored
+    assert cfg.whisper_gap_fill_model == "tiny.en"
+
+
+# --- wiring into TranscriptionManager --------------------------------------
+
+
+class FixedTranscriber(Transcriber):
+    def __init__(self, segments: list[Segment]):
+        self.segments = segments
+
+    @property
+    def model_name(self) -> str:
+        return "local_base.en"
+
+    def transcribe(self, audio_file_path: str) -> list[Segment]:
+        del audio_file_path
+        return list(self.segments)
+
+
+@pytest.fixture
+def app() -> Generator[Flask, None, None]:
+    app = Flask(__name__)
+    app.config["SQLALCHEMY_DATABASE_URI"] = "sqlite:///:memory:"
+    app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
+    with app.app_context():
+        db.init_app(app)
+        db.create_all()
+        yield app
+
+
+def test_manager_stores_recovered_segments_in_time_order(
+    app: Flask, episode: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Default wiring: settings come from config, model via load_whisper_model."""
+    loader = StubLoader()
+    monkeypatch.setattr(gap_fill, "load_whisper_model", loader)
+    cfg = create_standard_test_config()
+    cfg.whisper = LocalWhisperConfig(model="base.en")
+
+    with app.app_context():
+        feed = Feed(title="F", rss_url="http://example.com/rss.xml")
+        post = Post(
+            feed=feed,
+            guid="g",
+            download_url="http://example.com/a.mp3",
+            title="P",
+            unprocessed_audio_path=episode,
+        )
+        db.session.add_all([feed, post])
+        db.session.commit()
+
+        manager = TranscriptionManager(
+            logging.getLogger("test"),
+            cfg,
+            db_session=db.session,
+            transcriber=FixedTranscriber([_seg(20.0, 25.0, "b"), _seg(4.0, 10.0, "a")]),
+        )
+        stored = manager.transcribe(post)
+
+        assert loader.names == ["base.en"]
+        rows = (
+            TranscriptSegment.query.filter_by(post_id=post.id)
+            .order_by(TranscriptSegment.sequence_num)
+            .all()
+        )
+        assert [r.sequence_num for r in rows] == list(range(5))
+        assert [r.start_time for r in rows] == [0.5, 4.0, 13.0, 20.0, 27.0]
+        assert [r.text for r in rows][1::2] == ["a", "b"]
+        assert len(stored) == 5
+
+
+def test_manager_skips_gap_fill_when_disabled(
+    app: Flask, episode: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    loader = StubLoader()
+    monkeypatch.setattr(gap_fill, "load_whisper_model", loader)
+    cfg = create_standard_test_config()
+    cfg.whisper = LocalWhisperConfig(model="base.en")
+    cfg.whisper_gap_fill_enabled = False
+
+    with app.app_context():
+        feed = Feed(title="F", rss_url="http://example.com/rss.xml")
+        post = Post(
+            feed=feed,
+            guid="g2",
+            download_url="http://example.com/b.mp3",
+            title="P",
+            unprocessed_audio_path=episode,
+        )
+        db.session.add_all([feed, post])
+        db.session.commit()
+        manager = TranscriptionManager(
+            logging.getLogger("test"),
+            cfg,
+            db_session=db.session,
+            transcriber=FixedTranscriber([_seg(4.0, 10.0, "a")]),
+        )
+        assert len(manager.transcribe(post)) == 1
+        assert loader.names == []

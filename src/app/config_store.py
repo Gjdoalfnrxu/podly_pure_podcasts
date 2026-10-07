@@ -62,6 +62,21 @@ def _parse_int(val: Any, *, env_name: str = "") -> int | None:
         return None
 
 
+def _parse_float(val: Any, *, env_name: str = "") -> float | None:
+    if val is None or val == "":
+        return None
+    try:
+        return float(val)
+    except (ValueError, TypeError) as exc:
+        logger.warning(
+            "Environment variable %s has non-numeric value %r; ignoring override: %s",
+            env_name,
+            val,
+            exc,
+        )
+        return None
+
+
 def _parse_bool(val: Any, *, env_name: str = "") -> bool | None:
     if val is None or val == "":
         return None
@@ -609,6 +624,8 @@ def hydrate_runtime_config_inplace(db_config: PydanticConfig | None = None) -> N
 
     _apply_whisper_type_override(cfg)
 
+    _apply_gap_fill_env_overrides(cfg)
+
     _commit_runtime_config(cfg)
     _log_final_snapshot()
 
@@ -687,6 +704,35 @@ def _apply_top_level_env_overrides(cfg: PydanticConfig) -> None:
     )
     if env_llm_max_input_per_min is not None:
         cfg.llm_max_input_tokens_per_minute = env_llm_max_input_per_min
+
+
+def _apply_gap_fill_env_overrides(cfg: PydanticConfig) -> None:
+    enabled = _parse_bool(
+        os.environ.get("WHISPER_GAP_FILL_ENABLED"), env_name="WHISPER_GAP_FILL_ENABLED"
+    )
+    if enabled is not None:
+        cfg.whisper_gap_fill_enabled = enabled
+
+    for env_name, field, allow_zero in (
+        ("WHISPER_GAP_FILL_MIN_GAP_SECONDS", "whisper_gap_fill_min_gap_seconds", False),
+        ("WHISPER_GAP_FILL_PADDING_SECONDS", "whisper_gap_fill_padding_seconds", True),
+        (
+            "WHISPER_GAP_FILL_MAX_WINDOW_SECONDS",
+            "whisper_gap_fill_max_window_seconds",
+            False,
+        ),
+    ):
+        value = _parse_float(os.environ.get(env_name), env_name=env_name)
+        if value is None:
+            continue
+        if value < 0 or (value == 0 and not allow_zero):
+            logger.warning("Ignoring %s=%r: out of range", env_name, value)
+            continue
+        setattr(cfg, field, value)
+
+    model = os.environ.get("WHISPER_GAP_FILL_MODEL")
+    if model:
+        cfg.whisper_gap_fill_model = model
 
 
 def _apply_remote_whisper_runtime_overrides(whisper: RemoteWhisperConfig) -> None:

@@ -29,10 +29,13 @@ COPY src/podcast_processor/ad_classifier.py \
      src/podcast_processor/audio_processor.py \
      src/podcast_processor/boundary_refiner.py \
      src/podcast_processor/model_output.py \
+     src/podcast_processor/transcript_gap_fill.py \
+     src/podcast_processor/transcription_manager.py \
      src/podcast_processor/untranscribed_gaps.py \
      src/podcast_processor/word_boundary_refiner.py \
      /app/src/podcast_processor/
-COPY src/shared/config.py src/shared/llm_utils.py /app/src/shared/
+COPY src/shared/config.py src/shared/defaults.py src/shared/llm_utils.py \
+     /app/src/shared/
 # Drop the old hashed bundles so only the rebuilt index.html + assets ship.
 RUN rm -rf /app/src/app/static/assets
 COPY --from=frontend-build /app/dist /app/src/app/static
