@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import logging
 import os
 from typing import Any
@@ -30,6 +31,20 @@ logger = logging.getLogger("global_logger")
 
 def _is_empty(value: Any) -> bool:
     return value is None or value == ""
+
+
+def _parse_json_object(value: str | None, *, env_name: str) -> dict[str, Any] | None:
+    if value is None or not value.strip():
+        return None
+    try:
+        parsed = json.loads(value)
+    except json.JSONDecodeError as exc:
+        logger.error("Ignoring %s: not valid JSON (%s)", env_name, exc)
+        return None
+    if not isinstance(parsed, dict):
+        logger.error("Ignoring %s: must be a JSON object", env_name)
+        return None
+    return parsed
 
 
 def _parse_int(val: Any, *, env_name: str = "") -> int | None:
@@ -639,6 +654,12 @@ def _apply_top_level_env_overrides(cfg: PydanticConfig) -> None:
     )
     if env_llm_max_concurrent is not None:
         cfg.llm_max_concurrent_calls = env_llm_max_concurrent
+
+    env_llm_extra_body = _parse_json_object(
+        os.environ.get("LLM_EXTRA_BODY"), env_name="LLM_EXTRA_BODY"
+    )
+    if env_llm_extra_body is not None:
+        cfg.llm_extra_body = env_llm_extra_body
 
     env_llm_max_retries = _parse_int(
         os.environ.get("LLM_MAX_RETRY_ATTEMPTS"), env_name="LLM_MAX_RETRY_ATTEMPTS"

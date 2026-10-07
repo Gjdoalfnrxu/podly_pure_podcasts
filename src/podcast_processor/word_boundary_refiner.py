@@ -21,6 +21,7 @@ from podcast_processor.llm_model_call_utils import (
     try_update_model_call,
 )
 from shared.config import Config
+from shared.llm_utils import llm_request_extras
 
 # Keep the same internal bounds as the existing BoundaryRefiner.
 MAX_START_EXTENSION_SECONDS = 30.0
@@ -108,6 +109,7 @@ Return only one JSON object (no markdown/code fences, no analysis text) with:
                 timeout=self.config.openai_timeout,
                 api_key=self.config.llm_api_key,
                 base_url=self.config.openai_base_url,
+                **llm_request_extras(self.config),
             )
 
             content = extract_litellm_content(response)
