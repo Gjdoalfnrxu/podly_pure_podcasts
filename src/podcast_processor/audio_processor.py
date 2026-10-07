@@ -6,6 +6,10 @@ from app.models import Identification, ModelCall, Post, TranscriptSegment
 from app.writer.client import writer_client
 from podcast_processor.ad_merger import AdMerger
 from podcast_processor.audio import clip_segments_with_fade, get_audio_duration_ms
+from podcast_processor.untranscribed_gaps import (
+    MIN_UNTRANSCRIBED_GAP_SECONDS,
+    extend_groups_into_untranscribed_gaps,
+)
 from shared.config import Config
 
 
@@ -25,14 +29,18 @@ class AudioProcessor:
         self.config = config
         self._identification_query_provided = identification_query is not None
         self.identification_query = identification_query or Identification.query
+        self._transcript_segment_query_provided = transcript_segment_query is not None
         self.transcript_segment_query = (
             transcript_segment_query or TranscriptSegment.query
         )
         self.model_call_query = model_call_query or ModelCall.query
         self.db_session = db_session or db.session
         self.ad_merger = AdMerger()
+        self.min_untranscribed_gap_seconds = MIN_UNTRANSCRIBED_GAP_SECONDS
 
-    def get_ad_segments(self, post: Post) -> list[tuple[float, float]]:
+    def get_ad_segments(
+        self, post: Post, audio_duration_seconds: float | None = None
+    ) -> list[tuple[float, float]]:
         """
         Retrieves ad segments from the database for a given post.
 
@@ -41,6 +49,8 @@ class AudioProcessor:
 
         Args:
             post: The Post object to retrieve ad segments for
+            audio_duration_seconds: Source audio length; lets an ad that runs
+                into untranscribed audio at the episode end be cut to the end
 
         Returns:
             A list of tuples containing start and end times (in seconds) of ad segments
@@ -110,6 +120,16 @@ class AudioProcessor:
         if getattr(self.config, "enable_boundary_refinement", False):
             self._apply_refined_boundaries(post, ad_groups)
 
+        # After refinement: refinement clamps to the group's transcribed span,
+        # so extending first would be clamped straight back.
+        extend_groups_into_untranscribed_gaps(
+            ad_groups,
+            self._transcript_spans(post),
+            audio_duration_seconds=audio_duration_seconds,
+            min_gap_seconds=self.min_untranscribed_gap_seconds,
+            logger=self.logger,
+        )
+
         self.logger.info(
             f"Merged {len(ad_segments_with_text)} segments into {len(ad_groups)} groups for post {post.id}"
         )
@@ -118,6 +138,19 @@ class AudioProcessor:
         ad_segments_times = [(g.start_time, g.end_time) for g in ad_groups]
         ad_segments_times.sort(key=lambda x: x[0])
         return ad_segments_times
+
+    def _transcript_spans(self, post: Post) -> list[tuple[float, float]]:
+        query = (
+            self.transcript_segment_query
+            if self._transcript_segment_query_provided
+            else self.db_session.query(TranscriptSegment)
+        )
+        rows = (
+            query.filter(TranscriptSegment.post_id == post.id)
+            .with_entities(TranscriptSegment.start_time, TranscriptSegment.end_time)
+            .all()
+        )
+        return [(float(start), float(end)) for start, end in rows]
 
     def _apply_refined_boundaries(self, post: Post, ad_groups: Any) -> None:
         post_row = self._safe_get_post_row(post)
@@ -327,13 +360,15 @@ class AudioProcessor:
         Returns:
             The merged ad segments that were removed, as millisecond windows.
         """
-        ad_segments = self.get_ad_segments(post)
-
         duration_ms = get_audio_duration_ms(post.unprocessed_audio_path)
         if duration_ms is None:
             raise ValueError(
                 f"Could not determine duration for audio: {post.unprocessed_audio_path}"
             )
+
+        ad_segments = self.get_ad_segments(
+            post, audio_duration_seconds=duration_ms / 1000.0
+        )
 
         merged_ad_segments = self.merge_ad_segments(
             duration_ms=duration_ms,
