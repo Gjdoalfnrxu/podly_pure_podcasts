@@ -4,8 +4,10 @@ feeds.py code with only the network and the writer process faked."""
 from __future__ import annotations
 
 import socket
+import ssl
 import threading
 import time
+from pathlib import Path
 from types import SimpleNamespace
 from unittest import mock
 
@@ -21,6 +23,11 @@ from app.feed_fetch import (
 )
 from app.feeds import add_or_refresh_feed, fetch_and_store_feed, fetch_feed
 from app.models import Feed
+
+_DATA = Path(__file__).parent / "data"
+# Self-signed, 127.0.0.1 only, test use only.
+TLS_CERT = str(_DATA / "tls_test_cert.pem")
+TLS_KEY = str(_DATA / "tls_test_key.pem")
 
 RSS = b"""<?xml version="1.0"?>
 <rss version="2.0" xmlns:itunes="http://www.itunes.com/dtds/podcast-1.0.dtd">
@@ -129,13 +136,16 @@ class _Server:
     Handlers stop by themselves after a few seconds so a regression fails the
     test instead of hanging it."""
 
-    def __init__(self, handler) -> None:
+    def __init__(self, handler, tls: bool = False) -> None:
+        self._tls = tls
         self.stop = threading.Event()
         self.hits = 0
         self._srv = socket.socket()
         self._srv.bind(("127.0.0.1", 0))
         self._srv.listen(32)
-        self.base = f"http://127.0.0.1:{self._srv.getsockname()[1]}"
+        scheme = "https" if tls else "http"
+        self.base = f"{scheme}://127.0.0.1:{self._srv.getsockname()[1]}"
+        self.client_closed = threading.Event()
         self._handler = handler
         threading.Thread(target=self._accept, daemon=True).start()
 
@@ -150,10 +160,15 @@ class _Server:
 
     def _one(self, conn: socket.socket) -> None:
         try:
+            if self._tls:
+                ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+                ctx.load_cert_chain(TLS_CERT, TLS_KEY)
+                conn = ctx.wrap_socket(conn, server_side=True)
             conn.recv(4096)
             self._handler(conn, self.base, self.stop)
         except OSError:
-            pass
+            # Our sends fail once the client side is shut down.
+            self.client_closed.set()
         finally:
             conn.close()
 
@@ -170,7 +185,7 @@ def _drip(conn, prefix: bytes, unit: bytes, stop, every: float = 0.2) -> None:
         time.sleep(every)  # always under the 1 s socket read timeout
 
 
-def _assert_times_out_fast(url: str) -> None:
+def _assert_times_out_fast(url: str, server: _Server | None = None) -> None:
     start = time.monotonic()
     with pytest.raises(FeedFetchTimeout):
         fetch_feed_bytes(url, timeout=1)
@@ -180,6 +195,8 @@ def _assert_times_out_fast(url: str) -> None:
     while any(t.name == "feed-fetch" for t in threading.enumerate()):
         assert time.monotonic() < deadline, "fetch worker thread leaked"
         time.sleep(0.05)
+    if server is not None:
+        assert server.client_closed.wait(2), "client never closed the connection"
 
 
 @pytest.mark.parametrize(
@@ -190,10 +207,42 @@ def _assert_times_out_fast(url: str) -> None:
     ],
     ids=["body-drip", "header-drip"],
 )
-def test_fetch_feed_bytes_wall_clock_beats_drip(prefix, unit):
-    server = _Server(lambda conn, base, stop: _drip(conn, prefix, unit, stop))
+@pytest.mark.parametrize("tls", [False, True], ids=["http", "https"])
+def test_fetch_feed_bytes_wall_clock_beats_drip(prefix, unit, tls, monkeypatch):
+    monkeypatch.setenv("REQUESTS_CA_BUNDLE", TLS_CERT)
+    server = _Server(lambda conn, base, stop: _drip(conn, prefix, unit, stop), tls=tls)
     try:
-        _assert_times_out_fast(f"{server.base}/feed.xml")
+        _assert_times_out_fast(f"{server.base}/feed.xml", server)
+    finally:
+        server.close()
+
+
+def test_fetch_feed_bytes_wall_clock_beats_tls_handshake_drip(monkeypatch):
+    """Server accepts TCP then drips a TLS record that never completes, so the
+    client is stuck inside the handshake (before urllib3 wraps the socket)."""
+    monkeypatch.setenv("REQUESTS_CA_BUNDLE", TLS_CERT)
+
+    def handshake_drip(conn, base, stop):
+        _drip(conn, b"\x16\x03\x03\x40\x00", b"\x00", stop)
+
+    server = _Server(handshake_drip)  # plain TCP; the client speaks TLS
+    url = server.base.replace("http://", "https://")
+    try:
+        _assert_times_out_fast(f"{url}/feed.xml", server)
+    finally:
+        server.close()
+
+
+def test_fetch_feed_bytes_wall_clock_covers_http_proxy(monkeypatch):
+    """HTTP_PROXY routes through requests' proxy manager, not the direct pools."""
+    server = _Server(
+        lambda conn, base, stop: _drip(conn, b"HTTP/1.1 200 OK\r\nX-T: ", b"a", stop)
+    )
+    monkeypatch.setenv("HTTP_PROXY", server.base)
+    monkeypatch.delenv("NO_PROXY", raising=False)
+    monkeypatch.delenv("no_proxy", raising=False)
+    try:
+        _assert_times_out_fast("http://feeds.example.com/feed.xml", server)
     finally:
         server.close()
 

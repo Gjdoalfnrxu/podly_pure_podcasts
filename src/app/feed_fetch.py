@@ -5,7 +5,9 @@ operation: a server can drip header bytes or chain slow redirects forever
 without tripping them. Here the whole fetch (DNS, connect, TLS, redirects,
 headers, body) runs in a worker thread with a wall-clock limit. On expiry the
 caller gets FeedFetchTimeout at once and every socket the fetch opened is
-shut down, so the worker unwinds instead of leaking.
+shut down, so the worker unwinds instead of leaking. That covers direct
+connections and HTTP(S) proxies; behind a SOCKS proxy the caller is still
+bounded but the worker may outlive the limit until the socket times out.
 """
 
 import socket
@@ -35,24 +37,41 @@ class FetchedFeed:
 
 
 class _SocketWatch:
-    """Collects the sockets one fetch opens so a watchdog can shut them down."""
+    """Holds a dup of every socket one fetch opens so a watchdog can shut them.
+
+    A dup is needed because urllib3 TLS-wraps the plain socket and the wrap
+    detaches it (fd -1); shutting down the dup shuts the shared connection,
+    including mid-handshake. Dups are closed under the lock once the fetch is
+    over, so kill() can never touch a reused fd number.
+    """
 
     def __init__(self) -> None:
         self._lock = threading.Lock()
-        self._socks: list[socket.socket] = []
+        self._dups: list[socket.socket] = []
         self.expired = False
+        self._closed = False
 
     def add(self, sock: socket.socket) -> None:
         with self._lock:
-            self._socks.append(sock)
+            if self._closed:
+                return
+            dup = sock.dup()
+            self._dups.append(dup)
             if self.expired:
-                _shutdown(sock)
+                _shutdown(dup)
 
     def kill(self) -> None:
         with self._lock:
             self.expired = True
-            for sock in self._socks:
-                _shutdown(sock)
+            for dup in self._dups:
+                _shutdown(dup)
+
+    def close(self) -> None:
+        with self._lock:
+            self._closed = True
+            for dup in self._dups:
+                dup.close()
+            self._dups.clear()
 
 
 def _shutdown(sock: socket.socket) -> None:
@@ -81,13 +100,21 @@ def _watched_session(watch: _SocketWatch) -> requests.Session:
     class TLSPool(HTTPSConnectionPool):
         ConnectionCls = TLSConn
 
+    watched_pools = {"http": Pool, "https": TLSPool}
+
     class Adapter(HTTPAdapter):
         def init_poolmanager(self, *args: Any, **kwargs: Any) -> None:
             super().init_poolmanager(*args, **kwargs)
-            self.poolmanager.pool_classes_by_scheme = {
-                "http": Pool,
-                "https": TLSPool,
-            }
+            self.poolmanager.pool_classes_by_scheme = watched_pools
+
+        def proxy_manager_for(self, proxy: str, **kwargs: Any) -> Any:
+            manager = super().proxy_manager_for(proxy, **kwargs)
+            # HTTP(S) proxies (env HTTP_PROXY/HTTPS_PROXY) build pools from the
+            # same table. SOCKS managers use their own pool classes and are
+            # left alone; there only the caller-side time limit applies.
+            if not proxy.lower().startswith("socks"):
+                manager.pool_classes_by_scheme = watched_pools
+            return manager
 
     session = requests.Session()
     session.max_redirects = MAX_REDIRECTS
@@ -97,6 +124,13 @@ def _watched_session(watch: _SocketWatch) -> requests.Session:
 
 
 def _download(url: str, timeout: float, watch: _SocketWatch) -> FetchedFeed:
+    try:
+        return _get(url, timeout, watch)
+    finally:
+        watch.close()
+
+
+def _get(url: str, timeout: float, watch: _SocketWatch) -> FetchedFeed:
     with (
         _watched_session(watch) as session,
         session.get(
