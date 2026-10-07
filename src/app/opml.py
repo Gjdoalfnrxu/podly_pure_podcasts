@@ -7,7 +7,10 @@ XXE and entity-expansion payloads (billion laughs) fail before any expansion.
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import UTC, datetime
+from email.utils import format_datetime
 from typing import NoReturn
+from xml.etree import ElementTree as ET
 from xml.parsers import expat
 
 
@@ -70,3 +73,19 @@ def parse_opml(data: bytes) -> list[OpmlFeed]:
     if not root or root[0].lower() != "opml":
         raise OpmlParseError("Document is not OPML (root element must be <opml>)")
     return feeds
+
+
+def build_opml(feeds: list[OpmlFeed], title: str = "Podly feeds") -> bytes:
+    """Serialise feeds as an OPML 2.0 document (attributes XML-escaped)."""
+    root = ET.Element("opml", version="2.0")
+    head = ET.SubElement(root, "head")
+    ET.SubElement(head, "title").text = title
+    ET.SubElement(head, "dateCreated").text = format_datetime(datetime.now(UTC))
+    body = ET.SubElement(root, "body")
+    for feed in feeds:
+        name = feed.title or feed.url
+        ET.SubElement(
+            body, "outline", type="rss", text=name, title=name, xmlUrl=feed.url
+        )
+    ET.indent(root)
+    return ET.tostring(root, encoding="utf-8", xml_declaration=True)

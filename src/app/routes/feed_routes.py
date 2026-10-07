@@ -40,6 +40,7 @@ from app.models import (
     User,
     UserFeed,
 )
+from app.routes.feed_links import protected_feed_url
 from app.routes.feed_subscribe import (
     FeedAllowanceError,
     InvalidFeedUrlError,
@@ -226,20 +227,13 @@ def create_feed_share_link(feed_id: int) -> ResponseReturnValue:
     if user is None:
         return jsonify({"error": "User not found."}), 404
 
-    result = writer_client.action(
-        "create_feed_access_token",
-        {"user_id": user.id, "feed_id": feed.id},
-        wait=True,
-    )
-    if not result or not result.success or not isinstance(result.data, dict):
+    try:
+        link = protected_feed_url(user.id, feed.id)
+    except RuntimeError:
         return jsonify({"error": "Failed to create feed token"}), 500
-    token_id = str(result.data["token_id"])
-    secret = str(result.data["secret"])
-
-    base_url = _get_base_url()
-    path = f"/feed/{feed.id}"
-    query = urlencode({"feed_token": token_id, "feed_secret": secret})
-    prefilled_url = f"{base_url}{path}?{query}"
+    token_id = link.token_id
+    secret = link.secret
+    prefilled_url = link.url
 
     return (
         jsonify(

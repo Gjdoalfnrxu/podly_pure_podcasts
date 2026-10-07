@@ -59,3 +59,21 @@ checkbox defaults to unticked for bulk imports.
 waitress serves with `SERVER_THREADS` (default 1). The import no longer holds
 a request thread, but podcast-app polling, the UI and audio downloads still
 share the pool; 4 is a reasonable value for a small instance.
+
+# OPML export
+
+`GET /api/feeds/export-opml` downloads `podly-feeds.opml` (OPML 2.0) with one
+`<outline type="rss" text title xmlUrl>` per feed:
+
+- Auth on: only the feeds the logged-in user is subscribed to (also for
+  admins, whose feed list shows every feed). `xmlUrl` is the same tokenised,
+  ad-free URL "Copy protected feed" gives, built by the same helper
+  (`app/routes/feed_links.py`). Tokens are per user and feed and are reused:
+  exporting again returns the same URLs and creates no new tokens. Anyone with
+  the file can read those feeds, so treat it like the copied URLs.
+- Auth off: every feed, with the plain `/feed/<id>` URL.
+
+The base URL comes from the request (`Host` plus `X-Forwarded-Proto` and the
+other forwarded-scheme headers), as for the copy button. `htmlUrl` is not
+written: Podly does not store a feed's website. The UI button is the download
+icon next to "Add Feed".
