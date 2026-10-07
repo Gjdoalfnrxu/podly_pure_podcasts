@@ -315,6 +315,46 @@ def test_short_ad_group_is_dropped_before_extension(
         assert _cut_windows(test_config, post, duration_s=1000.0) == []
 
 
+def test_near_end_rule_measures_from_transcribed_ad_edge(
+    app: Flask, test_config: Config
+) -> None:
+    """Speech 3050-3080 is 50s past the transcribed ad end but only 30s past
+    the gap-extended end. The 60s near-end rule must judge the transcribed
+    edge, so the speech is kept."""
+    with app.app_context():
+        test_config.output.min_ad_segment_length_seconds = 14
+        post = _seed_post(
+            [
+                (0.0, 2999.0, "content"),
+                (3000.0, 3030.0, "ad"),
+                (3050.0, 3080.0, "content"),  # 20s untranscribed before it
+            ]
+        )
+        assert _cut_windows(test_config, post, duration_s=3100.0) == [
+            (3000000, 3050000)
+        ]
+
+
+def test_short_last_ad_kept_by_near_end_rule_is_not_gap_extended(
+    app: Flask, test_config: Config
+) -> None:
+    """A 5s ad near the end survives the 14s minimum only through the
+    near-end restore; it must not also pull the 50s gap before it into the
+    cut."""
+    with app.app_context():
+        test_config.output.min_ad_segment_length_seconds = 14
+        post = _seed_post(
+            [
+                (0.0, 2990.0, "content"),
+                (3040.0, 3045.0, "ad"),  # 50s untranscribed before it
+                (3046.0, 3075.0, "content"),
+            ]
+        )
+        assert _cut_windows(test_config, post, duration_s=3080.0) == [
+            (3040000, 3080000)
+        ]
+
+
 def test_groups_bordering_the_same_gap_coalesce(
     app: Flask, test_config: Config
 ) -> None:

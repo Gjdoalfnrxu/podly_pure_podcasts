@@ -257,9 +257,11 @@ class AudioProcessor:
             ad_segments: List of ad segments as (start, end) tuples in seconds
             min_ad_segment_length_seconds: Minimum length of an ad segment to retain
             min_ad_segment_separation_seconds: Minimum separation between segments before merging
-            gap_windows: Untranscribed-gap extensions of ``ad_segments``. Merging
-                and length filtering use the transcribed windows; only the
-                outer edges of the surviving windows are then extended.
+            gap_windows: Untranscribed-gap extensions of ``ad_segments``. Merging,
+                length filtering and the near-end rule use the transcribed
+                windows; only the outer edges of the surviving windows are then
+                extended. A short last window kept by the near-end restore is
+                not extended.
 
         Returns:
             List of merged ad segments as (start, end) tuples in milliseconds
@@ -287,13 +289,26 @@ class AudioProcessor:
             ad_segments, min_length=min_ad_segment_length_seconds
         )
         ad_segments = self._restore_last_segment_if_needed(ad_segments, last_segment)
-        if gap_windows:
-            ad_segments = extend_outer_edges(ad_segments, gap_windows)
+        # The near-end rule must measure from the transcribed ad edge, so it
+        # runs before the gap extension.
         ad_segments = self._extend_last_segment_to_end_if_needed(
             ad_segments,
             audio_duration_seconds=audio_duration_seconds,
             min_separation=min_ad_segment_separation_seconds,
         )
+        if gap_windows:
+            if (
+                last_segment is not None
+                and last_segment[1] - last_segment[0] < min_ad_segment_length_seconds
+            ):
+                # Kept only by the near-end restore, below the minimum length:
+                # it must not pull a gap into the cut either.
+                gap_windows = [
+                    w
+                    for w in gap_windows
+                    if not (w.start >= last_segment[0] and w.end <= last_segment[1])
+                ]
+            ad_segments = extend_outer_edges(ad_segments, gap_windows)
 
         self.logger.info(f"Joined ad segments into: {ad_segments}")
         return [(round(start * 1000), round(end * 1000)) for start, end in ad_segments]
