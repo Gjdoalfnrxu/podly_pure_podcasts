@@ -433,17 +433,63 @@ def test_start_post_processing_routes_keep_transcript_job_to_llm(papp):
         jm._run_lock = threading.Lock()
         jm._run_id = None
         jm._workers = mock.Mock()
+        real_action = writer_client.action
+        actions: list[tuple[str, dict]] = []
+
+        def recording_action(name, params=None, **kw):
+            actions.append((name, params or {}))
+            return real_action(name, params, **kw)
+
         with (
             mock.patch("app.jobs_manager._scheduler_app_context", papp.app_context),
             mock.patch("app.runtime_config.config", cfg),
+            mock.patch.object(writer_client, "action", side_effect=recording_action),
         ):
-            result = jm.start_post_processing("kt", priority="interactive", manual=True)
+            result = jm.start_post_processing(
+                "kt", priority="interactive", manual=True, needs_transcription=False
+            )
         assert result["status"] == "started"
         db.session.expire_all()
         job = get_job(result["job_id"])
         assert job.stage == STAGE_LLM
         assert job.priority == PRIORITY_INTERACTIVE
+        assert job.lane != LANE_CLOUD  # keep-transcript never uses the paid lane
         jm._workers.wake.assert_called()
+        # Stage and priority are in the insert itself, so no worker can see the
+        # new job unrouted.
+        created = [p["job_data"] for n, p in actions if n == "create_job"]
+        assert len(created) == 1
+        assert (created[0]["stage"], created[0]["priority"]) == (
+            STAGE_LLM,
+            PRIORITY_INTERACTIVE,
+        )
+
+
+def test_requeues_never_put_work_in_the_cloud_lane(papp):
+    """Restart re-queue and the LLM->transcribe bounce send cloud jobs local."""
+    with papp.app_context():
+        add_post("cut-off")
+        add_job(
+            "cut-off",
+            "cut-off",
+            status="running",
+            stage=STAGE_TRANSCRIBE,
+            lane=LANE_CLOUD,
+        )
+        add_post("waiting")
+        add_job("waiting", "waiting", stage=STAGE_TRANSCRIBE, lane=LANE_CLOUD)
+        add_post("bounce")
+        add_job("bounce", "bounce", status="running", stage=STAGE_LLM, lane=LANE_CLOUD)
+
+        assert act("advance_job_stage", job_id="bounce", stage=STAGE_TRANSCRIBE)[
+            "advanced"
+        ]
+        assert act("requeue_interrupted_jobs")["requeued"] == 1
+        db.session.expire_all()
+        assert get_job("cut-off").lane is None
+        assert get_job("bounce").lane is None
+        # A job that was only waiting keeps the lane it was queued with.
+        assert get_job("waiting").lane == LANE_CLOUD
 
 
 # ------------------------------------------------------------------ concurrency

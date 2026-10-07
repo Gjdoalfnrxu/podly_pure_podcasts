@@ -54,6 +54,8 @@ is finished in the transcribe stage, so it cannot bounce between stages.
   refuses to go over N running jobs of that stage.
 - **Cancel:** a job cancelled during transcription is not handed to the LLM
   stage.
+- **Atomic routing:** a new job's stage and priority are written in the same
+  insert that queues it (like its lane), so no worker sees it unrouted.
 
 ## Status shown in the UI
 
@@ -75,8 +77,9 @@ field.
 
 On startup, jobs that were running go back to pending in the same stage, and
 pending jobs stay queued. Jobs that were in the LLM stage keep their transcript
-and skip Whisper. (2.5.0 deleted pending and running jobs, and nothing came back
-until the next feed refresh.)
+and skip Whisper. Re-queued jobs go to the local lane (re-queues never use the
+paid cloud lane); waiting jobs keep their lane. (2.5.0 deleted pending and
+running jobs, and nothing came back until the next feed refresh.)
 
 ## Audio cut
 
