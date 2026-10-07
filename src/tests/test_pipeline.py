@@ -474,6 +474,22 @@ def test_stage_limits_are_never_exceeded_and_are_used(papp):
     assert len(h.timeline.of("llm")) == 8
 
 
+@pytest.mark.parametrize("slots", [1, 2])
+def test_audio_cuts_are_limited(papp, slots):
+    """Four episodes reach the cut together; only ``slots`` cuts run at once."""
+    with papp.app_context():
+        ids = []
+        for i in range(4):
+            post = add_post(f"p{i}")
+            store_transcript(post)
+            ids.append(add_job(f"j{i}", f"p{i}", order=i, stage=STAGE_LLM))
+    h = Harness(papp, llm_workers=4, cut_slots=slots, llm_s=0.2, cut_s=0.4)
+    h.run_until_done(ids)
+    assert job_statuses(papp, ids) == ["completed"] * 4
+    assert h.timeline.max_active["llm"] == 4
+    assert h.timeline.max_active["cut"] == slots
+
+
 def test_transcription_of_next_episode_overlaps_llm_of_previous(papp):
     with papp.app_context():
         ids = []
