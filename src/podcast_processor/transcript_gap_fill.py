@@ -212,16 +212,25 @@ def _repeats_neighbour(
 
 
 def merge_recovered(
-    existing: Sequence[Segment], recovered: Sequence[Segment]
+    existing: Sequence[Segment],
+    recovered: Sequence[Segment],
+    *,
+    primary: Sequence[Segment] | None = None,
 ) -> tuple[list[Segment], list[Segment]]:
     """Merge recovered segments into ``existing`` without overlap or repeats.
 
     A recovered segment mostly inside already-covered time (existing or an
     earlier accepted recovery) is dropped; otherwise its times are trimmed to
-    its longest uncovered stretch. One that repeats the words at the edge of
-    its neighbouring segment is dropped too. Returns (merged sorted, added).
+    its longest uncovered stretch. One that repeats the edge words of its
+    neighbouring ``primary`` segment (default: ``existing``) is dropped too;
+    recovered neighbours are not compared, as ad copy legitimately repeats.
+    Returns (merged sorted, added).
     """
     merged = sorted(existing, key=lambda s: (s.start, s.end))
+    originals = sorted(
+        primary if primary is not None else existing, key=lambda s: s.start
+    )
+    original_starts = [o.start for o in originals]
     added: list[Segment] = []
     for seg in sorted(recovered, key=lambda s: (s.start, s.end)):
         duration = seg.end - seg.start
@@ -234,13 +243,13 @@ def merge_recovered(
         start, end = max(parts, key=lambda p: p[1] - p[0])
         if end - start < _MIN_SEGMENT_SECONDS:
             continue
-        idx = bisect.bisect_left([m.start for m in merged], start)
-        before = merged[idx - 1] if idx > 0 else None
-        after = merged[idx] if idx < len(merged) else None
+        o_idx = bisect.bisect_left(original_starts, start)
+        before = originals[o_idx - 1] if o_idx > 0 else None
+        after = originals[o_idx] if o_idx < len(originals) else None
         if _repeats_neighbour(seg.text, before, after):
             continue
         kept = Segment(start=start, end=end, text=seg.text)
-        merged.insert(idx, kept)
+        merged.insert(bisect.bisect_left([m.start for m in merged], start), kept)
         added.append(kept)
     return merged, added
 
@@ -315,41 +324,62 @@ class WhisperGapFiller:
             )
             return sorted(segments, key=lambda seg: (seg.start, seg.end))
 
-        windows = plan_windows(gaps, duration, s.padding_seconds, s.max_window_seconds)
         started = time.time()
-        merged = sorted(segments, key=lambda seg: (seg.start, seg.end))
+        primary = sorted(segments, key=lambda seg: (seg.start, seg.end))
+        merged = primary
         added: list[Segment] = []
+        attempted: set[tuple[float, float]] = set()
+        windows_run = 0
+        seconds_run = 0.0
         model = self.model_loader(s.model_name)
         try:
-            for window in windows:
-                found = self._transcribe_window(model, audio_path, window)
-                merged, new = merge_recovered(merged, found)
-                added.extend(new)
-                if not new:
-                    self.logger.info(
-                        "Post %s: gap-fill window %.1f-%.1f (gap %.1f-%.1f) "
-                        "yielded no new speech; leaving it untranscribed",
-                        post_id,
-                        window.start,
-                        window.end,
-                        window.gap_start,
-                        window.gap_end,
-                    )
+            # Pass 2 retries what is still uncovered with no padding: a clip
+            # that opens on the tail of already-transcribed speech can make
+            # whisper emit that fragment and then jump a whole 30s window.
+            for pass_no, padding in enumerate((s.padding_seconds, 0.0), start=1):
+                remaining = find_gaps(merged, duration, s.min_gap_seconds)
+                planned = plan_windows(
+                    remaining, duration, padding, s.max_window_seconds
+                )
+                for window in planned:
+                    key = (round(window.start, 2), round(window.end, 2))
+                    if key in attempted:
+                        continue
+                    attempted.add(key)
+                    windows_run += 1
+                    seconds_run += window.end - window.start
+                    found = self._transcribe_window(model, audio_path, window)
+                    merged, new = merge_recovered(merged, found, primary=primary)
+                    added.extend(new)
+                    if not new:
+                        self.logger.info(
+                            "Post %s: gap-fill pass %d window %.1f-%.1f (gap "
+                            "%.1f-%.1f) yielded no new speech",
+                            post_id,
+                            pass_no,
+                            window.start,
+                            window.end,
+                            window.gap_start,
+                            window.gap_end,
+                        )
         finally:
             del model
             gc.collect()
 
+        left = find_gaps(merged, duration, s.min_gap_seconds)
         self.logger.info(
             "Post %s: gap-fill (%s) found %d gaps totalling %.1fs, re-transcribed "
-            "%.1fs in %d windows, added %d segments in %.1fs",
+            "%.1fs in %d windows, added %d segments in %.1fs; %.1fs still "
+            "untranscribed",
             post_id,
             s.model_name,
             len(gaps),
             sum(e - b for b, e in gaps),
-            sum(w.end - w.start for w in windows),
-            len(windows),
+            seconds_run,
+            windows_run,
             len(added),
             time.time() - started,
+            sum(e - b for b, e in left),
         )
         return merged
 

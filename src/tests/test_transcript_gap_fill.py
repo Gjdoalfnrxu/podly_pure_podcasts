@@ -200,6 +200,19 @@ def test_merge_drops_repeat_of_neighbour_edge_words() -> None:
     assert [s.text for s in added] == [" This episode is brought to you by Xero."]
 
 
+def test_merge_keeps_recovered_lines_that_echo_each_other() -> None:
+    """Ad copy repeats itself; only primary neighbours count as repeats."""
+    existing = [_seg(0.0, 10.0, " as good as far as"), _seg(30.0, 40.0, " Hey")]
+    recovered = [
+        _seg(10.0, 12.0, " No, you did."),
+        _seg(12.0, 14.0, " So you did."),
+        _seg(14.0, 16.0, " This is your business."),
+        _seg(16.0, 18.0, " This is your business."),
+    ]
+    _, added = merge_recovered(existing, recovered)
+    assert len(added) == 4
+
+
 # --- end to end through real audio ----------------------------------------
 
 
@@ -231,7 +244,11 @@ def test_fill_recovers_start_interior_and_end_speech(episode: str) -> None:
     assert [s.start for s in merged] == sorted(s.start for s in merged)
     # one model load for the whole pass, fresh-context decoding per window
     assert loader.names == ["base.en"]
-    assert len(loader.model.calls) == 3
+    # pass 1: three padded windows; pass 2 retries the silent 3s stretches
+    # left between primary and recovered speech, unpadded
+    assert [c["seconds"] for c in loader.model.calls] == pytest.approx(
+        [5.0, 12.0, 6.0, 3.0, 3.0], abs=0.01
+    )
     for call in loader.model.calls:
         assert call["fp16"] is False
         assert call["condition_on_previous_text"] is False
@@ -260,9 +277,12 @@ def test_fill_music_gap_yields_nothing_and_logs(
         merged = _filler(loader).fill(42, path, primary)
 
     assert merged == primary
-    assert len(loader.model.calls) == 1
+    # padded attempt, then one unpadded retry
+    assert [c["seconds"] for c in loader.model.calls] == pytest.approx(
+        [12.0, 10.0], abs=0.01
+    )
     assert (
-        "Post 42: gap-fill window 9.0-21.0 (gap 10.0-20.0) yielded no new speech"
+        "Post 42: gap-fill pass 1 window 9.0-21.0 (gap 10.0-20.0) yielded no new speech"
         in (caplog.text)
     )
     assert "found 1 gaps totalling 10.0s" in caplog.text
@@ -276,7 +296,9 @@ def test_fill_long_gap_is_chunked_without_duplicates(tmp_path: Path) -> None:
 
     merged = _filler(loader, max_window_seconds=60.0).fill(1, path, primary)
 
-    assert len(loader.model.calls) == 3
+    # pass 1 chunks the 150s gap into 3 windows; pass 2 retries the two
+    # silent 25s ends left uncovered
+    assert len(loader.model.calls) == 5
     assert max(c["seconds"] for c in loader.model.calls) <= 60.0 + 0.01
     recovered = [s for s in merged if s.text.startswith(" ~")]
     assert recovered[0].start == pytest.approx(30.0, abs=TOL)
@@ -285,6 +307,32 @@ def test_fill_long_gap_is_chunked_without_duplicates(tmp_path: Path) -> None:
     assert covered == pytest.approx(100.0, abs=3 * TOL)
     for a, b in pairwise(merged):
         assert a.end <= b.start + 1e-9
+
+
+class JumpingWhisperModel(StubWhisperModel):
+    """Mimics base.en on post 1025: a clip opening on the tail of earlier speech
+    yields only that fragment, then whisper seeks past the rest of its 30s
+    window, so the speech after it is never emitted."""
+
+    def transcribe(self, audio: np.ndarray, **kwargs: Any) -> dict[str, Any]:
+        result = super().transcribe(audio, **kwargs)
+        if result["segments"] and result["segments"][0]["start"] == 0.0:
+            return {"segments": result["segments"][:1]}
+        return result
+
+
+def test_unpadded_retry_recovers_speech_whisper_jumped_over(tmp_path: Path) -> None:
+    path = _write_wav(tmp_path / "jump.wav", 50.0, [(0.0, 10.0), (12.0, 38.0)])
+    primary = [_seg(0.0, 10.0, "show"), _seg(40.0, 50.0, "show again")]
+    loader = StubLoader(JumpingWhisperModel())
+
+    merged = _filler(loader).fill(1025, path, primary)
+
+    recovered = [s for s in merged if s.text.startswith(" ~")]
+    assert len(recovered) == 1
+    assert recovered[0].start == pytest.approx(12.0, abs=TOL)
+    assert recovered[0].end == pytest.approx(38.0, abs=TOL)
+    assert len(loader.model.calls) == 2
 
 
 def test_fill_keeps_primary_when_model_fails(episode: str) -> None:
