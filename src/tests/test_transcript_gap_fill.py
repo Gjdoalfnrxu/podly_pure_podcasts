@@ -644,7 +644,7 @@ def test_rejected_decode_leaves_its_stretch_open_for_retry(tmp_path: Path) -> No
 
 
 def test_fragment_points_past_the_clip_do_not_split_retry_gaps(
-    tmp_path: Path,
+    tmp_path: Path, caplog: pytest.LogCaptureFixture
 ) -> None:
     """A fragment whisper times past the end of its clip is clamped to a
     zero-length point. Such points must not count as heard: a train of them
@@ -660,10 +660,22 @@ def test_fragment_points_past_the_clip_do_not_split_retry_gaps(
                         {
                             "start": seconds + 2.0 + 2.5 * i,
                             "end": seconds + 3.0 + 2.5 * i,
-                            "text": " Yes.",
-                            "avg_logprob": -0.95,
+                            "text": text,
+                            "avg_logprob": -0.95,  # weak fragments
                         }
-                        for i in range(9)
+                        for i, text in enumerate(
+                            [
+                                "Yes.",
+                                "No.",
+                                "Right.",
+                                "Okay.",
+                                "Sure.",
+                                "Well.",
+                                "Hmm.",
+                                "Yeah.",
+                                "So.",
+                            ]
+                        )
                     ]
                 }
             if len(self.calls) == 2:  # padded window 14-41: whisper jumps
@@ -676,7 +688,10 @@ def test_fragment_points_past_the_clip_do_not_split_retry_gaps(
     primary = [_seg(0.0, 10.0, "a"), _seg(14.0, 15.0, "b"), _seg(40.0, 60.0, "c")]
     loader = StubLoader(PhantomModel())
 
-    merged = _filler(loader).fill(1, path, primary)
+    with caplog.at_level(logging.INFO, logger="test"):
+        merged = _filler(loader).fill(1, path, primary)
+
+    assert "weak fragment 9" in caplog.text
 
     recovered = [(round(s.start, 1), round(s.end, 1)) for s in merged if "~" in s.text]
     assert recovered == [(18.0, 36.0)]
