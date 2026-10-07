@@ -1,0 +1,251 @@
+import { useEffect, useRef, useState } from 'react';
+import { feedsApi } from '../services/api';
+import type { OpmlImportResult } from '../types';
+import { diagnostics, emitDiagnosticError } from '../utils/diagnostics';
+import { getHttpErrorInfo } from '../utils/httpError';
+
+const ACTIVE_IMPORT_KEY = 'podly.opmlImportId';
+const MAX_POLL_FAILURES = 5;
+
+interface ImportOpmlPanelProps {
+  onImported: () => void;
+  onDone: () => void;
+  disabled?: boolean;
+}
+
+function UrlList({ title, urls, tone }: { title: string; urls: string[]; tone: string }) {
+  if (urls.length === 0) return null;
+  return (
+    <div>
+      <h4 className={`text-sm font-medium ${tone}`}>
+        {title} ({urls.length})
+      </h4>
+      <ul className="mt-1 text-xs text-gray-600 break-all list-disc pl-5 space-y-0.5">
+        {urls.map((u) => (
+          <li key={u}>{u}</li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+export default function ImportOpmlPanel({ onImported, onDone, disabled }: ImportOpmlPanelProps) {
+  const [file, setFile] = useState<File | null>(null);
+  // Bulk imports default to not queueing anything; see the checkbox help text.
+  const [processLatest, setProcessLatest] = useState(false);
+  const [isImporting, setIsImporting] = useState(false);
+  const [error, setError] = useState('');
+  const [result, setResult] = useState<OpmlImportResult | null>(null);
+  const mounted = useRef(true);
+
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+    };
+  }, []);
+
+  const pollUntilDone = async (initial: OpmlImportResult): Promise<OpmlImportResult> => {
+    let current = initial;
+    let consecutiveFailures = 0;
+    while (current.status === 'running' && mounted.current) {
+      await new Promise((resolve) => setTimeout(resolve, 1500));
+      try {
+        current = await feedsApi.getOpmlImport(current.import_id);
+        consecutiveFailures = 0;
+      } catch (err) {
+        const { status } = getHttpErrorInfo(err);
+        // 404: the server restarted and lost the job (subscriptions made so far stay).
+        if (status === 404 || ++consecutiveFailures >= MAX_POLL_FAILURES) throw err;
+        continue;
+      }
+      if (mounted.current) setResult(current);
+    }
+    return current;
+  };
+
+  // Follow a job to completion; used for new imports and resumed ones.
+  const followImport = async (started: OpmlImportResult) => {
+    sessionStorage.setItem(ACTIVE_IMPORT_KEY, started.import_id);
+    setIsImporting(true);
+    setResult(started);
+    try {
+      const summary = await pollUntilDone(started);
+      if (!mounted.current) return;
+      if (summary.status === 'running') return;
+      sessionStorage.removeItem(ACTIVE_IMPORT_KEY);
+      if (summary.status === 'error') {
+        setError(summary.error || 'Import stopped with an error.');
+      }
+      diagnostics.add('info', 'OPML import done', {
+        added: summary.added.length,
+        skipped: summary.skipped_existing.length,
+        failed: summary.failed.length,
+      });
+      if (summary.added.length > 0) {
+        onImported();
+      }
+    } catch (err) {
+      sessionStorage.removeItem(ACTIVE_IMPORT_KEY);
+      reportError(err);
+    } finally {
+      if (mounted.current) setIsImporting(false);
+    }
+  };
+
+  const reportError = (err: unknown) => {
+    const { status, data, message } = getHttpErrorInfo(err);
+    emitDiagnosticError({
+      title: 'OPML import failed',
+      message,
+      kind: status ? 'http' : 'network',
+      details: { status, response: data },
+    });
+    if (mounted.current) {
+      setError(
+        status === 404
+          ? 'Lost track of the import (the server may have restarted). Check your feed list.'
+          : message || 'Failed to import OPML file.'
+      );
+    }
+  };
+
+  // Reopening the modal mid-import picks the running job back up.
+  useEffect(() => {
+    const activeId = sessionStorage.getItem(ACTIVE_IMPORT_KEY);
+    if (!activeId) return;
+    feedsApi
+      .getOpmlImport(activeId)
+      .then((job) => {
+        if (job.status === 'running') {
+          void followImport(job);
+        } else {
+          sessionStorage.removeItem(ACTIVE_IMPORT_KEY);
+        }
+      })
+      .catch(() => sessionStorage.removeItem(ACTIVE_IMPORT_KEY));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!file) return;
+    setError('');
+    setResult(null);
+    let started: OpmlImportResult;
+    try {
+      diagnostics.add('info', 'OPML import request', { size: file.size, processLatest });
+      setIsImporting(true);
+      started = await feedsApi.importOpml(file, processLatest);
+    } catch (err) {
+      const { status, data } = getHttpErrorInfo(err);
+      const running =
+        status === 409 && data && typeof data === 'object'
+          ? (data as { running?: OpmlImportResult }).running
+          : undefined;
+      if (running) {
+        setError('An import is already running; showing its progress.');
+        await followImport(running);
+      } else {
+        setIsImporting(false);
+        reportError(err);
+      }
+      return;
+    }
+    await followImport(started);
+  };
+
+  return (
+    <div className="space-y-4">
+      <form onSubmit={handleSubmit} className="space-y-4">
+        <div>
+          <label htmlFor="opml-file" className="block text-sm font-medium text-gray-700 mb-1">
+            OPML file
+          </label>
+          <input
+            type="file"
+            id="opml-file"
+            accept=".opml,.xml,text/xml,application/xml,text/x-opml"
+            onChange={(e) => {
+              setFile(e.target.files?.[0] ?? null);
+              setResult(null);
+              setError('');
+            }}
+            className="block w-full text-sm text-gray-700 file:mr-3 file:px-3 file:py-2 file:rounded-md file:border-0 file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"
+            disabled={disabled}
+          />
+          <p className="mt-1 text-xs text-gray-500">
+            Export subscriptions from your podcast app as OPML. Feeds you already follow are skipped.
+          </p>
+        </div>
+
+        <label className="flex items-start gap-2 text-sm text-gray-700">
+          <input
+            type="checkbox"
+            checked={processLatest}
+            onChange={(e) => setProcessLatest(e.target.checked)}
+            className="mt-0.5"
+            disabled={disabled}
+          />
+          <span>
+            Process the latest episode of each new feed (same as adding one feed).
+            <span className="block text-xs text-gray-500">
+              Unticked: feeds new to this server are added with no episodes queued. Feeds that
+              already exist on this server are refreshed as usual, which can queue newly released
+              episodes if auto-processing is on. Episodes released later follow your
+              auto-process settings either way.
+            </span>
+          </span>
+        </label>
+
+        {error && <div className="text-red-600 text-sm">{error}</div>}
+
+        <div className="flex flex-col sm:flex-row sm:justify-end gap-3">
+          <button
+            type="submit"
+            disabled={isImporting || !file || !!disabled}
+            className="bg-blue-600 hover:bg-blue-700 disabled:bg-gray-400 text-white px-4 py-2 rounded-md font-medium transition-colors sm:w-auto w-full"
+          >
+            {isImporting
+              ? result
+                ? `Importing ${result.processed}/${result.total}...`
+                : 'Uploading...'
+              : 'Import'}
+          </button>
+        </div>
+      </form>
+
+      {result && result.status !== 'running' && (
+        <div className="space-y-3 p-3 border border-gray-200 rounded-md bg-gray-50" data-testid="opml-import-result">
+          <p className="text-sm text-gray-800">
+            Added {result.added.length}, already subscribed {result.skipped_existing.length}, failed{' '}
+            {result.failed.length}.
+          </p>
+          <UrlList title="Added" urls={result.added} tone="text-green-700" />
+          <UrlList title="Already subscribed" urls={result.skipped_existing} tone="text-gray-700" />
+          {result.failed.length > 0 && (
+            <div>
+              <h4 className="text-sm font-medium text-red-700">Failed ({result.failed.length})</h4>
+              <ul className="mt-1 text-xs text-gray-600 break-all list-disc pl-5 space-y-0.5">
+                {result.failed.map((f) => (
+                  <li key={f.url}>
+                    {f.url}: <span className="text-red-600">{f.error}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+          <div className="flex justify-end">
+            <button
+              type="button"
+              onClick={onDone}
+              className="px-3 py-2 rounded-md border border-gray-200 text-sm text-gray-700 hover:bg-gray-100"
+            >
+              Done
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}

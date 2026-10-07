@@ -8,7 +8,6 @@ from typing import Any, cast
 from urllib.parse import urlencode
 
 import requests
-import validators
 from flask import (
     Blueprint,
     Flask,
@@ -30,7 +29,6 @@ from app.auth.service import update_user_last_active
 from app.extensions import db
 from app.feeds import (
     _get_base_url,
-    add_or_refresh_feed,
     generate_aggregate_feed_xml,
     generate_feed_xml,
     is_feed_active_for_user,
@@ -42,8 +40,13 @@ from app.models import (
     User,
     UserFeed,
 )
+from app.routes.feed_subscribe import (
+    FeedAllowanceError,
+    InvalidFeedUrlError,
+    start_enqueue_pending_jobs,
+    subscribe_to_feed,
+)
 from app.routes.feed_utils import (
-    check_feed_allowance,
     cleanup_feed_directories,
     ensure_user_feed_membership,
     fix_url,
@@ -195,33 +198,14 @@ def add_feed() -> ResponseReturnValue:
     if current_app.config.get("developer_mode") and url.startswith("http://test-feed/"):
         return handle_developer_mode_feed(url, user)
 
-    if not validators.url(url):
-        return make_response(("Invalid URL", 400))
-
     try:
-        if user:
-            allowance_error = check_feed_allowance(user, url)
-            if allowance_error:
-                return allowance_error
-
-        feed = add_or_refresh_feed(url)
-        if user:
-            created, previous_count = ensure_user_feed_membership(feed, user.id)
-            if created and previous_count == 0:
-                whitelist_latest_for_first_member(feed, getattr(user, "id", None))
-        elif not is_auth_enabled():
-            # In no-auth mode, if this feed has no members, trigger whitelisting for the latest post.
-            if UserFeed.query.filter_by(feed_id=feed.id).count() == 0:
-                whitelist_latest_for_first_member(feed, None)
-
-        app = cast(Any, current_app)._get_current_object()
-        Thread(
-            target=_enqueue_pending_jobs_async,
-            args=(app,),
-            daemon=True,
-            name="enqueue-jobs-after-add",
-        ).start()
+        subscribe_to_feed(url, user)
+        start_enqueue_pending_jobs()
         return redirect(url_for("main.index"))
+    except InvalidFeedUrlError:
+        return make_response(("Invalid URL", 400))
+    except FeedAllowanceError as e:
+        return e.response
     except Exception as e:  # noqa: BLE001
         logger.error(f"Error adding feed: {e}")
         return make_response((f"Error adding feed: {e}", 500))
@@ -555,14 +539,6 @@ def _refresh_feed_background(app: Flask, feed_id: int) -> None:
             )
         except Exception as exc:  # noqa: BLE001
             logger.error("Failed to refresh feed %s asynchronously: %s", feed_id, exc)
-
-
-def _enqueue_pending_jobs_async(app: Flask) -> None:
-    with app.app_context():
-        try:
-            get_jobs_manager().enqueue_pending_jobs(trigger="feed_refresh")
-        except Exception as exc:  # noqa: BLE001
-            logger.error("Failed to enqueue pending jobs asynchronously: %s", exc)
 
 
 @feed_bp.route("/api/feeds/refresh-all", methods=["POST"])

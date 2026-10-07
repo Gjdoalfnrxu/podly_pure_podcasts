@@ -3,18 +3,20 @@ import { feedsApi } from '../services/api';
 import type { PodcastSearchResult } from '../types';
 import { diagnostics, emitDiagnosticError } from '../utils/diagnostics';
 import { getHttpErrorInfo } from '../utils/httpError';
+import ImportOpmlPanel from './ImportOpmlPanel';
 
 interface AddFeedFormProps {
   onSuccess: () => void;
+  onImported?: () => void;
   onUpgradePlan?: () => void;
   planLimitReached?: boolean;
 }
 
-type AddMode = 'url' | 'search';
+type AddMode = 'url' | 'search' | 'opml';
 
 const PAGE_SIZE = 10;
 
-export default function AddFeedForm({ onSuccess, onUpgradePlan, planLimitReached }: AddFeedFormProps) {
+export default function AddFeedForm({ onSuccess, onImported, onUpgradePlan, planLimitReached }: AddFeedFormProps) {
   const [url, setUrl] = useState('');
   const [activeMode, setActiveMode] = useState<AddMode>('search');
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -201,7 +203,29 @@ export default function AddFeedForm({ onSuccess, onUpgradePlan, planLimitReached
         >
           Search Podcasts
         </button>
+        <button
+          type="button"
+          onClick={() => {
+            setActiveMode('opml');
+            setError('');
+          }}
+          className={`flex-1 px-3 py-2 rounded-md border ${
+            activeMode === 'opml'
+              ? 'bg-blue-50 border-blue-500 text-blue-700'
+              : 'border-gray-200 text-gray-600 hover:bg-gray-100'
+          }`}
+        >
+          Import OPML
+        </button>
       </div>
+
+      {activeMode === 'opml' && (
+        <ImportOpmlPanel
+          onImported={onImported ?? (() => {})}
+          onDone={onSuccess}
+          disabled={!!planLimitReached}
+        />
+      )}
 
       {activeMode === 'url' && (
         <form onSubmit={handleSubmitManual} className="space-y-4">

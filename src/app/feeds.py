@@ -14,6 +14,7 @@ import PyRSS2Gen
 from flask import current_app, g, request
 
 from app.extensions import db
+from app.feed_fetch import fetch_feed_bytes
 from app.models import Feed, Post, User, UserFeed
 from app.runtime_config import config
 from app.writer.client import writer_client
@@ -329,17 +330,22 @@ def _get_base_url() -> str:
     return "http://localhost:5001"
 
 
-def fetch_feed(url: str) -> feedparser.FeedParserDict:
+def fetch_feed(url: str, *, timeout: float | None = None) -> feedparser.FeedParserDict:
     logger.info(f"Fetching feed from URL: {url}")
-    feed_data = feedparser.parse(url)
+    if timeout is None:
+        feed_data = feedparser.parse(url)
+    else:
+        fetched = fetch_feed_bytes(url, timeout)
+        feed_data = feedparser.parse(fetched.content, response_headers=fetched.headers)
+        feed_data["href"] = fetched.final_url
     for entry in feed_data.entries:
         entry.id = get_guid(entry)
     return feed_data
 
 
-def refresh_feed(feed: Feed) -> None:
+def refresh_feed(feed: Feed, *, fetch_timeout: float | None = None) -> None:
     logger.info(f"Refreshing feed with ID: {feed.id}")
-    feed_data = fetch_feed(feed.rss_url)
+    feed_data = fetch_feed(feed.rss_url, timeout=fetch_timeout)
 
     updates = {}
     image_info = feed_data.feed.get("image")
@@ -434,21 +440,42 @@ number_of_episodes_to_whitelist_from_archive_of_new_feed setting: {entry.title}"
     logger.info(f"Feed with ID: {feed.id} refreshed")
 
 
-def add_or_refresh_feed(url: str) -> Feed:
-    feed_data = fetch_feed(url)
+def add_or_refresh_feed(url: str, *, whitelist_archive: bool = True) -> Feed:
+    feed, _created = fetch_and_store_feed(url, whitelist_archive=whitelist_archive)
+    return feed
+
+
+def fetch_and_store_feed(
+    url: str,
+    *,
+    whitelist_archive: bool = True,
+    fetch_timeout: float | None = None,
+) -> tuple[Feed, bool]:
+    """Fetch ``url`` and refresh the matching feed or store a new one.
+
+    Returns (feed, created). A feed is matched by the requested URL or by the
+    post-redirect URL, which is what ``add_feed`` stores as ``rss_url``.
+    """
+    feed_data = fetch_feed(url, timeout=fetch_timeout)
     if "title" not in feed_data.feed:
         logger.error("Invalid feed URL")
         raise ValueError(f"Invalid feed URL: {url}")
 
     feed = Feed.query.filter_by(rss_url=url).first()
+    final_url = feed_data.get("href")
+    if feed is None and isinstance(final_url, str) and final_url and final_url != url:
+        feed = Feed.query.filter_by(rss_url=final_url).first()
     if feed:
-        refresh_feed(feed)
-    else:
-        feed = add_feed(feed_data)
-    return feed
+        refresh_feed(feed, fetch_timeout=fetch_timeout)
+        return feed, False
+    return add_feed(feed_data, whitelist_archive=whitelist_archive), True
 
 
-def add_feed(feed_data: feedparser.FeedParserDict) -> Feed:
+def add_feed(
+    feed_data: feedparser.FeedParserDict, *, whitelist_archive: bool = True
+) -> Feed:
+    """Store a new feed. ``whitelist_archive=False`` stores every existing
+    episode un-whitelisted, so the writer creates no processing jobs for them."""
     logger.info(f"Storing feed: {feed_data.feed.title}")
     try:
         feed_dict = {
@@ -476,7 +503,9 @@ def add_feed(feed_data: feedparser.FeedParserDict) -> Feed:
                 p.whitelisted = False
             else:
                 num_posts_added += 1
-                p.whitelisted = config.automatically_whitelist_new_episodes
+                p.whitelisted = (
+                    whitelist_archive and config.automatically_whitelist_new_episodes
+                )
 
             post_data = {
                 "guid": p.guid,

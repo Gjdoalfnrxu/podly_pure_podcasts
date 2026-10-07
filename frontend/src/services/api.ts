@@ -19,6 +19,7 @@ import type {
   CostSummary,
   CallLog,
   FeedSubscribersResponse,
+  OpmlImportResult,
 } from '../types';
 
 const API_BASE_URL = '';
@@ -90,6 +91,19 @@ export const feedsApi = {
     const formData = new FormData();
     formData.append('url', url);
     await api.post('/feed', formData);
+  },
+
+  importOpml: async (file: File, processLatest: boolean): Promise<OpmlImportResult> => {
+    const formData = new FormData();
+    formData.append('file', file);
+    formData.append('process_latest', processLatest ? 'true' : 'false');
+    const response = await api.post('/api/feeds/import-opml', formData);
+    return response.data;
+  },
+
+  getOpmlImport: async (importId: string): Promise<OpmlImportResult> => {
+    const response = await api.get(`/api/feeds/import-opml/${importId}`);
+    return response.data;
   },
 
   deleteFeed: async (feedId: number): Promise<void> => {
