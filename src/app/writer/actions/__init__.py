@@ -44,6 +44,13 @@ from .jobs import dequeue_job_action as dequeue_job_action
 from .jobs import mark_cancelled_action as mark_cancelled_action
 from .jobs import reassign_pending_jobs_action as reassign_pending_jobs_action
 from .jobs import update_job_status_action as update_job_status_action
+from .lanes import requeue_job_local_action as requeue_job_local_action
+from .lanes import reserve_cloud_usage_action as reserve_cloud_usage_action
+from .lanes import set_job_lane_action as set_job_lane_action
+from .lanes import settle_cloud_usage_action as settle_cloud_usage_action
+from .lanes import (
+    update_cloud_lane_settings_action as update_cloud_lane_settings_action,
+)
 from .processor import insert_identifications_action as insert_identifications_action
 from .processor import mark_model_call_failed_action as mark_model_call_failed_action
 from .processor import replace_identifications_action as replace_identifications_action

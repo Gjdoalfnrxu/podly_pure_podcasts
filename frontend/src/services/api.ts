@@ -20,6 +20,8 @@ import type {
   CallLog,
   FeedSubscribersResponse,
   OpmlImportResult,
+  LaneStatus,
+  CloudLaneSettings,
 } from '../types';
 
 const API_BASE_URL = '';
@@ -621,6 +623,26 @@ export const authApi = {
 export const landingApi = {
   getStatus: async (): Promise<LandingStatus> => {
     const response = await api.get('/api/landing/status');
+    return response.data;
+  },
+};
+
+export const lanesApi = {
+  getStatus: async (): Promise<LaneStatus> => {
+    const response = await api.get('/api/lanes/status');
+    return response.data;
+  },
+  getSettings: async (): Promise<CloudLaneSettings> => {
+    const response = await api.get('/api/lanes/settings');
+    return response.data;
+  },
+  // Omit api_key to keep the stored key; send '' to clear it.
+  updateSettings: async (
+    payload: Partial<Omit<CloudLaneSettings, 'api_key_set' | 'api_key_preview'>> & {
+      api_key?: string;
+    }
+  ): Promise<CloudLaneSettings> => {
+    const response = await api.put('/api/lanes/settings', payload);
     return response.data;
   },
 };

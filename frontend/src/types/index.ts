@@ -75,6 +75,30 @@ export interface Job {
   started_at: string | null;
   completed_at: string | null;
   error_message: string | null;
+  lane?: 'local' | 'cloud' | string;
+  lane_reason?: string | null;
+}
+
+export interface LaneStatus {
+  cloud_available: boolean;
+  cloud_unavailable_reason: string | null;
+  month_spent_usd: number;
+  monthly_cap_usd: number;
+  month_cloud_jobs: number;
+  cloud_concurrency: number;
+  queues: Record<string, { pending: number; running: number }>;
+}
+
+export interface CloudLaneSettings {
+  enabled: boolean;
+  base_url: string;
+  api_key_set: boolean;
+  api_key_preview: string | null;
+  model: string;
+  language: string;
+  usd_per_hour: number;
+  monthly_cap_usd: number;
+  max_episode_minutes: number | null;
 }
 
 export interface JobManagerRun {

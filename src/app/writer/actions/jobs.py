@@ -1,25 +1,37 @@
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
+from sqlalchemy import or_
+
 from app.extensions import db
 from app.jobs_manager_run_service import recalculate_run_counts
+from app.lanes import LANE_LOCAL
 from app.models import ProcessingJob
 
 
 def dequeue_job_action(params: dict[str, Any]) -> dict[str, Any] | None:
-    run_id = params.get("run_id")
+    """Claim the oldest pending job of a lane.
 
-    # Check for running jobs
-    running_job = (
-        ProcessingJob.query.filter(ProcessingJob.status == "running")
-        .order_by(ProcessingJob.started_at.desc().nullslast())
-        .first()
-    )
-    if running_job:
+    lane "local" (default; NULL lane counts as local) runs one job at a time.
+    lane "cloud" runs up to ``max_running`` jobs at once.
+    """
+    run_id = params.get("run_id")
+    lane = params.get("lane") or LANE_LOCAL
+    max_running = int(params.get("max_running") or 1)
+
+    if lane == LANE_LOCAL:
+        in_lane = or_(ProcessingJob.lane.is_(None), ProcessingJob.lane == LANE_LOCAL)
+    else:
+        in_lane = ProcessingJob.lane == lane
+
+    running = ProcessingJob.query.filter(
+        ProcessingJob.status == "running", in_lane
+    ).count()
+    if running >= max_running:
         return None
 
     job = (
-        ProcessingJob.query.filter(ProcessingJob.status == "pending")
+        ProcessingJob.query.filter(ProcessingJob.status == "pending", in_lane)
         .order_by(ProcessingJob.created_at.asc())
         .first()
     )

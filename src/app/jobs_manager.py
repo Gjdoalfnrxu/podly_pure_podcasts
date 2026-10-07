@@ -1,3 +1,4 @@
+import contextlib
 import logging
 from datetime import UTC, datetime, timedelta
 from threading import Event, Lock, Thread
@@ -5,16 +6,19 @@ from typing import Any, cast
 
 from sqlalchemy import case
 
+from app.cloud_lane import build_cloud_processor, choose_lane
 from app.db_guard import db_guard, reset_session
 from app.extensions import db as _db
 from app.extensions import scheduler
 from app.feeds import refresh_feed
 from app.job_manager import JobManager as SingleJobManager
+from app.lanes import LANE_CLOUD, LANE_LOCAL
 from app.models import Feed, JobsManagerRun, Post, ProcessingJob
 from app.processor import get_processor
 from app.writer.client import writer_client
 from podcast_processor.podcast_processor import ProcessorException
 from podcast_processor.processing_status_manager import ProcessingStatusManager
+from shared import defaults as DEFAULTS
 from shared.processing_paths import find_existing_processed_audio_path
 
 logger = logging.getLogger("global_logger")
@@ -55,6 +59,18 @@ class JobsManager:
             target=self._worker_loop, name="jobs-manager-worker", daemon=True
         )
         self._worker_thread.start()
+        # Cloud fast lane: separate small worker pool, runs alongside local.
+        self._cloud_work_event = Event()
+        self._cloud_workers = [
+            Thread(
+                target=self._cloud_worker_loop,
+                name=f"jobs-manager-cloud-{i}",
+                daemon=True,
+            )
+            for i in range(DEFAULTS.CLOUD_LANE_CONCURRENCY)
+        ]
+        for worker in self._cloud_workers:
+            worker.start()
 
         # Initialize run via writer
         with _scheduler_app_context():
@@ -79,6 +95,7 @@ class JobsManager:
 
     def _wake_worker(self) -> None:
         self._work_event.set()
+        self._cloud_work_event.set()
 
     def _wait_for_work(self, timeout: float = 5.0) -> None:
         triggered = self._work_event.wait(timeout)
@@ -93,9 +110,13 @@ class JobsManager:
         *,
         requested_by_user_id: int | None = None,
         billing_user_id: int | None = None,
+        manual: bool = False,
     ) -> dict[str, Any]:
         """
         Idempotently start processing for a post. If an active job exists, return it.
+
+        ``manual`` marks a job someone explicitly asked for (process/reprocess
+        click); only those may use the paid cloud lane (see app/lanes.py).
         """
         with _scheduler_app_context():
             ensure_result = writer_client.action(
@@ -118,9 +139,39 @@ class JobsManager:
                 requested_by_user_id=requested_by_user_id,
                 billing_user_id=billing_user_id,
             ).start_processing(priority)
+            if start_result.get("status") == "started" and start_result.get("job_id"):
+                self._assign_lane(post_guid, str(start_result["job_id"]), manual)
         if start_result.get("status") in {"started", "running"}:
             self._wake_worker()
         return start_result
+
+    def _assign_lane(self, post_guid: str, job_id: str, manual: bool) -> None:
+        """Route a just-queued job. Automatic re-queues never downgrade a job
+        that a manual request already put in the cloud lane."""
+        job = _db.session.get(ProcessingJob, job_id)
+        if not manual and job is not None and job.lane == LANE_CLOUD:
+            return
+        post = Post.query.filter_by(guid=post_guid).first()
+        duration = getattr(post, "duration", None) if post else None
+        try:
+            decision = choose_lane(
+                manual=manual,
+                audio_seconds=float(duration) if duration else None,
+            )
+            writer_client.action(
+                "set_job_lane",
+                {"job_id": job_id, "lane": decision.lane, "reason": decision.reason},
+                wait=True,
+            )
+            logger.info(
+                "[LANE] job_id=%s post_guid=%s lane=%s reason=%s",
+                job_id,
+                post_guid,
+                decision.lane,
+                decision.reason,
+            )
+        except Exception as exc:  # noqa: BLE001 - routing must never lose a job
+            logger.error("Lane assignment failed for job %s: %s", job_id, exc)
 
     def enqueue_pending_jobs(
         self,
@@ -337,6 +388,8 @@ class JobsManager:
                             job.completed_at.isoformat() if job.completed_at else None
                         ),
                         "error_message": job.error_message,
+                        "lane": job.lane or LANE_LOCAL,
+                        "lane_reason": job.lane_reason,
                     }
                 )
 
@@ -383,6 +436,8 @@ class JobsManager:
                             job.completed_at.isoformat() if job.completed_at else None
                         ),
                         "error_message": job.error_message,
+                        "lane": job.lane or LANE_LOCAL,
+                        "lane_reason": job.lane_reason,
                     }
                 )
 
@@ -600,7 +655,7 @@ class JobsManager:
 
     # ------------------------ Internal helpers ------------------------
 
-    def _dequeue_next_job(self) -> tuple[str, str] | None:
+    def _dequeue_next_job(self, lane: str = LANE_LOCAL) -> tuple[str, str] | None:
         """Return the next pending job id and post guid, or None if idle.
 
         CRITICAL: This method atomically marks the job as "running" when dequeuing
@@ -609,7 +664,17 @@ class JobsManager:
         """
         try:
             run_id = self._get_run_id()
-            result = writer_client.action("dequeue_job", {"run_id": run_id}, wait=True)
+            result = writer_client.action(
+                "dequeue_job",
+                {
+                    "run_id": run_id,
+                    "lane": lane,
+                    "max_running": (
+                        DEFAULTS.CLOUD_LANE_CONCURRENCY if lane == LANE_CLOUD else 1
+                    ),
+                },
+                wait=True,
+            )
 
             if result and result.success and result.data:
                 job_id = result.data["job_id"]
@@ -653,18 +718,37 @@ class JobsManager:
                 logger.error("Worker loop error: %s", exc, exc_info=True)
                 reset_session(_db.session, logger, "worker_loop_exception", exc)
 
-    def _process_job(self, job_id: str, post_guid: str) -> None:
+    def _cloud_worker_loop(self) -> None:
+        """Cloud fast-lane worker; DEFAULTS.CLOUD_LANE_CONCURRENCY of these run."""
+        while not self._stop_event.is_set():
+            try:
+                job_details = self._dequeue_next_job(LANE_CLOUD)
+                if not job_details:
+                    if self._cloud_work_event.wait(5.0):
+                        self._cloud_work_event.clear()
+                    continue
+                job_id, post_guid = job_details
+                self._process_job(job_id, post_guid, lane=LANE_CLOUD)
+            except Exception as exc:
+                logger.error("Cloud worker loop error: %s", exc, exc_info=True)
+                reset_session(_db.session, logger, "cloud_worker_exception", exc)
+
+    def _process_job(self, job_id: str, post_guid: str, lane: str = LANE_LOCAL) -> None:
         """Execute a single job using the processor.
 
-        Uses a global processing lock to absolutely guarantee single-job execution.
+        Local jobs take the global processing lock (one CPU job at a time).
+        Cloud jobs use a fresh processor with the budgeted cloud transcriber and
+        do not take the lock; if the cloud lane fails they are re-queued locally.
         """
+        lock = _lane_lock(lane)
+        cloud_transcriber = None
         # Acquire global lock to ensure only one job runs at a time
         logger.info(
             "[JOB_PROCESS] Waiting for processing lock: job_id=%s post_guid=%s",
             job_id,
             post_guid,
         )
-        with JobsManager._global_processing_lock:
+        with lock:
             logger.info(
                 "[JOB_PROCESS] Acquired processing lock: job_id=%s post_guid=%s",
                 job_id,
@@ -711,7 +795,10 @@ class JobsManager:
                                 current_job is None or current_job.status == "cancelled"
                             )
 
-                        get_processor().process(
+                        processor, cloud_transcriber = _processor_for(
+                            lane, job_id, post_guid
+                        )
+                        processor.process(
                             worker_post, job_id=job_id, cancel_callback=_cancelled
                         )
                     except ProcessorException as exc:
@@ -755,11 +842,45 @@ class JobsManager:
                             logger.warning(
                                 "Failed to remove session after job: %s", exc
                             )
+            if cloud_transcriber is not None and cloud_transcriber.fallback_reason:
+                self._fall_back_to_local(job_id, cloud_transcriber.fallback_reason)
             logger.info(
                 "[JOB_PROCESS] Released processing lock: job_id=%s post_guid=%s",
                 job_id,
                 post_guid,
             )
+
+    def _fall_back_to_local(self, job_id: str, reason: str) -> None:
+        with _scheduler_app_context():
+            result = writer_client.action(
+                "requeue_job_local",
+                {"job_id": job_id, "reason": f"cloud fallback: {reason}"[:500]},
+                wait=True,
+            )
+        requeued = bool(
+            result and result.success and (result.data or {}).get("requeued")
+        )
+        logger.warning(
+            "[LANE] cloud job %s fell back to local (%s), requeued=%s",
+            job_id,
+            reason,
+            requeued,
+        )
+        if requeued:
+            self._work_event.set()
+
+
+def _lane_lock(lane: str) -> Any:
+    if lane == LANE_LOCAL:
+        return JobsManager._global_processing_lock
+    return contextlib.nullcontext()
+
+
+def _processor_for(lane: str, job_id: str, post_guid: str) -> tuple[Any, Any]:
+    """Local: the shared processor. Cloud: a fresh one with the cloud transcriber."""
+    if lane == LANE_CLOUD:
+        return build_cloud_processor(job_id, post_guid)
+    return get_processor(), None
 
 
 # Singleton accessor

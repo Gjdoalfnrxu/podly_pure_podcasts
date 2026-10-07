@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { jobsApi } from '../services/api';
+import { useQuery } from '@tanstack/react-query';
+import { jobsApi, lanesApi } from '../services/api';
 import type { CleanupPreview, Job, JobManagerRun, JobManagerStatus } from '../types';
 import { buildProcessingProgressModel } from '../utils/processingProgress';
 
@@ -279,6 +280,8 @@ export default function JobsPage() {
 
   return (
     <div className="space-y-4">
+      <LaneSummary />
+
       <div className="rounded border border-gray-200 bg-white p-4 shadow-sm">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
@@ -470,6 +473,7 @@ export default function JobsPage() {
                 <StatusBadge status={job.status} />
               </div>
               <div className="text-xs text-gray-600 truncate">{job.feed_title || 'Unknown feed'}</div>
+              <LaneBadge lane={job.lane} reason={job.lane_reason} />
 
               <div className="space-y-2">
                 <div className="flex items-center justify-between text-xs text-gray-700">
@@ -559,6 +563,48 @@ export default function JobsPage() {
           );
         })}
       </div>
+    </div>
+  );
+}
+
+function LaneBadge({ lane, reason }: { lane?: string; reason?: string | null }) {
+  const cloud = lane === 'cloud';
+  return (
+    <div className="flex items-center gap-2 text-xs" title={reason || undefined}>
+      <span
+        className={`inline-flex items-center rounded px-2 py-0.5 font-medium ${
+          cloud ? 'bg-purple-100 text-purple-800' : 'bg-gray-100 text-gray-700'
+        }`}
+      >
+        {cloud ? 'Cloud lane' : 'Local lane'}
+      </span>
+      {reason && <span className="text-gray-500 truncate">{reason}</span>}
+    </div>
+  );
+}
+
+function LaneSummary() {
+  const { data } = useQuery({
+    queryKey: ['lane-status'],
+    queryFn: lanesApi.getStatus,
+    refetchInterval: 10000,
+  });
+  if (!data) return null;
+  const local = data.queues.local ?? { pending: 0, running: 0 };
+  const cloud = data.queues.cloud ?? { pending: 0, running: 0 };
+  return (
+    <div className="rounded border border-gray-200 bg-white p-3 shadow-sm text-xs text-gray-700 flex flex-wrap gap-x-6 gap-y-1">
+      <span>
+        Local lane: {local.running} running, {local.pending} waiting
+      </span>
+      <span>
+        Cloud lane: {cloud.running} running, {cloud.pending} waiting
+        {data.cloud_available ? '' : ` (off: ${data.cloud_unavailable_reason})`}
+      </span>
+      <span>
+        Cloud spend this month: ${data.month_spent_usd.toFixed(4)} of $
+        {data.monthly_cap_usd.toFixed(2)}
+      </span>
     </div>
   );
 }

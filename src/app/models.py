@@ -318,6 +318,9 @@ class ProcessingJob(db.Model):  # type: ignore[name-defined, misc]
     created_at = db.Column(db.DateTime, default=_utc_now_naive, index=True)
     requested_by_user_id = db.Column(db.Integer, db.ForeignKey("users.id"))
     billing_user_id = db.Column(db.Integer, db.ForeignKey("users.id"))
+    # Processing lane: NULL/"local" = local CPU worker, "cloud" = paid fast lane.
+    lane = db.Column(db.String(16), nullable=True)
+    lane_reason = db.Column(db.Text, nullable=True)
 
     # Relationships
     post = db.relationship(
@@ -566,3 +569,49 @@ class ChapterFilterSettings(db.Model):  # type: ignore[name-defined, misc]
 
     created_at = db.Column(db.DateTime, nullable=False, default=_utc_now_naive)
     updated_at = db.Column(db.DateTime, nullable=False, default=_utc_now_naive)
+
+
+class CloudLaneSettings(db.Model):  # type: ignore[name-defined, misc]
+    """Paid fast lane (cloud Whisper) for manually requested jobs. Singleton id=1."""
+
+    __tablename__ = "cloud_lane_settings"
+
+    id = db.Column(db.Integer, primary_key=True, default=1)
+    enabled = db.Column(db.Boolean, nullable=False, default=False)
+    base_url = db.Column(db.Text, nullable=False, default=DEFAULTS.CLOUD_LANE_BASE_URL)
+    api_key = db.Column(db.Text, nullable=True)
+    model = db.Column(db.Text, nullable=False, default=DEFAULTS.CLOUD_LANE_MODEL)
+    language = db.Column(
+        db.Text, nullable=False, default=DEFAULTS.WHISPER_REMOTE_LANGUAGE
+    )
+    usd_per_hour = db.Column(
+        db.Float, nullable=False, default=DEFAULTS.CLOUD_LANE_USD_PER_HOUR
+    )
+    monthly_cap_usd = db.Column(db.Float, nullable=False, default=0.0)
+    max_episode_minutes = db.Column(db.Integer, nullable=True)
+    updated_at = db.Column(
+        db.DateTime, default=_utc_now_naive, onupdate=_utc_now_naive, nullable=False
+    )
+
+
+class CloudLaneUsage(db.Model):  # type: ignore[name-defined, misc]
+    """One cloud transcription attempt: reserved before the call, settled after."""
+
+    __tablename__ = "cloud_lane_usage"
+
+    id = db.Column(db.Integer, primary_key=True, autoincrement=True)
+    job_id = db.Column(db.String(36), nullable=True, index=True)
+    post_guid = db.Column(db.String(255), nullable=False, index=True)
+    model = db.Column(db.Text, nullable=False)
+    # reserved | charged | failed (failed still counts what was billed)
+    status = db.Column(db.String(16), nullable=False)
+    audio_seconds = db.Column(db.Float, nullable=False)
+    estimated_usd = db.Column(db.Float, nullable=False)
+    billed_seconds = db.Column(db.Float, nullable=True)
+    cost_usd = db.Column(db.Float, nullable=True)
+    usd_per_hour = db.Column(db.Float, nullable=False)
+    error = db.Column(db.Text, nullable=True)
+    created_at = db.Column(
+        db.DateTime, default=_utc_now_naive, nullable=False, index=True
+    )
+    settled_at = db.Column(db.DateTime, nullable=True)

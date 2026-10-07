@@ -7,6 +7,7 @@ from .cost_routes import costs_bp
 from .discord_routes import discord_bp
 from .feed_routes import feed_bp
 from .jobs_routes import jobs_bp
+from .lane_routes import lane_bp
 from .main_routes import main_bp
 from .opml_routes import opml_bp
 from .post_routes import post_bp
@@ -20,6 +21,7 @@ def register_routes(app: Flask) -> None:
     app.register_blueprint(post_bp)
     app.register_blueprint(config_bp)
     app.register_blueprint(jobs_bp)
+    app.register_blueprint(lane_bp)
     app.register_blueprint(auth_bp)
     app.register_blueprint(billing_bp)
     app.register_blueprint(discord_bp)
