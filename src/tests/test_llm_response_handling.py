@@ -213,11 +213,13 @@ def _segments() -> list[TranscriptSegment]:
 
 
 def _chunk(classifier: AdClassifier, call: ModelCall, segments) -> Any:
+    post = db.session.get(Post, call.post_id)
+    assert post is not None
     with mock.patch.object(classifier, "_get_or_create_model_call", return_value=call):
         return classifier._process_chunk(
             chunk_segments=segments,
             system_prompt="sys",
-            post=db.session.get(Post, call.post_id),
+            post=post,
             user_prompt_str="prompt",
         )
 
