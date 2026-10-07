@@ -487,20 +487,29 @@ def _decode(
     return [{"start": a, "end": b, "text": t, **stats} for a, b, t in lines]
 
 
-# Post 1025 decoder loop (base.en, real text and timings relative to the clip).
+# Real post 1025 decoder loop (base.en, window 5183-5238.36, times relative to
+# the clip): the line recurs, then drifts. nsp 0.59 / lp -0.90 is just inside
+# the no-speech rule, so only the loop check catches it.
 LOOP_1025 = [
-    (30.0, 35.38, " I'm going to go ahead and get the"),
-    (35.38, 36.38, " phone."),
-    (36.38, 40.52, " I'm going to go ahead and get the"),
-    (40.52, 41.52, " phone."),
-    (41.52, 44.42, " I'm going to go ahead and get the"),
-    (44.42, 45.42, " phone."),
+    (0.0, 5.38, " I'm going to go ahead and get the"),
+    (5.38, 6.38, " first one."),
+    (6.38, 10.32, " I'm going to go ahead and get the"),
+    (10.32, 11.82, " first one."),
+    (11.82, 16.32, " I'm going to go ahead and get the"),
+    (16.32, 17.76, " first one."),
+    (17.76, 20.26, " I'm going to go ahead and get"),
+    (20.26, 21.86, " the first one."),
+    (21.86, 24.26, " I'm going to go ahead and get"),
+    (24.26, 25.7, " the first one."),
+    (25.7, 28.1, " I'm going to go ahead and get"),
 ]
+LOOP_STATS = {"avg_logprob": -0.9, "no_speech_prob": 0.59, "compression_ratio": 4.62}
 
 
 def test_low_confidence_and_looping_segments_are_dropped(tmp_path: Path) -> None:
-    """Loops are caught on their own text, even from an otherwise confident
-    decode: the same line 3+ times, or one line that compresses like a loop."""
+    """Loops are caught on their text, not the decode's compression ratio: one
+    line that compresses like a loop, or a decode that recurs a line 3+ times,
+    from that line on (the real loop drifts into lines seen only twice)."""
 
     class ShakyModel:
         calls = 0
@@ -520,12 +529,7 @@ def test_low_confidence_and_looping_segments_are_dropped(tmp_path: Path) -> None
                         "compression_ratio": 1.0,
                     },
                     {"start": 5.0, "end": 6.0, "text": " Hi", "avg_logprob": -0.4},
-                    *_decode(
-                        LOOP_1025,
-                        avg_logprob=-0.3,
-                        no_speech_prob=0.1,
-                        compression_ratio=5.47,
-                    ),
+                    *_decode([(a + 10, b + 10, t) for a, b, t in LOOP_1025]),
                 ]
             }
 
@@ -596,15 +600,24 @@ def test_real_xero_read_is_kept_despite_decode_compression_ratio(
     ]
 
 
-def test_rejection_reason_keeps_xero_and_drops_loop() -> None:
-    for _, _, text in XERO_DECODE:
-        assert gap_fill.rejection_reason({"text": text, **XERO_STATS}) is None
-    # the real read repeats a line twice in one decode; that is not a loop
-    assert gap_fill.rejection_reason({"text": XERO_DECODE[0][2], **XERO_STATS}, 2) is (
-        None
+def test_split_decode_on_real_xero_read_and_real_loop() -> None:
+    window = gap_fill.Window(0.0, 30.0, 0.0, 31.0)
+    # an unpadded retry of the real read heard its opening line twice: not a loop
+    lines = [XERO_DECODE[0], (1.6, 3.6, XERO_DECODE[0][2]), *XERO_DECODE[1:]]
+    xero = _decode(lines, seek=0, **XERO_STATS)
+    loop = _decode(LOOP_1025, seek=3000, **LOOP_STATS)
+
+    found, rejected = gap_fill.split_decode(window, [*xero, *loop])
+
+    assert [s.text for s in found] == [t for _, _, t in lines]
+    assert [(d.segment.text, d.reason) for d in rejected] == [
+        (t, "repetitive") for _, _, t in LOOP_1025
+    ]
+    # a loop in one 30s decode says nothing about the next one
+    found, _ = gap_fill.split_decode(
+        window, [*loop, *_decode(XERO_DECODE[:1], seek=6000, **XERO_STATS)]
     )
-    loop = {"text": LOOP_1025[0][2], "avg_logprob": -0.3, "no_speech_prob": 0.1}
-    assert gap_fill.rejection_reason(loop, 3) == "repetitive"
+    assert [s.text for s in found] == [XERO_DECODE[0][2]]
 
 
 def test_rejected_decode_leaves_its_stretch_open_for_retry(tmp_path: Path) -> None:

@@ -62,9 +62,11 @@ _REPEAT_SLACK_SECONDS = 1.5
 _MIN_AVG_LOGPROB = -1.0
 # Decoder loops. whisper's compression_ratio is per 30s decode and so is high
 # for clean ad copy that repeats its own lines (a real Xero read decoded at
-# 2.83, lp -0.25), so it is not used. A loop is the same text 3+ times in one
-# decode ("I'm going to go ahead and get the" / "phone." x6 on post 1025), or
-# one segment whose own text compresses like a loop.
+# 2.83, lp -0.25), so it is not used. A decode loops once a line recurs 3+
+# times ("I'm going to go ahead and get the" / "phone." x6 on post 1025); the
+# loop then holds to the end of that decode, drifting ("first one." became
+# "the first one."), so everything from its first line on is dropped. A
+# single segment whose own text compresses like a loop is dropped too.
 _LOOP_REPEATS = 3
 _MAX_COMPRESSION_RATIO = 2.4  # whisper's compression_ratio_threshold
 # Junk filters, tuned on real base.en output for post 1025 (stats are per 30s
@@ -322,10 +324,10 @@ def _text_compression_ratio(text: str) -> float:
     return len(data) / len(zlib.compress(data))
 
 
-def rejection_reason(raw: Mapping[str, Any], times_in_decode: int = 1) -> str | None:
+def rejection_reason(raw: Mapping[str, Any], in_loop: bool = False) -> str | None:
     """Why a raw whisper segment from a gap window is junk, or None if not.
 
-    ``times_in_decode`` is how often the segment's text occurs in its decode.
+    ``in_loop``: the segment is part of a decoder loop (see ``_loop_flags``).
     """
     text = str(raw.get("text", ""))
     if not _HAS_WORD.search(text):
@@ -334,10 +336,7 @@ def rejection_reason(raw: Mapping[str, Any], times_in_decode: int = 1) -> str | 
     no_speech = float(raw.get("no_speech_prob", 0.0))
     if logprob < _MIN_AVG_LOGPROB:
         return "low confidence"
-    if (
-        times_in_decode >= _LOOP_REPEATS
-        or _text_compression_ratio(text) > _MAX_COMPRESSION_RATIO
-    ):
+    if in_loop or _text_compression_ratio(text) > _MAX_COMPRESSION_RATIO:
         return "repetitive"
     if no_speech > _NO_SPEECH_PROB and logprob < _CONFIDENT_LOGPROB:
         return "likely no speech"
@@ -348,21 +347,40 @@ def rejection_reason(raw: Mapping[str, Any], times_in_decode: int = 1) -> str | 
     return None
 
 
+def _loop_flags(raw_segments: Sequence[Mapping[str, Any]]) -> list[bool]:
+    """Per segment, whether it is in a decoder loop.
+
+    Segments are grouped into 30s decodes by whisper's ``seek``. Within one
+    decode, the loop starts at the first segment whose text occurs there
+    ``_LOOP_REPEATS`` or more times and runs to the decode's end.
+    """
+    keys = [
+        (r.get("seek"), " ".join(_words(str(r.get("text", ""))))) for r in raw_segments
+    ]
+    counts = Counter(keys)
+    looping: set[Any] = set()
+    flags = []
+    for seek, text in keys:
+        if counts[(seek, text)] >= _LOOP_REPEATS:
+            looping.add(seek)
+        flags.append(seek in looping)
+    return flags
+
+
 def split_decode(
     window: Window, raw_segments: Sequence[Mapping[str, Any]]
 ) -> tuple[list[Segment], list[Dropped]]:
     """Offset one window's raw whisper segments to episode time and split them
     into recovered speech and junk."""
-    counts = Counter(" ".join(_words(str(r.get("text", "")))) for r in raw_segments)
     out: list[Segment] = []
     rejected: list[Dropped] = []
-    for raw in raw_segments:
+    for raw, in_loop in zip(raw_segments, _loop_flags(raw_segments), strict=True):
         text = str(raw.get("text", ""))
         start = window.start + float(raw["start"])
         # Whisper pads a short clip to 30s and can time speech past its end.
         end = min(window.start + float(raw["end"]), window.end)
         seg = Segment(start=start, end=max(start, end), text=text)
-        reason = rejection_reason(raw, counts[" ".join(_words(text))])
+        reason = rejection_reason(raw, in_loop)
         if reason is None and end <= start:
             reason = "past window end"
         if reason is None:
