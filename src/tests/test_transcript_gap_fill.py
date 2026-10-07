@@ -41,7 +41,6 @@ from shared.config import (
 from shared.test_utils import create_standard_test_config
 
 FRAME = 0.05  # stub model resolution, seconds
-_WORDS = ["", "alpha", "kettle", "quorum", "zebra", "lantern", "orchid", "pumice"]
 TOL = 0.15
 
 
@@ -63,8 +62,9 @@ def _write_wav(path: Path, duration: float, speech: list[tuple[float, float]]) -
 class StubWhisperModel:
     """Returns one segment per non-silent run, timed relative to the clip."""
 
-    def __init__(self) -> None:
+    def __init__(self, text: str = " ~ recovered ad speech") -> None:
         self.calls: list[dict[str, Any]] = []
+        self.text = text
 
     def transcribe(self, audio: np.ndarray, **kwargs: Any) -> dict[str, Any]:
         self.calls.append({"seconds": len(audio) / SAMPLE_RATE, **kwargs})
@@ -82,9 +82,7 @@ class StubWhisperModel:
                     {
                         "start": run_start * FRAME,
                         "end": idx * FRAME,
-                        # "~" marks recovered text; distinct words per call so
-                        # the neighbour-repeat check never sees two as copies
-                        "text": f" ~ {_WORDS[len(self.calls)]} {_WORDS[-1 - len(segments)]}",
+                        "text": self.text,  # "~" marks recovered text
                     }
                 )
                 run_start = None
@@ -166,7 +164,10 @@ def test_merge_drops_mostly_covered_and_trims_partial_overlap() -> None:
         _seg(14.0, 19.0, "middle"),
         _seg(18.8, 20.6, "head"),  # 0.8 of 1.8s covered -> trim to 19-20
     ]
-    merged, added = merge_recovered(existing, recovered)
+    merged, added, dropped = merge_recovered(existing, recovered)
+    assert [(d.segment.text, d.reason) for d in dropped] == [
+        ("padding re-read", "already transcribed")
+    ]
     assert [(s.start, s.end, s.text) for s in added] == [
         (10, 14.0, "tail of gap"),
         (14.0, 19.0, "middle"),
@@ -178,7 +179,7 @@ def test_merge_drops_mostly_covered_and_trims_partial_overlap() -> None:
 
 
 def test_merge_drops_duplicate_from_overlapping_chunks() -> None:
-    merged, added = merge_recovered([], [_seg(10, 15, "a"), _seg(10.2, 15.1, "a")])
+    merged, added, _ = merge_recovered([], [_seg(10, 15, "a"), _seg(10.2, 15.1, "a")])
     assert [s.text for s in added] == ["a"]
     assert len(merged) == 1
 
@@ -196,8 +197,9 @@ def test_merge_drops_repeat_of_neighbour_edge_words() -> None:
         _seg(4910.4, 4911.4, " God bless."),
         _seg(4911.4, 4915.0, " This episode is brought to you by Xero."),
     ]
-    _, added = merge_recovered(existing, recovered)
+    _, added, dropped = merge_recovered(existing, recovered)
     assert [s.text for s in added] == [" This episode is brought to you by Xero."]
+    assert [d.reason for d in dropped] == ["repeats neighbour"] * 2
 
 
 def test_merge_keeps_recovered_lines_that_echo_each_other() -> None:
@@ -209,8 +211,77 @@ def test_merge_keeps_recovered_lines_that_echo_each_other() -> None:
         _seg(14.0, 16.0, " This is your business."),
         _seg(16.0, 18.0, " This is your business."),
     ]
-    _, added = merge_recovered(existing, recovered)
+    _, added, _ = merge_recovered(existing, recovered)
     assert len(added) == 4
+
+
+# Real primary lines from post 1025 (segments 618-633): one Xero read.
+XERO_READ = [
+    (2391.16, 2392.92, " This is your business."),
+    (2392.92, 2394.52, " This is your business super chance"),
+    (2394.52, 2397.16, " with the help of zero accounting software!"),
+    (2397.16, 2399.16, " This is managing cash flow."),
+    (2399.16, 2400.56, " This is managing your cash flow"),
+    (2400.56, 2402.96, " with the help of zero accounting software!"),
+    (2402.96, 2404.84, " These are your customers paying you..."),
+    (2404.84, 2407.0, " These are your customers having more ways to pay you"),
+    (2407.0, 2409.64, " with the help of zero accounting software!"),
+    (2409.64, 2411.56, " This is your business super chance with the help of zero"),
+    (2411.56, 2412.72, " helping you solve your cash flow"),
+    (2412.72, 2414.28, " by giving your customers more ways to pay"),
+    (2414.28, 2417.08, " so now you can focus on making your business move!"),
+    (2417.08, 2419.48, " Super-tied your business today with the help of zero."),
+    (2419.48, 2421.32, " Don't share it with an ex!"),
+]
+AFTER_XERO = (2421.32, 2423.08, " Hey, still, how's hunting next weekend?")
+
+
+def test_merge_keeps_back_to_back_repeat_of_whole_ad() -> None:
+    """The same ad played twice in a row; the primary got the first copy and
+    skipped the second. The second copy's closing line repeats the primary
+    line before the gap, 30s away from it, and must be kept."""
+    shift = XERO_READ[-1][1] - XERO_READ[0][0]
+    copy1 = [_seg(*line) for line in XERO_READ]
+    after = _seg(AFTER_XERO[0] + shift, AFTER_XERO[1] + shift, AFTER_XERO[2])
+    copy2 = [_seg(a + shift, b + shift, t) for a, b, t in XERO_READ]
+
+    _, added, dropped = merge_recovered([*copy1, after], copy2)
+
+    assert [s.text for s in added] == [t for _, _, t in XERO_READ]
+    assert added[-1].text == " Don't share it with an ex!"
+    assert dropped == []
+
+
+def test_merge_keeps_repeat_of_neighbour_inside_one_read() -> None:
+    """A gap inside one read: the primary line before it ends "with the help
+    of zero accounting software!" and the read repeats that line twice more,
+    4s and 10s into the gap."""
+    primary = [_seg(*line) for line in [*XERO_READ[:3], *XERO_READ[13:]]]
+    recovered = [_seg(*line) for line in XERO_READ[3:13]]
+
+    _, added, dropped = merge_recovered(primary, recovered)
+
+    assert [s.text for s in added] == [t for _, _, t in XERO_READ[3:13]]
+    assert dropped == []
+
+
+def test_merge_repeat_check_is_limited_to_the_gap_edges() -> None:
+    """Within padding + 1.5s of a primary neighbour a repeat of its edge words
+    is the padding re-read and is dropped; past that it is kept."""
+    primary = [_seg(0.0, 5.0, " Search Xero with an X."), _seg(40.0, 45.0, " Hey")]
+    recovered = [
+        _seg(5.5, 7.0, " with an X."),  # 0.5s after the neighbour: re-read
+        _seg(20.0, 22.0, " Search Xero with an X."),  # 15s in: ad repeats
+        _seg(37.0, 39.5, " Hey"),  # 0.5s before the next neighbour
+    ]
+
+    _, added, dropped = merge_recovered(primary, recovered, repeat_edge_seconds=2.5)
+
+    assert [(s.start, s.text) for s in added] == [(20.0, " Search Xero with an X.")]
+    assert [(d.segment.start, d.reason) for d in dropped] == [
+        (5.5, "repeats neighbour"),
+        (37.0, "repeats neighbour"),
+    ]
 
 
 # --- end to end through real audio ----------------------------------------
@@ -398,6 +469,121 @@ def test_fill_keeps_repeated_ad_lines(tmp_path: Path) -> None:
     merged = _filler(StubLoader(EchoModel())).fill(1, path, primary)
 
     assert [s.text for s in merged].count(" This is your business.") == 2
+
+
+def test_fill_keeps_ad_line_that_repeats_primary_neighbour(tmp_path: Path) -> None:
+    """The tagline the primary caught before the gap is read again 15s into
+    the gap; only re-reads at the gap edge count as repeats."""
+    tagline = " Search Xero with an X."
+    path = _write_wav(tmp_path / "tag.wav", 50.0, [(0, 10), (25, 28), (40, 50)])
+    primary = [_seg(0.0, 10.0, tagline), _seg(40.0, 50.0, " Welcome back.")]
+    loader = StubLoader(StubWhisperModel(text=tagline))
+
+    merged = _filler(loader).fill(1, path, primary)
+
+    assert [(round(s.start, 1), round(s.end, 1), s.text) for s in merged] == [
+        (0.0, 10.0, tagline),
+        (25.0, 28.0, tagline),
+        (40.0, 50.0, " Welcome back."),
+    ]
+
+
+@pytest.mark.parametrize(
+    ("text", "no_speech", "logprob", "reason"),
+    [
+        # junk base.en produced in post 1025's gaps (stats are per decode)
+        (" Yes.", 0.21, -0.95, "weak fragment"),
+        (" Good.", 0.14, -0.67, "weak fragment"),
+        (" F***", 0.58, -0.87, "weak fragment"),
+        (" God bless.", 0.04, -0.94, "weak fragment"),
+        (" As good as f-", 0.62, -0.71, "likely no speech"),
+        (" The", 0.58, -2.20, "low confidence"),
+        # real ad lines it recovered there
+        (" No, you did.", 0.57, -0.39, None),
+        (" Search Zero with an X.", 0.12, -0.29, None),
+        (" When human beings try to find...", 0.02, -0.57, None),
+        # a short line from a confident decode
+        (" Hey Jane.", 0.12, -0.29, None),
+    ],
+)
+def test_rejection_reason_on_real_post_1025_decodes(
+    text: str, no_speech: float, logprob: float, reason: str | None
+) -> None:
+    raw = {
+        "text": text,
+        "no_speech_prob": no_speech,
+        "avg_logprob": logprob,
+        "compression_ratio": 1.0,
+    }
+    assert gap_fill.rejection_reason(raw) == reason
+
+
+def test_weak_fragment_does_not_shrink_gap_beside_ad(
+    tmp_path: Path, caplog: pytest.LogCaptureFixture
+) -> None:
+    """Post 1025 end: in the 5.04s gap before the BNZ ad, base.en heard only a
+    mis-read of the previous word ("Yes.", lp -0.95). Kept, it would leave a
+    gap too short for the ad-cut backstop; it is dropped and logged."""
+
+    class TailModel(StubWhisperModel):
+        def transcribe(self, audio: np.ndarray, **kwargs: Any) -> dict[str, Any]:
+            result = super().transcribe(audio, **kwargs)
+            for seg in result["segments"]:
+                seg.update(text=" Yes.", avg_logprob=-0.95, no_speech_prob=0.21)
+            return result
+
+    path = _write_wav(tmp_path / "tail.wav", 30.0, [(0, 11.0), (15.04, 30.0)])
+    primary = [
+        _seg(0.0, 10.0, " a crow rubber dog dog bless"),
+        _seg(15.04, 30.0, " hey still house hunting next weekend"),
+    ]
+
+    with caplog.at_level(logging.INFO, logger="test"):
+        merged = _filler(StubLoader(TailModel())).fill(1025, path, primary)
+
+    assert merged == primary
+    assert "gap-fill dropped 10.00-11.00 (weak fragment): ' Yes.'" in caplog.text
+    assert "added 0 segments, dropped 3 (weak fragment 3)" in caplog.text
+
+
+def test_failed_window_keeps_other_windows(
+    episode: str, caplog: pytest.LogCaptureFixture
+) -> None:
+    def flaky_audio(path: str, start: float, duration: float) -> np.ndarray:
+        if start <= 13.0 < start + duration:
+            raise RuntimeError("corrupt frame")
+        return gap_fill.load_audio_window(path, start, duration)
+
+    primary = [_seg(4.0, 10.0, "a"), _seg(20.0, 25.0, "b")]
+    filler = WhisperGapFiller(
+        logging.getLogger("test"),
+        GapFillSettings("base.en"),
+        model_loader=StubLoader(),
+        audio_loader=flaky_audio,
+    )
+
+    with caplog.at_level(logging.INFO, logger="test"):
+        merged = filler.fill(1, episode, primary)
+
+    recovered = [(round(s.start, 1), round(s.end, 1)) for s in merged if "~" in s.text]
+    assert recovered == [(0.5, 2.5), (27.0, 29.0)]
+    assert "window 9.0-21.0 failed; keeping speech recovered so far" in caplog.text
+    assert "(2 failed)" in caplog.text
+
+
+def test_recovered_speech_is_clamped_to_its_window(tmp_path: Path) -> None:
+    """Whisper pads a short clip to 30s and can time a segment past the clip
+    end; at the end of the audio nothing else would trim it."""
+
+    class OverrunModel:
+        def transcribe(self, audio: Any, **kwargs: Any) -> dict[str, Any]:
+            seconds = len(audio) / SAMPLE_RATE
+            return {"segments": [{"start": seconds - 3.0, "end": 30.0, "text": " Bye"}]}
+
+    path = _write_wav(tmp_path / "end.wav", 30.0, [(0, 10), (27, 30)])
+    merged = _filler(StubLoader(OverrunModel())).fill(1, path, [_seg(0.0, 10.0)])
+
+    assert max(s.end for s in merged) == pytest.approx(30.0, abs=0.01)
 
 
 def test_fill_keeps_primary_when_model_fails(episode: str) -> None:

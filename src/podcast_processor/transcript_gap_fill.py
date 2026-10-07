@@ -11,8 +11,10 @@ the last segment, up to the real audio duration), cuts each one out with a
 little padding, and transcribes it on its own with local whisper. A short clip
 gives whisper a fresh context, which recovers speech even when the primary
 transcriber was the same local model. Recovered segments are offset back to
-episode time, trimmed so they never overlap what is already transcribed, and
-merged in time order. Whatever is still uncovered is retried unpadded from
+episode time, filtered for decoder junk (short low-confidence fragments
+would otherwise shrink an untranscribed stretch below the ad-cut backstop in
+``untranscribed_gaps``), trimmed so they never overlap what is already
+transcribed, and merged in time order. Every dropped segment is logged. Whatever is still uncovered is retried unpadded from
 where recovered speech stops, because a clip opening mid-sentence can make
 whisper skip the rest of its 30s window the same way the primary pass did.
 """
@@ -25,7 +27,8 @@ import logging
 import math
 import re
 import time
-from collections.abc import Callable, Sequence
+from collections import Counter
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from difflib import SequenceMatcher
 from typing import Any, NamedTuple, Protocol, runtime_checkable
@@ -48,10 +51,23 @@ _WORD = re.compile(r"[\w']+")
 # Character similarity above which a recovered phrase counts as a repeat of the
 # neighbouring segment's edge words ("God bless." vs "Dog bless." is 0.78).
 _DUPLICATE_RATIO = 0.75
+# Only recovered segments starting/ending this close to a primary neighbour
+# (beyond the padding) are checked as re-reads of it; further in, a repeat of
+# the neighbour's words is the ad repeating its own copy.
+_REPEAT_SLACK_SECONDS = 1.5
 # Whisper's own failed-decode thresholds (logprob_threshold,
 # compression_ratio_threshold), applied per segment since there is no fallback.
 _MIN_AVG_LOGPROB = -1.0
 _MAX_COMPRESSION_RATIO = 2.4
+# Junk filters, tuned on real base.en output for post 1025 (stats are per 30s
+# decode, shared by every segment in it). Every 1-2 word fragment there was a
+# mis-heard tail of a primary segment ("Yes." lp -0.95, "Good." -0.67, "F***"
+# -0.87 with no-speech 0.58); real recovered ad decodes ran -0.29 to -0.57
+# with no-speech up to 0.57. A kept fragment matters: it shrinks an
+# untranscribed stretch below the cut backstop beside an ad.
+_NO_SPEECH_PROB = 0.6  # whisper's no_speech_threshold
+_CONFIDENT_LOGPROB = -0.6
+_FRAGMENT_MAX_WORDS = 2
 _RETRY_PASSES = 2
 
 
@@ -62,6 +78,17 @@ class WhisperModel(Protocol):
 
 ModelLoader = Callable[[str], WhisperModel]
 AudioLoader = Callable[[str, float, float], np.ndarray]
+
+
+class Dropped(NamedTuple):
+    segment: Segment
+    reason: str
+
+
+class MergeResult(NamedTuple):
+    merged: list[Segment]
+    added: list[Segment]
+    dropped: list[Dropped]
 
 
 class Window(NamedTuple):
@@ -223,15 +250,22 @@ def merge_recovered(
     recovered: Sequence[Segment],
     *,
     primary: Sequence[Segment] | None = None,
-) -> tuple[list[Segment], list[Segment]]:
+    repeat_edge_seconds: float = (
+        DEFAULTS.WHISPER_GAP_FILL_PADDING_SECONDS + _REPEAT_SLACK_SECONDS
+    ),
+) -> MergeResult:
     """Merge recovered segments into ``existing`` without overlap or repeats.
 
     A recovered segment mostly inside already-covered time (existing or an
     earlier accepted recovery) is dropped; otherwise its times are trimmed to
-    its longest uncovered stretch. One that repeats the edge words of its
-    neighbouring ``primary`` segment (default: ``existing``) is dropped too;
-    recovered neighbours are not compared, as ad copy legitimately repeats.
-    Returns (merged sorted, added).
+    its longest uncovered stretch. Its text is kept whole: there are no word
+    timings to cut it by, and extra ad words only help the classifier.
+
+    A segment starting within ``repeat_edge_seconds`` of the end of the
+    ``primary`` segment before it (default: ``existing``), or ending that close
+    to the start of the one after, is dropped when it repeats that
+    neighbour's edge words: it is the padding re-read. Further into the gap,
+    and between recovered segments, repeats are kept, as ad copy repeats.
     """
     merged = sorted(existing, key=lambda s: (s.start, s.end))
     originals = sorted(
@@ -239,26 +273,55 @@ def merge_recovered(
     )
     original_starts = [o.start for o in originals]
     added: list[Segment] = []
+    dropped: list[Dropped] = []
     for seg in sorted(recovered, key=lambda s: (s.start, s.end)):
         duration = seg.end - seg.start
         if duration < _MIN_SEGMENT_SECONDS:
+            dropped.append(Dropped(seg, "too short"))
             continue
         parts = _uncovered_parts(seg.start, seg.end, _covered_spans(merged))
         free = sum(e - s for s, e in parts)
         if free < duration * _MIN_UNCOVERED_FRACTION:
+            dropped.append(Dropped(seg, "already transcribed"))
             continue
         start, end = max(parts, key=lambda p: p[1] - p[0])
         if end - start < _MIN_SEGMENT_SECONDS:
+            dropped.append(Dropped(seg, "already transcribed"))
             continue
         o_idx = bisect.bisect_left(original_starts, start)
         before = originals[o_idx - 1] if o_idx > 0 else None
         after = originals[o_idx] if o_idx < len(originals) else None
+        if before is not None and seg.start - before.end > repeat_edge_seconds:
+            before = None
+        if after is not None and after.start - seg.end > repeat_edge_seconds:
+            after = None
         if _repeats_neighbour(seg.text, before, after):
+            dropped.append(Dropped(seg, "repeats neighbour"))
             continue
         kept = Segment(start=start, end=end, text=seg.text)
         merged.insert(bisect.bisect_left([m.start for m in merged], start), kept)
         added.append(kept)
-    return merged, added
+    return MergeResult(merged, added, dropped)
+
+
+def rejection_reason(raw: Mapping[str, Any]) -> str | None:
+    """Why a raw whisper segment from a gap window is junk, or None if not."""
+    text = str(raw.get("text", ""))
+    if not _HAS_WORD.search(text):
+        return "no words"
+    logprob = float(raw.get("avg_logprob", 0.0))
+    no_speech = float(raw.get("no_speech_prob", 0.0))
+    if logprob < _MIN_AVG_LOGPROB:
+        return "low confidence"
+    if float(raw.get("compression_ratio", 0.0)) > _MAX_COMPRESSION_RATIO:
+        return "repetitive"
+    if no_speech > _NO_SPEECH_PROB and logprob < _CONFIDENT_LOGPROB:
+        return "likely no speech"
+    if len(_words(text)) <= _FRAGMENT_MAX_WORDS and (
+        no_speech > _NO_SPEECH_PROB or logprob < _CONFIDENT_LOGPROB
+    ):
+        return "weak fragment"
+    return None
 
 
 def load_audio_window(path: str, start: float, duration: float) -> np.ndarray:
@@ -335,8 +398,10 @@ class WhisperGapFiller:
         primary = sorted(segments, key=lambda seg: (seg.start, seg.end))
         merged = primary
         added: list[Segment] = []
+        drops: Counter[str] = Counter()
         attempted: set[tuple[float, float]] = set()
         windows_run = 0
+        windows_failed = 0
         seconds_run = 0.0
         model = self.model_loader(s.model_name)
         try:
@@ -358,10 +423,44 @@ class WhisperGapFiller:
                     attempted.add(key)
                     windows_run += 1
                     seconds_run += window.end - window.start
-                    found = self._transcribe_window(model, audio_path, window)
-                    merged, new = merge_recovered(merged, found, primary=primary)
-                    added.extend(new)
-                    if not new:
+                    # One bad window (e.g. a corrupt frame ffmpeg cannot
+                    # decode) must not discard what other windows recovered.
+                    try:
+                        found, rejected = self._transcribe_window(
+                            model, audio_path, window
+                        )
+                        result = merge_recovered(
+                            merged,
+                            found,
+                            primary=primary,
+                            repeat_edge_seconds=s.padding_seconds
+                            + _REPEAT_SLACK_SECONDS,
+                        )
+                    except Exception:  # noqa: BLE001 - keep other windows
+                        windows_failed += 1
+                        self.logger.warning(
+                            "Post %s: gap-fill pass %d window %.1f-%.1f failed; "
+                            "keeping speech recovered so far",
+                            post_id,
+                            pass_no,
+                            window.start,
+                            window.end,
+                            exc_info=True,
+                        )
+                        continue
+                    merged = result.merged
+                    added.extend(result.added)
+                    for dropped in (*rejected, *result.dropped):
+                        drops[dropped.reason] += 1
+                        self.logger.info(
+                            "Post %s: gap-fill dropped %.2f-%.2f (%s): %r",
+                            post_id,
+                            dropped.segment.start,
+                            dropped.segment.end,
+                            dropped.reason,
+                            dropped.segment.text,
+                        )
+                    if not result.added:
                         self.logger.info(
                             "Post %s: gap-fill pass %d window %.1f-%.1f (gap "
                             "%.1f-%.1f) yielded no new speech",
@@ -379,15 +478,18 @@ class WhisperGapFiller:
         left = find_gaps(merged, duration, s.min_gap_seconds)
         self.logger.info(
             "Post %s: gap-fill (%s) found %d gaps totalling %.1fs, re-transcribed "
-            "%.1fs in %d windows, added %d segments in %.1fs; %.1fs still "
-            "untranscribed",
+            "%.1fs in %d windows (%d failed), added %d segments, dropped %d (%s) "
+            "in %.1fs; %.1fs still untranscribed",
             post_id,
             s.model_name,
             len(gaps),
             sum(e - b for b, e in gaps),
             seconds_run,
             windows_run,
+            windows_failed,
             len(added),
+            sum(drops.values()),
+            ", ".join(f"{reason} {n}" for reason, n in sorted(drops.items())) or "none",
             time.time() - started,
             sum(e - b for b, e in left),
         )
@@ -395,10 +497,11 @@ class WhisperGapFiller:
 
     def _transcribe_window(
         self, model: WhisperModel, audio_path: str, window: Window
-    ) -> list[Segment]:
+    ) -> tuple[list[Segment], list[Dropped]]:
+        """Recovered segments in episode time, plus those rejected as junk."""
         audio = self.audio_loader(audio_path, window.start, window.end - window.start)
         if audio.size == 0:
-            return []
+            return [], []
         result = model.transcribe(
             audio,
             fp16=False,
@@ -409,16 +512,19 @@ class WhisperGapFiller:
             temperature=0.0,
         )
         out: list[Segment] = []
+        rejected: list[Dropped] = []
         for raw in result.get("segments") or []:
-            text = str(raw.get("text", ""))
-            if not _HAS_WORD.search(text):
-                continue
-            if raw.get("avg_logprob", 0.0) < _MIN_AVG_LOGPROB:
-                continue
-            if raw.get("compression_ratio", 0.0) > _MAX_COMPRESSION_RATIO:
-                continue
             start = window.start + float(raw["start"])
+            # Whisper pads a short clip to 30s and can time speech past its end.
             end = min(window.start + float(raw["end"]), window.end)
-            if end > start:
-                out.append(Segment(start=start, end=end, text=text))
-        return out
+            seg = Segment(
+                start=start, end=max(start, end), text=str(raw.get("text", ""))
+            )
+            reason = rejection_reason(raw)
+            if reason is None and end <= start:
+                reason = "past window end"
+            if reason is None:
+                out.append(seg)
+            else:
+                rejected.append(Dropped(seg, reason))
+        return out, rejected
