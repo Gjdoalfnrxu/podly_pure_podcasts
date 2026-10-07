@@ -17,6 +17,10 @@ from flask import Flask
 from app.extensions import db
 from app.models import Feed, Identification, ModelCall, Post, TranscriptSegment
 from podcast_processor.audio_processor import AudioProcessor
+from podcast_processor.untranscribed_gaps import (
+    MAX_EDGE_UNTRANSCRIBED_GAP_SECONDS,
+    MAX_INTERIOR_UNTRANSCRIBED_GAP_SECONDS,
+)
 from shared.config import Config
 
 POST_1025_FIXTURE = (
@@ -82,16 +86,23 @@ def _seed_post(
 
 
 def _cut_windows(
-    config: Config, post: Post, duration_s: float, *, separation: int = 60
+    config: Config,
+    post: Post,
+    duration_s: float,
+    *,
+    separation: int = 60,
+    duration_ms: int | None = None,
 ) -> list[tuple[int, int]]:
     config.output.min_ad_segement_separation_seconds = separation
+    if duration_ms is None:
+        duration_ms = round(duration_s * 1000)
     processor = AudioProcessor(
         config=config, logger=logging.getLogger("test"), db_session=db.session
     )
     with (
         patch(
             "podcast_processor.audio_processor.get_audio_duration_ms",
-            side_effect=[int(duration_s * 1000), 1000],
+            side_effect=[duration_ms, 1000],
         ),
         patch("podcast_processor.audio_processor.clip_segments_with_fade") as clip,
     ):
@@ -263,3 +274,185 @@ def test_refined_edge_moved_inside_group_blocks_gap_extension(
             ],
         )
         assert _cut_windows(test_config, post, duration_s=400.0) == [expected]
+
+
+def test_extension_does_not_let_separation_merge_swallow_speech(
+    app: Flask, test_config: Config
+) -> None:
+    """The 60s separation merge must judge the transcribed ad windows. Judged
+    on extended windows, ad 100-130 (+50s gap to 180) is within 60s of ad
+    200-230 and the transcribed speech at 180-200 would be cut."""
+    with app.app_context():
+        post = _seed_post(
+            [
+                (0.0, 100.0, "content"),
+                (100.0, 130.0, "ad"),
+                (180.0, 200.0, "content"),  # 50s untranscribed before it
+                (200.0, 230.0, "ad"),
+                (230.0, 400.0, "content"),
+            ]
+        )
+        assert _cut_windows(test_config, post, duration_s=400.0) == [
+            (100000, 180000),
+            (200000, 230000),
+        ]
+
+
+def test_short_ad_group_is_dropped_before_extension(
+    app: Flask, test_config: Config
+) -> None:
+    """An 8s ad group is below the 14s minimum; a 20s gap after it must not
+    lift it over the minimum."""
+    with app.app_context():
+        test_config.output.min_ad_segment_length_seconds = 14
+        post = _seed_post(
+            [
+                (0.0, 500.0, "content"),
+                (500.0, 508.0, "ad"),
+                (528.0, 1000.0, "content"),  # 20s untranscribed before it
+            ]
+        )
+        assert _cut_windows(test_config, post, duration_s=1000.0) == []
+
+
+def test_groups_bordering_the_same_gap_coalesce(
+    app: Flask, test_config: Config
+) -> None:
+    """Separation 10 keeps the two transcribed groups apart; both extend over
+    the 40s gap between them, so the cut is one window."""
+    with app.app_context():
+        post = _seed_post(
+            [
+                (0.0, 100.0, "content"),
+                (100.0, 130.0, "ad"),
+                (170.0, 200.0, "ad"),  # 40s untranscribed between the groups
+                (200.0, 400.0, "content"),
+            ]
+        )
+        assert _cut_windows(test_config, post, duration_s=400.0, separation=10) == [
+            (100000, 200000)
+        ]
+
+
+def _interior_gap_post(gap: float) -> Post:
+    return _seed_post(
+        [
+            (0.0, 100.0, "content"),
+            (100.0, 130.0, "ad"),
+            (130.0 + gap, 1000.0, "content"),
+        ]
+    )
+
+
+@pytest.mark.parametrize(
+    ("gap", "extends"),
+    [
+        (MAX_INTERIOR_UNTRANSCRIBED_GAP_SECONDS - 0.1, True),
+        (MAX_INTERIOR_UNTRANSCRIBED_GAP_SECONDS + 0.1, False),
+    ],
+)
+def test_interior_gap_cap(
+    app: Flask,
+    test_config: Config,
+    caplog: pytest.LogCaptureFixture,
+    gap: float,
+    extends: bool,
+) -> None:
+    assert MAX_INTERIOR_UNTRANSCRIBED_GAP_SECONDS == 60.0
+    with app.app_context():
+        post = _interior_gap_post(gap)
+        with caplog.at_level(logging.WARNING, logger="test"):
+            cut = _cut_windows(test_config, post, duration_s=1000.0)
+        end = round((130.0 + gap) * 1000) if extends else 130000
+        assert cut == [(100000, end)]
+        warned = [
+            r.getMessage() for r in caplog.records if r.levelno == logging.WARNING
+        ]
+        if extends:
+            assert warned == []
+        else:
+            assert warned == [
+                f"Post {post.id}: untranscribed gap 130.0-{130.0 + gap:.1f} "
+                f"({gap:.1f}s) beside an ad exceeds the 60s cap; "
+                "not extending the cut over it"
+            ]
+
+
+@pytest.mark.parametrize(
+    ("gap", "extends"),
+    [
+        (MAX_EDGE_UNTRANSCRIBED_GAP_SECONDS - 0.1, True),
+        (MAX_EDGE_UNTRANSCRIBED_GAP_SECONDS + 0.1, False),
+    ],
+)
+def test_head_gap_cap(
+    app: Flask,
+    test_config: Config,
+    caplog: pytest.LogCaptureFixture,
+    gap: float,
+    extends: bool,
+) -> None:
+    assert MAX_EDGE_UNTRANSCRIBED_GAP_SECONDS == 180.0
+    with app.app_context():
+        post = _seed_post(
+            [
+                (gap, gap + 30.0, "ad"),  # nothing transcribed before it
+                (gap + 30.0, 1000.0, "content"),
+            ]
+        )
+        with caplog.at_level(logging.WARNING, logger="test"):
+            cut = _cut_windows(test_config, post, duration_s=1000.0)
+        start = 0 if extends else round(gap * 1000)
+        assert cut == [(start, round((gap + 30.0) * 1000))]
+        assert (
+            any(
+                r.levelno == logging.WARNING and f"Post {post.id}:" in r.getMessage()
+                for r in caplog.records
+            )
+            is not extends
+        )
+
+
+@pytest.mark.parametrize(
+    ("gap", "extends"),
+    [
+        (MAX_EDGE_UNTRANSCRIBED_GAP_SECONDS - 0.1, True),
+        (MAX_EDGE_UNTRANSCRIBED_GAP_SECONDS + 0.1, False),
+    ],
+)
+def test_tail_gap_cap(
+    app: Flask,
+    test_config: Config,
+    caplog: pytest.LogCaptureFixture,
+    gap: float,
+    extends: bool,
+) -> None:
+    with app.app_context():
+        post = _seed_post(
+            [
+                (0.0, 300.0, "content"),
+                (300.0, 330.0, "ad"),  # nothing transcribed after it
+            ]
+        )
+        duration = 330.0 + gap
+        with caplog.at_level(logging.WARNING, logger="test"):
+            cut = _cut_windows(test_config, post, duration_s=duration)
+        end = round(duration * 1000) if extends else 330000
+        assert cut == [(300000, end)]
+        assert (
+            any(
+                r.levelno == logging.WARNING and f"Post {post.id}:" in r.getMessage()
+                for r in caplog.records
+            )
+            is not extends
+        )
+
+
+def test_tail_cut_reaches_exact_duration(app: Flask, test_config: Config) -> None:
+    """512002 / 1000 * 1000 truncates to 512001 with int(); the cut must end
+    exactly at the source duration (no 1 ms keep segment)."""
+    with app.app_context():
+        post = _seed_post([(0.0, 300.0, "content"), (300.0, 340.0, "ad")])
+        assert _cut_windows(
+            test_config, post, duration_s=512.002, duration_ms=512002
+        ) == [(300000, 512002)]

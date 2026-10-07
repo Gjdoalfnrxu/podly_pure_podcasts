@@ -7,6 +7,7 @@ from flask import Flask
 from app.extensions import db
 from app.models import Feed, Identification, Post, TranscriptSegment
 from podcast_processor.audio_processor import AudioProcessor
+from podcast_processor.untranscribed_gaps import AdWindow
 from shared.config import Config
 from shared.test_utils import create_standard_test_config
 
@@ -172,9 +173,13 @@ def test_process_audio(
 
         output_path = "path/to/output.mp3"
 
-        # Set up mocks for get_ad_segments and get_audio_duration_ms
+        # Set up mocks for get_ad_windows and get_audio_duration_ms
         with (
-            patch.object(processor, "get_ad_segments", return_value=[(5.0, 10.0)]),
+            patch.object(
+                processor,
+                "get_ad_windows",
+                return_value=[AdWindow(5.0, 10.0, 5.0, 10.0)],
+            ),
             patch(
                 "podcast_processor.audio_processor.get_audio_duration_ms",
                 side_effect=[30000, 24000],
