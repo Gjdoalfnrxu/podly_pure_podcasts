@@ -149,7 +149,8 @@ def test_fetch_feed_bytes_times_out_on_silent_server():
 def test_fetch_feed_bytes_deadline_beats_slow_drip():
     def drip(conn, done):
         conn.sendall(b"HTTP/1.1 200 OK\r\nContent-Type: application/rss+xml\r\n\r\n")
-        while not done.is_set():
+        stop_at = time.monotonic() + 6  # bounded so a regression fails, not hangs
+        while not done.is_set() and time.monotonic() < stop_at:
             try:
                 conn.sendall(b"<")
             except OSError:
