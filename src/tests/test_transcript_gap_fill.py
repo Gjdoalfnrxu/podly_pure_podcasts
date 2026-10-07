@@ -427,6 +427,33 @@ def test_retry_walks_past_fragment_when_gap_starts_mid_speech(
     assert len(loader.model.calls) == 3
 
 
+def test_retry_walks_past_dropped_fragment(tmp_path: Path) -> None:
+    """Real post 1025: the fragment base.en emits at the start of the clip is
+    junk ("F***", lp -0.87) and is dropped, but the retry must still start
+    after it, or the ad whisper jumped over is never recovered."""
+
+    class JunkFragmentModel(JumpingWhisperModel):
+        def transcribe(self, audio: np.ndarray, **kwargs: Any) -> dict[str, Any]:
+            result = super().transcribe(audio, **kwargs)
+            first = result["segments"][:1]
+            if first and first[0]["start"] == 0.0 and first[0]["end"] <= 1.0:
+                first[0].update(text=" F***", avg_logprob=-0.87, no_speech_prob=0.58)
+            return result
+
+    path = _write_wav(tmp_path / "junk.wav", 50.0, [(0.0, 10.0), (12.0, 38.0)])
+    primary = [_seg(0.0, 9.5, "show"), _seg(40.0, 50.0, "show again")]
+    loader = StubLoader(JunkFragmentModel())
+
+    merged = _filler(loader).fill(1025, path, primary)
+
+    assert [(round(s.start, 1), round(s.end, 1), s.text) for s in merged] == [
+        (0.0, 9.5, "show"),
+        (12.0, 38.0, " ~ recovered ad speech"),
+        (40.0, 50.0, "show again"),
+    ]
+    assert len(loader.model.calls) == 3
+
+
 def test_low_confidence_and_looping_segments_are_dropped(episode: str) -> None:
     class ShakyModel:
         def transcribe(self, audio: Any, **kwargs: Any) -> dict[str, Any]:
@@ -542,8 +569,8 @@ def test_weak_fragment_does_not_shrink_gap_beside_ad(
         merged = _filler(StubLoader(TailModel())).fill(1025, path, primary)
 
     assert merged == primary
-    assert "gap-fill dropped 10.00-11.00 (weak fragment): ' Yes.'" in caplog.text
-    assert "added 0 segments, dropped 3 (weak fragment 3)" in caplog.text
+    assert "gap-fill dropped 9.00-11.00 (weak fragment): ' Yes.'" in caplog.text
+    assert "added 0 segments, dropped 2 (weak fragment 2)" in caplog.text
 
 
 def test_failed_window_keeps_other_windows(

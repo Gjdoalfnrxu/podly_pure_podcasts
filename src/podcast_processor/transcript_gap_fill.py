@@ -398,6 +398,9 @@ class WhisperGapFiller:
         primary = sorted(segments, key=lambda seg: (seg.start, seg.end))
         merged = primary
         added: list[Segment] = []
+        # Speech whisper emitted but that was dropped as junk or a re-read.
+        # Not stored, but retries start after it like after kept speech.
+        heard: list[Segment] = []
         drops: Counter[str] = Counter()
         attempted: set[tuple[float, float]] = set()
         windows_run = 0
@@ -406,13 +409,13 @@ class WhisperGapFiller:
         model = self.model_loader(s.model_name)
         try:
             # Later passes retry what is still uncovered, unpadded and starting
-            # where the last recovered speech ended: a clip that opens on the
-            # tail of a sentence can make whisper emit that fragment and then
-            # jump the rest of its 30s window. Windows are never re-run with
+            # where the last emitted speech ended, kept or dropped: a clip that
+            # opens on the tail of a sentence can make whisper emit that
+            # fragment and then jump the rest of its 30s window. Windows are never re-run with
             # the same bounds, so a silent stretch costs at most two attempts.
             paddings = (s.padding_seconds, *([0.0] * _RETRY_PASSES))
             for pass_no, padding in enumerate(paddings, start=1):
-                remaining = find_gaps(merged, duration, s.min_gap_seconds)
+                remaining = find_gaps([*merged, *heard], duration, s.min_gap_seconds)
                 planned = plan_windows(
                     remaining, duration, padding, s.max_window_seconds
                 )
@@ -451,6 +454,8 @@ class WhisperGapFiller:
                     merged = result.merged
                     added.extend(result.added)
                     for dropped in (*rejected, *result.dropped):
+                        if dropped.reason != "already transcribed":
+                            heard.append(dropped.segment)
                         drops[dropped.reason] += 1
                         self.logger.info(
                             "Post %s: gap-fill dropped %.2f-%.2f (%s): %r",
