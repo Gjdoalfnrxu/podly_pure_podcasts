@@ -50,10 +50,14 @@ audio hour), and the cap already bounds spend.
 
 ## Concurrency
 
-- **Local lane:** one job at a time (`_global_processing_lock`), as before.
-- **Cloud lane:** two worker threads, so up to 2 cloud jobs run alongside the
-  local one. Each cloud job gets a fresh processor, so nothing is shared
-  between them. Download, ffmpeg cutting and LLM calls still run on this box.
+Lanes only decide **who transcribes** a job. Jobs then run in two stages, each
+with its own workers (see [pipeline.md](pipeline.md)):
+
+- **Transcribe stage, local lane:** `PODLY_TRANSCRIBE_WORKERS` threads (default 1).
+- **Transcribe stage, cloud lane:** two threads, alongside the local one. Each
+  cloud job gets a fresh processor, so nothing is shared between them.
+- **LLM stage** (ad detection and the audio cut, any lane): `PODLY_LLM_WORKERS`
+  threads (default 4). Download, ffmpeg cutting and LLM calls run on this box.
 
 ## Money
 
@@ -124,9 +128,11 @@ database is still at `c1a0de1a9e5f`.
   provider may still have processed it, so that chunk is **counted as billed**.
   If the provider answers with an error status (4xx/5xx), the chunk is counted
   as not billed.
-- **Restarts.** Podly clears pending and running jobs on startup and re-creates
-  pending work as automatic (local) jobs, so a manual cloud request that was
-  waiting during a restart ends up local. A cloud call cut off by a restart
-  stays `reserved` and keeps counting its estimate.
+- **Restarts.** On startup, jobs that were running are put back in their
+  queue; re-queued jobs go to the local lane (re-queues never use the cloud
+  lane). Jobs that were still waiting keep their lane, so a manual cloud
+  request that was waiting during a restart still goes to the cloud lane. A
+  cloud call cut off by a restart stays `reserved` and keeps counting its
+  estimate.
 - **Spend is an estimate.** It comes from audio length times your price per
   hour. It is not read from the provider's invoice.

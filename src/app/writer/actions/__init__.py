@@ -34,6 +34,7 @@ from .feeds import (
     whitelist_latest_post_for_feed_action as whitelist_latest_post_for_feed_action,
 )
 from .feeds import whitelist_post_action as whitelist_post_action
+from .jobs import advance_job_stage_action as advance_job_stage_action
 from .jobs import cancel_existing_jobs_action as cancel_existing_jobs_action
 from .jobs import cleanup_stale_jobs_action as cleanup_stale_jobs_action
 from .jobs import clear_active_jobs_action as clear_active_jobs_action
@@ -43,6 +44,10 @@ from .jobs import create_job_if_missing_action as create_job_if_missing_action
 from .jobs import dequeue_job_action as dequeue_job_action
 from .jobs import mark_cancelled_action as mark_cancelled_action
 from .jobs import reassign_pending_jobs_action as reassign_pending_jobs_action
+from .jobs import (
+    requeue_interrupted_jobs_action as requeue_interrupted_jobs_action,
+)
+from .jobs import route_job_action as route_job_action
 from .jobs import update_job_status_action as update_job_status_action
 from .lanes import requeue_job_local_action as requeue_job_local_action
 from .lanes import reserve_cloud_usage_action as reserve_cloud_usage_action

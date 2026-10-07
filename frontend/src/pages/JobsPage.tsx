@@ -281,6 +281,7 @@ export default function JobsPage() {
   return (
     <div className="space-y-4">
       <LaneSummary />
+      <StageSummary jobs={jobs} />
 
       <div className="rounded border border-gray-200 bg-white p-4 shadow-sm">
         <div className="flex flex-wrap items-center justify-between gap-3">
@@ -474,6 +475,9 @@ export default function JobsPage() {
               </div>
               <div className="text-xs text-gray-600 truncate">{job.feed_title || 'Unknown feed'}</div>
               <LaneBadge lane={job.lane} reason={job.lane_reason} />
+              {(job.status === 'pending' || job.status === 'running') && (
+                <StageBadge stage={job.stage} status={job.status} />
+              )}
 
               <div className="space-y-2">
                 <div className="flex items-center justify-between text-xs text-gray-700">
@@ -579,6 +583,40 @@ function LaneBadge({ lane, reason }: { lane?: string; reason?: string | null }) 
         {cloud ? 'Cloud lane' : 'Local lane'}
       </span>
       {reason && <span className="text-gray-500 truncate">{reason}</span>}
+    </div>
+  );
+}
+
+const STAGE_LABELS: Record<string, string> = {
+  transcribe: 'Transcription',
+  llm: 'Ad detection',
+};
+
+function StageBadge({ stage, status }: { stage?: string; status: string }) {
+  const label = STAGE_LABELS[stage || 'transcribe'] ?? stage;
+  return (
+    <div className="text-xs text-gray-600">
+      {status === 'running' ? 'In ' : 'Waiting for '}
+      <span className="font-medium">{label}</span>
+    </div>
+  );
+}
+
+function StageSummary({ jobs }: { jobs: Job[] }) {
+  const counts = { transcribe: { running: 0, pending: 0 }, llm: { running: 0, pending: 0 } };
+  for (const job of jobs) {
+    if (job.status !== 'running' && job.status !== 'pending') continue;
+    const stage = job.stage === 'llm' ? 'llm' : 'transcribe';
+    counts[stage][job.status] += 1;
+  }
+  return (
+    <div className="rounded border border-gray-200 bg-white p-3 shadow-sm text-xs text-gray-700 flex flex-wrap gap-x-6 gap-y-1">
+      <span>
+        Transcription: {counts.transcribe.running} running, {counts.transcribe.pending} waiting
+      </span>
+      <span>
+        Ad detection: {counts.llm.running} running, {counts.llm.pending} waiting
+      </span>
     </div>
   );
 }

@@ -77,6 +77,8 @@ export interface Job {
   error_message: string | null;
   lane?: 'local' | 'cloud' | string;
   lane_reason?: string | null;
+  // Pipeline stage: 'transcribe' (download + Whisper) or 'llm' (ad detection + cut).
+  stage?: 'transcribe' | 'llm' | string;
 }
 
 export interface LaneStatus {

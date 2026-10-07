@@ -1,50 +1,141 @@
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
-from sqlalchemy import or_
+from sqlalchemy import and_, or_, select
 
 from app.extensions import db
 from app.jobs_manager_run_service import recalculate_run_counts
 from app.lanes import LANE_CLOUD, LANE_LOCAL
 from app.models import ProcessingJob
+from app.pipeline import STAGE_LLM, STAGE_TRANSCRIBE
 
 
-def dequeue_job_action(params: dict[str, Any]) -> dict[str, Any] | None:
-    """Claim the oldest pending job of a lane.
+def _pool_clause(stage: str, lane: str) -> Any:
+    """Jobs that belong to one worker pool.
 
-    lane "local" (default; NULL lane counts as local) runs one job at a time.
-    lane "cloud" runs up to ``max_running`` jobs at once.
+    Transcribe pools are per lane (local: NULL/"local", cloud: "cloud") and
+    take jobs whose stage is NULL (not routed yet) or "transcribe". The LLM pool
+    takes stage "llm" jobs of any lane (the lane only decides who transcribes).
     """
-    run_id = params.get("run_id")
-    lane = params.get("lane") or LANE_LOCAL
-    max_running = int(params.get("max_running") or 1)
-
+    if stage == STAGE_LLM:
+        return ProcessingJob.stage == STAGE_LLM
     if lane == LANE_LOCAL:
         in_lane = or_(ProcessingJob.lane.is_(None), ProcessingJob.lane == LANE_LOCAL)
     else:
         in_lane = ProcessingJob.lane == lane
+    in_stage = or_(
+        ProcessingJob.stage.is_(None), ProcessingJob.stage == STAGE_TRANSCRIBE
+    )
+    return and_(in_stage, in_lane)
 
+
+def dequeue_job_action(params: dict[str, Any]) -> dict[str, Any] | None:
+    """Claim the next pending job for one stage worker pool.
+
+    Returns None when ``max_running`` jobs of the pool are already running, or
+    nothing is eligible. A post with a running job (any stage), or listed in
+    ``exclude_post_guids`` (posts a worker thread is still busy with), is never
+    claimed, so one post is never processed twice at once. Order: priority
+    (higher first), then oldest first. The claimed job is marked running in
+    this same writer action, so two workers cannot claim the same job.
+    """
+    run_id = params.get("run_id")
+    stage = params.get("stage") or STAGE_TRANSCRIBE
+    lane = params.get("lane") or LANE_LOCAL
+    max_running = int(params.get("max_running") or 1)
+    exclude = [str(g) for g in params.get("exclude_post_guids") or []]
+
+    in_pool = _pool_clause(stage, lane)
     running = ProcessingJob.query.filter(
-        ProcessingJob.status == "running", in_lane
+        ProcessingJob.status == "running", in_pool
     ).count()
     if running >= max_running:
         return None
 
-    job = (
-        ProcessingJob.query.filter(ProcessingJob.status == "pending", in_lane)
-        .order_by(ProcessingJob.created_at.asc())
-        .first()
+    busy_posts = select(ProcessingJob.post_guid).where(
+        ProcessingJob.status == "running"
     )
+    query = ProcessingJob.query.filter(
+        ProcessingJob.status == "pending",
+        in_pool,
+        ProcessingJob.post_guid.not_in(busy_posts),
+    )
+    if exclude:
+        query = query.filter(ProcessingJob.post_guid.not_in(exclude))
+    job = query.order_by(
+        ProcessingJob.priority.desc(), ProcessingJob.created_at.asc()
+    ).first()
     if not job:
         return None
 
     job.status = "running"
-    job.started_at = datetime.now(UTC).replace(tzinfo=None)
+    job.stage = stage
+    if job.started_at is None:
+        job.started_at = datetime.now(UTC).replace(tzinfo=None)
 
     if run_id and job.jobs_manager_run_id != run_id:
         job.jobs_manager_run_id = run_id
 
-    return {"job_id": job.id, "post_guid": job.post_guid}
+    return {"job_id": job.id, "post_guid": job.post_guid, "stage": stage}
+
+
+def advance_job_stage_action(params: dict[str, Any]) -> dict[str, Any]:
+    """Hand a running job to another stage's queue (pending + new stage).
+
+    Only a job that is still running moves; a job cancelled meanwhile stays
+    cancelled.
+    """
+    job = db.session.get(ProcessingJob, params.get("job_id"))
+    if job is None or job.status != "running":
+        return {"advanced": False, "status": getattr(job, "status", None)}
+    job.status = "pending"
+    job.stage = params["stage"]
+    if job.stage == STAGE_TRANSCRIBE:
+        _requeue_off_cloud(job)
+    job.current_step = params.get("step", job.current_step)
+    job.step_name = params.get("step_name", job.step_name)
+    if params.get("progress") is not None:
+        job.progress_percentage = params["progress"]
+    if job.jobs_manager_run_id:
+        recalculate_run_counts(db.session)
+    return {"advanced": True, "status": job.status}
+
+
+def route_job_action(params: dict[str, Any]) -> dict[str, Any]:
+    """Set a queued job's stage and raise (never lower) its priority."""
+    job = db.session.get(ProcessingJob, params.get("job_id"))
+    if job is None or job.status != "pending":
+        return {"routed": False}
+    stage = params.get("stage")
+    if stage:
+        job.stage = stage
+    job.priority = max(job.priority or 0, int(params.get("priority") or 0))
+    return {"routed": True, "stage": job.stage, "priority": job.priority}
+
+
+def _requeue_off_cloud(job: ProcessingJob) -> None:
+    """Re-queued work never uses the paid lane; only queueing a job with
+    create_job/set_job_lane puts it there (same rule as update_job_status)."""
+    if job.lane == LANE_CLOUD:
+        job.lane = None
+        job.lane_reason = "re-queued: local lane"
+
+
+def requeue_interrupted_jobs_action(params: dict[str, Any]) -> dict[str, Any]:
+    """Startup: jobs left running by a stop go back to pending, same stage.
+
+    A job that was in the LLM stage keeps stage "llm" (its transcript is in the
+    DB), so it skips Whisper. Pending jobs are left as they are.
+    """
+    del params
+    interrupted = ProcessingJob.query.filter(ProcessingJob.status == "running").all()
+    for job in interrupted:
+        job.status = "pending"
+        job.step_name = "Re-queued after restart"
+        _requeue_off_cloud(job)
+    if interrupted:
+        recalculate_run_counts(db.session)
+    return {"requeued": len(interrupted)}
 
 
 def cleanup_stale_jobs_action(params: dict[str, Any]) -> dict[str, Any]:

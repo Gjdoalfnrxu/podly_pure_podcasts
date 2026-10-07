@@ -25,6 +25,11 @@ from app.jobs_manager import (
     get_jobs_manager,
 )
 from app.logger import setup_logger
+from app.pipeline import (
+    load_pipeline_settings,
+    required_db_pool_size,
+    server_threads_from_env,
+)
 from app.processor import (
     ProcessorSingleton,
 )
@@ -336,12 +341,16 @@ def _configure_database(app: Flask) -> None:
     app.config["SQLALCHEMY_DATABASE_URI"] = (
         f"{uri_scheme}:///sqlite3.db?timeout={connect_timeout}"
     )
+    # The web process holds one connection per request thread and per pipeline
+    # worker (plus refresh/scheduler threads); see required_db_pool_size. The
+    # writer process does all writes on one thread, so readers are what grow.
     engine_options: dict[str, Any] = {
         "connect_args": {
             "timeout": connect_timeout,
         },
-        # Keep pool small to reduce concurrent SQLite writers
-        "pool_size": 5,
+        "pool_size": required_db_pool_size(
+            load_pipeline_settings(), server_threads_from_env()
+        ),
         "max_overflow": 5,
     }
 
@@ -477,11 +486,11 @@ def _start_scheduler_and_jobs(app: Flask) -> None:
     setup_scheduler(app)
 
     jobs_manager = get_jobs_manager()
-    clear_result = jobs_manager.clear_active_jobs()
-    if clear_result["status"] == "success":
-        app_logger.info(f"Startup: {clear_result['message']}")
+    requeue_result = jobs_manager.requeue_interrupted_jobs()
+    if requeue_result["status"] == "success":
+        app_logger.info(f"Startup: {requeue_result['message']}")
     else:
-        app_logger.warning(f"Startup job clearing failed: {clear_result['message']}")
+        app_logger.warning(f"Startup job re-queue failed: {requeue_result['message']}")
 
     add_background_job(
         10

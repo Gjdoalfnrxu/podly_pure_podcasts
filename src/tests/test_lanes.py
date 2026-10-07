@@ -32,6 +32,8 @@ from app.lanes import (
     month_start,
 )
 from app.models import CloudLaneUsage, Feed, Post, ProcessingJob
+from app.pipeline import STAGE_LLM, STAGE_TRANSCRIBE, PipelineSettings
+from app.pipeline_workers import PipelineWorkers
 from app.writer.client import writer_client
 from podcast_processor.processing_status_manager import ProcessingStatusManager
 
@@ -338,9 +340,7 @@ def test_cloud_transcriber_failure_settles_and_falls_back(app, tmp_path):
 def manager(app):
     """A JobsManager without its worker threads, on the test app context."""
     jm = object.__new__(JobsManager)
-    jm._work_event = mock.Mock()
-    jm._cloud_work_event = mock.Mock()
-    jm._stop_event = threading.Event()
+    jm._workers = mock.Mock()
     jm._run_lock = threading.Lock()
     jm._run_id = None
     jm._status_manager = ProcessingStatusManager(
@@ -453,7 +453,7 @@ class _FailingCloudProcessor:
     def __init__(self, job_id: str) -> None:
         self.job_id = job_id
 
-    def process(self, post, job_id, cancel_callback=None):
+    def process(self, post, job_id, cancel_callback=None, stage=None):
         _act(
             "update_job_status",
             job_id=job_id,
@@ -465,22 +465,44 @@ class _FailingCloudProcessor:
         raise RuntimeError("cloud transcription failed: 503")
 
 
-def test_failed_cloud_job_is_requeued_locally(app, manager):
+def _workers(app, factory=None, *, transcribe_workers=1, cloud_workers=2):
+    """PipelineWorkers on the test app; ``factory`` None = production factory."""
+    extra = {"processor_factory": factory} if factory else {}
+    return PipelineWorkers(
+        PipelineSettings(transcribe_workers, 1, cloud_workers, 1),
+        app_context=app.app_context,
+        get_run_id=lambda: None,
+        status_manager=ProcessingStatusManager(db.session),
+        **extra,
+    )
+
+
+def test_failed_cloud_job_is_requeued_locally(app):
     with app.app_context():
         job_id = _post_with_job(status="running", lane=LANE_CLOUD)
-        transcriber = SimpleNamespace(fallback_reason="cloud transcription failed: 503")
-        with mock.patch(
-            "app.jobs_manager._processor_for",
-            return_value=(_FailingCloudProcessor(job_id), transcriber),
-        ):
-            manager._process_job(job_id, "g1", lane=LANE_CLOUD)
+    transcriber = SimpleNamespace(fallback_reason="cloud transcription failed: 503")
+    calls: list[tuple[str, str]] = []
 
+    def factory(stage, lane, job_id_, guid):
+        calls.append((stage, lane))
+        return _FailingCloudProcessor(job_id_), transcriber
+
+    workers = _workers(app, factory)
+    workers.run_stage(job_id, "g1", STAGE_TRANSCRIBE, LANE_CLOUD)
+
+    with app.app_context():
         job = _job_row(job_id)
         assert job.status == "pending"
         assert job.lane == LANE_LOCAL
+        assert job.stage != STAGE_LLM  # back in the local Whisper queue
         assert "cloud fallback" in (job.lane_reason or "")
         assert job.error_message is None
-        manager._work_event.set.assert_called()  # local worker woken
+    assert calls == [(STAGE_TRANSCRIBE, LANE_CLOUD)]
+    local_pool = next(
+        p for p in workers.pools if p.stage == STAGE_TRANSCRIBE and p.lane == LANE_LOCAL
+    )
+    assert local_pool.wake_event.is_set()  # local worker woken
+    assert workers.inflight_posts() == set()
 
 
 def test_cancelled_cloud_job_is_not_requeued(app, manager):
@@ -491,28 +513,59 @@ def test_cancelled_cloud_job_is_not_requeued(app, manager):
         }
 
 
-def test_cloud_jobs_do_not_take_the_local_processing_lock(app, manager):
-    """A cloud job must run while a local job holds the processing lock."""
+def test_cloud_transcription_runs_while_local_whisper_is_busy(app):
+    """The cloud lane has its own transcribe threads: a long local job does
+    not hold it up."""
     with app.app_context():
-        job_id = _post_with_job(status="running", lane=LANE_CLOUD)
-    ran = threading.Event()
+        feed = Feed(title="F", rss_url="https://ex.example.com/f")
+        db.session.add(feed)
+        db.session.commit()
+        for guid, lane in (("local-1", LANE_LOCAL), ("cloud-1", LANE_CLOUD)):
+            db.session.add(
+                Post(
+                    feed_id=feed.id,
+                    guid=guid,
+                    download_url=f"https://ex.example.com/{guid}.mp3",
+                    title=guid,
+                    whitelisted=True,
+                )
+            )
+            db.session.add(
+                ProcessingJob(id=guid, post_guid=guid, status="pending", lane=lane)
+            )
+        db.session.commit()
+
+    local_started = threading.Event()
+    release_local = threading.Event()
+    cloud_ran = threading.Event()
 
     class _Probe:
-        def process(self, post, job_id, cancel_callback=None):
-            ran.set()
+        def __init__(self, lane: str) -> None:
+            self.lane = lane
 
-    def run_cloud_job() -> None:
-        with app.app_context():
-            manager._process_job(job_id, "g1", lane=LANE_CLOUD)
+        def process(self, post, job_id, cancel_callback=None, stage=None):
+            if self.lane == LANE_LOCAL:
+                local_started.set()
+                release_local.wait(5)
+            else:
+                cloud_ran.set()
+            _act(
+                "update_job_status",
+                job_id=job_id,
+                status="completed",
+                step=4,
+                step_name="done",
+            )
+            return "/out.mp3"
 
-    with (
-        JobsManager._global_processing_lock,  # a local job is running
-        mock.patch("app.jobs_manager._processor_for", return_value=(_Probe(), None)),
-    ):
-        worker = threading.Thread(target=run_cloud_job, daemon=True)
-        worker.start()
-        assert ran.wait(5), "cloud job blocked on the local processing lock"
-        worker.join(5)
+    workers = _workers(app, lambda stage, lane, j, g: (_Probe(lane), None))
+    workers.start()
+    try:
+        assert local_started.wait(5)
+        assert cloud_ran.wait(5), "cloud job waited for the local Whisper slot"
+    finally:
+        release_local.set()
+        workers.stop()
 
 
 # ------------------------------------------------------------------ API
