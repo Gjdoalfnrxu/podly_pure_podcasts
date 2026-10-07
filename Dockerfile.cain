@@ -19,6 +19,7 @@ COPY src/app/cloud_lane.py \
      src/app/config_store.py \
      src/app/feed_fetch.py \
      src/app/feeds.py \
+     src/app/job_manager.py \
      src/app/jobs_manager.py \
      src/app/lane_store.py \
      src/app/lanes.py \
@@ -35,6 +36,7 @@ COPY src/app/routes/__init__.py \
      src/app/routes/post_routes.py \
      /app/src/app/routes/
 COPY src/app/writer/actions/__init__.py \
+     src/app/writer/actions/cleanup.py \
      src/app/writer/actions/jobs.py \
      src/app/writer/actions/lanes.py \
      /app/src/app/writer/actions/
@@ -43,6 +45,8 @@ COPY src/migrations/versions/c1a0de1a9e5f_cloud_fast_lane.py /app/src/migrations
 COPY src/podcast_processor/ad_classifier.py \
      src/podcast_processor/boundary_refiner.py \
      src/podcast_processor/model_output.py \
+     src/podcast_processor/processing_status_manager.py \
+     src/podcast_processor/transcription_manager.py \
      src/podcast_processor/word_boundary_refiner.py \
      /app/src/podcast_processor/
 COPY src/shared/config.py \

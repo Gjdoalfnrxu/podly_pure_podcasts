@@ -58,6 +58,9 @@ def cleanup_missing_audio_paths_action(params: dict[str, Any]) -> int:
             )
             if latest_job and latest_job.status not in {"pending", "running"}:
                 latest_job.status = "pending"
+                # An automatic re-queue: never back into the paid lane.
+                latest_job.lane = None
+                latest_job.lane_reason = "automatic job"
                 latest_job.current_step = 0
                 latest_job.progress_percentage = 0.0
                 latest_job.step_name = "Not started"

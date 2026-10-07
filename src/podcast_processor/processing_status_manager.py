@@ -31,8 +31,13 @@ class ProcessingStatusManager:
         *,
         requested_by_user_id: int | None = None,
         billing_user_id: int | None = None,
+        lane: str | None = None,
+        lane_reason: str | None = None,
     ) -> ProcessingJob:
-        """Create a new pending job record for the provided post."""
+        """Create a new pending job record for the provided post.
+
+        The lane is part of the same insert, so a worker never sees the job
+        in the wrong queue."""
         job_data = {
             "id": job_id,
             "jobs_manager_run_id": run_id,
@@ -44,6 +49,8 @@ class ProcessingStatusManager:
             "created_at": datetime.now(UTC).replace(tzinfo=None).isoformat(),
             "requested_by_user_id": requested_by_user_id,
             "billing_user_id": billing_user_id,
+            "lane": lane,
+            "lane_reason": lane_reason,
         }
 
         writer_client.action("create_job", {"job_data": job_data}, wait=True)

@@ -1089,6 +1089,7 @@ def api_reprocess_post_keep_transcript(p_guid: str) -> ResponseReturnValue:
             requested_by_user_id=billing_user_id,
             billing_user_id=billing_user_id,
             manual=True,
+            needs_transcription=False,
         )
         status_code = 200 if result.get("status") in ("started", "completed") else 400
         if result.get("status") == "started":

@@ -11,26 +11,35 @@ uses your normal LLM settings in both lanes.
 The rules are in `src/app/lanes.py::decide_lane`. The first match wins:
 
 1. **Automatic jobs go local.** These are new episodes from feed refreshes, the
-   latest episode of a newly added feed, and processing that a podcast app
-   triggers by downloading.
-2. **Manual jobs go to the cloud lane** if all of these hold. Manual means the
-   Process, Reprocess and Reprocess (keep transcript) buttons, and whitelisting
-   an episode with "process now".
+   latest episode of a newly added feed, processing that a podcast app
+   triggers by downloading, and any re-queue done by housekeeping (for
+   example the refresh-time "audio file missing" reset).
+2. **Reprocess (keep transcript) goes local.** There is nothing to transcribe,
+   so there is nothing to pay for.
+3. **Manual jobs go to the cloud lane** if all of these hold. Manual means the
+   Process and Reprocess buttons, and whitelisting an episode with "process
+   now".
    - The lane is enabled. It is **off by default**.
    - An API key is set.
-   - The monthly cap is above $0.
+   - The monthly cap is above $0, and the price per hour is above $0 (a $0
+     price would make every estimate $0 and switch the cap off).
    - The episode is not longer than the optional "max episode length".
    - The episode's estimated cost fits in what is left of this month's cap. The
      estimate uses the feed's episode length. If the length is unknown, the job
      still goes to cloud and the check happens before upload (point 3).
    Otherwise the job goes local. The reason is stored on the job and shown on
-   the Jobs page.
-3. **Checked again before upload.** The cloud worker downloads the episode,
+   the Jobs page. The lane is written in the same insert that queues the job,
+   so a worker can never pick it up from the wrong queue; housekeeping
+   re-queues reset it to local. Only a manual request can put a job in the
+   cloud queue.
+4. **Checked again before upload.** The cloud worker downloads the episode,
    measures the real length, and reserves the estimated cost. The reservation is
    a single writer action, so two cloud jobs cannot both squeeze under the cap.
-   If the reservation is refused, or the API call fails or times out (10 min per
-   request), the job is **put back in the local queue**. It is never dropped.
-4. If a manual request comes in for an episode that is already queued locally,
+   If the reservation is refused or cannot be made, the cloud processor cannot
+   be set up, or the API call fails or times out (120 s per request, no
+   automatic retries), the job is **put back in the local queue**. It is never
+   dropped. A job cancelled during the upload is not re-queued.
+5. If a manual request comes in for an episode that is already queued locally,
    the job moves to the cloud lane. An automatic trigger never moves a cloud job
    back to local.
 
@@ -80,20 +89,29 @@ API: `GET /api/lanes/status` (any logged-in user), `GET`/`PUT
 Migration `c1a0de1a9e5f` adds `processing_job.lane` and `processing_job.lane_reason`
 and creates `cloud_lane_settings` and `cloud_lane_usage`. All changes are
 additive. Before going back to an image without this migration, run the
-downgrade inside the new image:
+downgrade inside the new image. The downgrade removes the two job columns and
+**keeps both tables**, so this month's recorded spend (and the settings)
+survive a downgrade followed by a later upgrade:
 
     docker exec -u appuser -w /app -e PYTHONPATH=/app/src \
       -e PODLY_RUN_STARTUP=false -e PODLY_DISABLE_SCHEDULER=true \
       podly /app/.venv/bin/flask --app "app:create_app" db downgrade 3e5eebc6b3b1
 
-(Smoke-tested: this removes the columns and tables and sets the revision back,
-and the previous image `podly-cain:2.5.0-opml-c294aa1` then starts healthy on
-that database. Without the downgrade, the previous image did not become healthy.)
+(Smoke-tested: this removes the columns, keeps the tables and sets the
+revision back, and the previous image `podly-cain:2.5.0-opml-c294aa1` then
+starts healthy on that database, extra tables and all. Without the downgrade,
+the previous image did not become healthy.)
 
 An older image's startup `upgrade()` stops with "Can't locate revision" if the
 database is still at `c1a0de1a9e5f`.
 
 ## Known limits (honest list)
+
+- **Transcripts are shared between lanes.** A transcript made by the cloud
+  model is reused by the local lane and the other way round, as long as it came
+  from the currently configured local model or the configured cloud model. A
+  transcript from a model that is no longer configured is still treated as
+  stale, as upstream does.
 
 - **Episode length often unknown.** Many feeds don't give Podly an episode
   length, so the routing-time estimate is skipped ("length unknown") and the cap
@@ -101,9 +119,11 @@ database is still at `c1a0de1a9e5f`.
   routed to cloud first and may then fall back.
 - **Brief "failed" on fallback.** When the cloud call fails, the job shows as
   failed for a moment before it is re-queued locally.
-- **Retries before fallback.** The OpenAI SDK retries a failing request twice by
-  default, so an outage costs about 3 attempts per chunk before the job moves
-  to local. Failed requests are assumed to be unbilled.
+- **What a failed request costs.** Each chunk is sent once (no SDK retries),
+  with a 120 s timeout. If the request times out or the connection drops, the
+  provider may still have processed it, so that chunk is **counted as billed**.
+  If the provider answers with an error status (4xx/5xx), the chunk is counted
+  as not billed.
 - **Restarts.** Podly clears pending and running jobs on startup and re-creates
   pending work as automatic (local) jobs, so a manual cloud request that was
   waiting during a restart ends up local. A cloud call cut off by a restart

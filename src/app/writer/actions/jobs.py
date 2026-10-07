@@ -5,7 +5,7 @@ from sqlalchemy import or_
 
 from app.extensions import db
 from app.jobs_manager_run_service import recalculate_run_counts
-from app.lanes import LANE_LOCAL
+from app.lanes import LANE_CLOUD, LANE_LOCAL
 from app.models import ProcessingJob
 
 
@@ -154,6 +154,11 @@ def update_job_status_action(params: dict[str, Any]) -> dict[str, Any]:
     if not job:
         raise ValueError(f"Job {job_id} not found")
 
+    if status == "pending" and job.status != "pending" and job.lane == LANE_CLOUD:
+        # Only create_job/set_job_lane put work in the paid lane; anything else
+        # re-queueing a job sends it to the free local lane.
+        job.lane = None
+        job.lane_reason = "automatic job"
     job.status = status
     job.current_step = step
     job.step_name = step_name

@@ -93,6 +93,13 @@ def _flag(value: Any) -> Any:
     return value
 
 
+def _positive_money(value: Any) -> Any:
+    value = _money(value)
+    if value <= 0:
+        raise ValueError("must be a number > 0")
+    return value
+
+
 def _money(value: Any) -> Any:
     if (
         isinstance(value, bool)
@@ -125,7 +132,7 @@ _VALIDATORS = {
     "api_key": _key,
     "model": _text,
     "language": _text,
-    "usd_per_hour": _money,
+    "usd_per_hour": _positive_money,
     "monthly_cap_usd": _money,
     "max_episode_minutes": _minutes,
 }

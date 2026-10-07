@@ -22,8 +22,14 @@ class JobManager:
         *,
         requested_by_user_id: int | None = None,
         billing_user_id: int | None = None,
+        lane: str | None = None,
+        lane_reason: str | None = None,
+        override_queued_lane: bool = False,
     ) -> None:
         self.post_guid = post_guid
+        self._lane = lane
+        self._lane_reason = lane_reason
+        self._override_queued_lane = override_queued_lane
         self._status_manager = status_manager
         self._logger = logger_obj
         self._run_id = run_id
@@ -66,6 +72,12 @@ class JobManager:
                 changed = True
             if changed:
                 self._status_manager.db_session.flush()
+            if self._lane and self._override_queued_lane and job.status == "pending":
+                writer_client.action(
+                    "set_job_lane",
+                    {"job_id": job.id, "lane": self._lane, "reason": self._lane_reason},
+                    wait=True,
+                )
             return job
         job_id = self._status_manager.generate_job_id()
         job = self._status_manager.create_job(
@@ -74,6 +86,8 @@ class JobManager:
             self._run_id,
             requested_by_user_id=self._requested_by_user_id,
             billing_user_id=self._billing_user_id,
+            lane=self._lane,
+            lane_reason=self._lane_reason,
         )
         self.job = job
         return job

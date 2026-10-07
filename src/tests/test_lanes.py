@@ -7,6 +7,7 @@ action functions and commits), so budget accounting is the production code.
 from __future__ import annotations
 
 import dataclasses
+import logging
 import threading
 from datetime import UTC, datetime
 from pathlib import Path
@@ -32,6 +33,7 @@ from app.lanes import (
 )
 from app.models import CloudLaneUsage, Feed, Post, ProcessingJob
 from app.writer.client import writer_client
+from podcast_processor.processing_status_manager import ProcessingStatusManager
 
 AUDIO = Path(__file__).parent / "data" / "count_0_99.mp3"  # 66.048 s
 AUDIO_SECONDS = 66.048
@@ -91,6 +93,8 @@ def _act(name: str, **params):
         (True, _settings(), 0.95, 3600, LANE_CLOUD, "est. $0.0400"),
         (True, _settings(), 0.0, None, LANE_CLOUD, "length unknown"),
         (True, _settings(max_episode_minutes=30), 0.0, 30 * 60, LANE_CLOUD, "manual"),
+        (True, _settings(usd_per_hour=0.0), 0.0, 600, LANE_LOCAL, "above $0"),
+        (True, _settings(usd_per_hour=-1.0), 0.0, 600, LANE_LOCAL, "above $0"),
     ],
 )
 def test_decide_lane(manual, settings, spent, seconds, lane, reason):
@@ -99,6 +103,18 @@ def test_decide_lane(manual, settings, spent, seconds, lane, reason):
     )
     assert decision.lane == lane
     assert reason in decision.reason
+
+
+def test_decide_lane_keep_transcript_is_local():
+    decision = decide_lane(
+        manual=True,
+        settings=_settings(),
+        spent_usd=0.0,
+        audio_seconds=600,
+        needs_transcription=False,
+    )
+    assert decision.lane == LANE_LOCAL
+    assert decision.reason == "reuses the existing transcript"
 
 
 def test_billing_applies_per_request_minimum():
@@ -324,10 +340,34 @@ def manager(app):
     jm = object.__new__(JobsManager)
     jm._work_event = mock.Mock()
     jm._cloud_work_event = mock.Mock()
+    jm._stop_event = threading.Event()
+    jm._run_lock = threading.Lock()
+    jm._run_id = None
+    jm._status_manager = ProcessingStatusManager(
+        db_session=db.session, logger=logging.getLogger("test")
+    )
     with mock.patch(
         "app.jobs_manager._scheduler_app_context", side_effect=app.app_context
     ):
         yield jm
+
+
+def _post(app, audio_path: str | None = None) -> Post:
+    feed = Feed(title="F", rss_url="https://ex.example.com/f")
+    db.session.add(feed)
+    db.session.commit()
+    post = Post(
+        feed_id=feed.id,
+        guid="g1",
+        download_url="https://ex.example.com/1.mp3",
+        title="Ep",
+        duration=1800,
+        whitelisted=True,
+        unprocessed_audio_path=audio_path,
+    )
+    db.session.add(post)
+    db.session.commit()
+    return post
 
 
 def _post_with_job(status: str = "pending", lane: str | None = None) -> str:
@@ -348,29 +388,60 @@ def _post_with_job(status: str = "pending", lane: str | None = None) -> str:
     return "j1"
 
 
-def test_assign_lane_routes_manual_to_cloud_and_never_downgrades(app, manager):
+def _queue(manager, *, manual: bool, needs_transcription: bool = True) -> str:
+    result = manager.start_post_processing(
+        "g1", manual=manual, needs_transcription=needs_transcription
+    )
+    assert result["status"] == "started", result
+    return str(result["job_id"])
+
+
+def test_manual_job_is_created_in_the_cloud_lane_atomically(app, manager):
     with app.app_context():
         _store_settings()
-        job_id = _post_with_job()
-
-        manager._assign_lane("g1", job_id, manual=False)
-        assert _job_row(job_id).lane == LANE_LOCAL
-
-        manager._assign_lane("g1", job_id, manual=True)
-        job = _job_row(job_id)
-        assert job.lane == LANE_CLOUD
-        assert "est. $0.0200" in (job.lane_reason or "")  # 30 min at $0.04/h
-
-        # A later automatic trigger for the same pending job keeps it in cloud.
-        manager._assign_lane("g1", job_id, manual=False)
+        _post(app)
+        with mock.patch(
+            "app.writer.client.writer_client.action", wraps=writer_client.action
+        ) as action:
+            job_id = _queue(manager, manual=True)
+        created = [
+            c.args[1] for c in action.call_args_list if c.args[0] == "create_job"
+        ]
+        # The lane is part of the insert that makes the job visible to workers.
+        assert created[0]["job_data"]["lane"] == LANE_CLOUD
+        assert "est. $0.0200" in created[0]["job_data"]["lane_reason"]
         assert _job_row(job_id).lane == LANE_CLOUD
 
 
-def test_assign_lane_keeps_manual_local_when_cloud_disabled(app, manager):
+def test_automatic_requeue_never_downgrades_a_queued_cloud_job(app, manager):
     with app.app_context():
-        job_id = _post_with_job()  # no settings row -> disabled
-        manager._assign_lane("g1", job_id, manual=True)
-        job = _job_row(job_id)
+        _store_settings()
+        job_id = _post_with_job(lane=LANE_CLOUD)
+        assert _queue(manager, manual=False) == job_id
+        assert _job_row(job_id).lane == LANE_CLOUD
+
+
+def test_manual_request_upgrades_a_queued_local_job(app, manager):
+    with app.app_context():
+        _store_settings()
+        job_id = _post_with_job(lane=None)
+        assert _queue(manager, manual=True) == job_id
+        assert _job_row(job_id).lane == LANE_CLOUD
+
+
+def test_keep_transcript_reprocess_never_uses_cloud(app, manager):
+    with app.app_context():
+        _store_settings()
+        _post(app)
+        job = _job_row(_queue(manager, manual=True, needs_transcription=False))
+        assert job.lane == LANE_LOCAL
+        assert job.lane_reason == "reuses the existing transcript"
+
+
+def test_manual_job_stays_local_when_cloud_disabled(app, manager):
+    with app.app_context():
+        _post(app)  # no settings row -> disabled
+        job = _job_row(_queue(manager, manual=True))
         assert job.lane == LANE_LOCAL
         assert job.lane_reason == "cloud lane disabled"
 
@@ -479,6 +550,7 @@ def test_settings_api_never_returns_the_key(app, lane_client):
     "payload",
     [
         {"usd_per_hour": -1},
+        {"usd_per_hour": 0},
         {"monthly_cap_usd": "5"},
         {"enabled": "yes"},
         {"max_episode_minutes": 0},

@@ -2,7 +2,8 @@
 
 Routing rule, in order (first match wins):
   1. Automatic jobs (feed refresh, new-feed latest episode, podcast-app download
-     triggers) always use the local lane.
+     triggers) always use the local lane, and so do keep-transcript
+     reprocesses (nothing to transcribe, nothing to pay for).
   2. Manual jobs (someone clicked process/reprocess) use the cloud lane only if
      the lane is enabled, has an API key, has a monthly cap above $0, the episode
      is within the optional length limit, and its estimated cost fits in what is
@@ -73,8 +74,9 @@ def cloud_unavailable_reason(settings: LaneSettings) -> str | None:
         return "cloud lane has no API key"
     if settings.monthly_cap_usd <= 0:
         return "cloud monthly cap is $0"
-    if settings.usd_per_hour < 0 or math.isnan(settings.usd_per_hour):
-        return "cloud price per hour is invalid"
+    # $0/h would make every estimate $0 and so silently disable the cap.
+    if math.isnan(settings.usd_per_hour) or settings.usd_per_hour <= 0:
+        return "cloud price per hour must be above $0"
     return None
 
 
@@ -91,9 +93,12 @@ def decide_lane(
     settings: LaneSettings,
     spent_usd: float,
     audio_seconds: float | None,
+    needs_transcription: bool = True,
 ) -> LaneDecision:
     if not manual:
         return LaneDecision(LANE_LOCAL, "automatic job")
+    if not needs_transcription:
+        return LaneDecision(LANE_LOCAL, "reuses the existing transcript")
     unavailable = cloud_unavailable_reason(settings)
     if unavailable:
         return LaneDecision(LANE_LOCAL, unavailable)

@@ -132,9 +132,7 @@ def test_check_existing_transcription_success(
 
     with app.app_context():
         # Configure the existing mocks in the manager
-        test_manager.model_call_query.filter_by().order_by().first.return_value = (
-            model_call
-        )
+        test_manager.model_call_query.filter_by().filter().order_by().first.return_value = model_call
         test_manager.segment_query.filter_by().order_by().all.return_value = segments
 
         result = test_manager._check_existing_transcription(post)
@@ -154,7 +152,7 @@ def test_check_existing_transcription_no_model_call(
 
     with app.app_context():
         # Set return value for the existing mock in the manager
-        test_manager.model_call_query.filter_by().order_by().first.return_value = None
+        test_manager.model_call_query.filter_by().filter().order_by().first.return_value = None
 
         result = test_manager._check_existing_transcription(post)
         assert result is None

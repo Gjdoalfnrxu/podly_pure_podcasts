@@ -79,11 +79,10 @@ def upgrade():
 
 
 def downgrade():
-    tables = _tables()
-    if "cloud_lane_usage" in tables:
-        op.drop_table("cloud_lane_usage")
-    if "cloud_lane_settings" in tables:
-        op.drop_table("cloud_lane_settings")
+    # cloud_lane_usage and cloud_lane_settings are deliberately kept: dropping
+    # the usage table would reset this month's spend if the image is upgraded
+    # again, and older images ignore tables they don't know. upgrade() only
+    # creates them when missing.
     existing = _columns("processing_job")
     with op.batch_alter_table("processing_job", schema=None) as batch_op:
         if "lane_reason" in existing:

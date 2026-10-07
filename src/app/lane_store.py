@@ -53,3 +53,13 @@ def month_spent_usd(now: datetime | None = None) -> float:
         .scalar()
     )
     return float(total or 0.0)
+
+
+def cloud_lane_model_names() -> set[str]:
+    """Model name(s) the cloud lane records on its transcription ModelCalls."""
+    try:
+        row = db.session.get(CloudLaneSettings, 1)
+    except Exception:  # noqa: BLE001 - table absent (e.g. before migration)
+        db.session.rollback()
+        return set()
+    return {row.model} if row is not None and row.model else set()

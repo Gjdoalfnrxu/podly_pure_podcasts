@@ -6,13 +6,13 @@ from typing import Any, cast
 
 from sqlalchemy import case
 
-from app.cloud_lane import build_cloud_processor, choose_lane
+from app.cloud_lane import CloudLaneFallback, build_cloud_processor, choose_lane
 from app.db_guard import db_guard, reset_session
 from app.extensions import db as _db
 from app.extensions import scheduler
 from app.feeds import refresh_feed
 from app.job_manager import JobManager as SingleJobManager
-from app.lanes import LANE_CLOUD, LANE_LOCAL
+from app.lanes import LANE_CLOUD, LANE_LOCAL, LaneDecision
 from app.models import Feed, JobsManagerRun, Post, ProcessingJob
 from app.processor import get_processor
 from app.writer.client import writer_client
@@ -111,12 +111,16 @@ class JobsManager:
         requested_by_user_id: int | None = None,
         billing_user_id: int | None = None,
         manual: bool = False,
+        needs_transcription: bool = True,
     ) -> dict[str, Any]:
         """
         Idempotently start processing for a post. If an active job exists, return it.
 
         ``manual`` marks a job someone explicitly asked for (process/reprocess
         click); only those may use the paid cloud lane (see app/lanes.py).
+        ``needs_transcription=False`` (keep-transcript reprocess) never uses it.
+        The lane is written in the same writer action that queues the job, so
+        no worker can pick it up from the wrong lane.
         """
         with _scheduler_app_context():
             ensure_result = writer_client.action(
@@ -131,6 +135,7 @@ class JobsManager:
             if ensure_result and ensure_result.success and ensure_result.data:
                 run_id = ensure_result.data.get("run_id")
             self._set_run_id(run_id)
+            decision = self._decide_lane(post_guid, manual, needs_transcription)
             start_result = SingleJobManager(
                 post_guid,
                 self._status_manager,
@@ -138,40 +143,38 @@ class JobsManager:
                 run_id,
                 requested_by_user_id=requested_by_user_id,
                 billing_user_id=billing_user_id,
+                lane=decision.lane,
+                lane_reason=decision.reason,
+                # Automatic re-queues never move an already queued job (so a
+                # manual cloud request is not downgraded); manual ones do.
+                override_queued_lane=manual,
             ).start_processing(priority)
-            if start_result.get("status") == "started" and start_result.get("job_id"):
-                self._assign_lane(post_guid, str(start_result["job_id"]), manual)
+            if start_result.get("status") == "started":
+                logger.info(
+                    "[LANE] job_id=%s post_guid=%s lane=%s reason=%s",
+                    start_result.get("job_id"),
+                    post_guid,
+                    decision.lane,
+                    decision.reason,
+                )
         if start_result.get("status") in {"started", "running"}:
             self._wake_worker()
         return start_result
 
-    def _assign_lane(self, post_guid: str, job_id: str, manual: bool) -> None:
-        """Route a just-queued job. Automatic re-queues never downgrade a job
-        that a manual request already put in the cloud lane."""
-        job = _db.session.get(ProcessingJob, job_id)
-        if not manual and job is not None and job.lane == LANE_CLOUD:
-            return
+    def _decide_lane(
+        self, post_guid: str, manual: bool, needs_transcription: bool
+    ) -> LaneDecision:
         post = Post.query.filter_by(guid=post_guid).first()
         duration = getattr(post, "duration", None) if post else None
         try:
-            decision = choose_lane(
+            return choose_lane(
                 manual=manual,
+                needs_transcription=needs_transcription,
                 audio_seconds=float(duration) if duration else None,
             )
-            writer_client.action(
-                "set_job_lane",
-                {"job_id": job_id, "lane": decision.lane, "reason": decision.reason},
-                wait=True,
-            )
-            logger.info(
-                "[LANE] job_id=%s post_guid=%s lane=%s reason=%s",
-                job_id,
-                post_guid,
-                decision.lane,
-                decision.reason,
-            )
         except Exception as exc:  # noqa: BLE001 - routing must never lose a job
-            logger.error("Lane assignment failed for job %s: %s", job_id, exc)
+            logger.error("Lane decision failed for %s: %s", post_guid, exc)
+            return LaneDecision(LANE_LOCAL, f"lane decision failed: {exc}"[:200])
 
     def enqueue_pending_jobs(
         self,
@@ -876,10 +879,25 @@ def _lane_lock(lane: str) -> Any:
     return contextlib.nullcontext()
 
 
+class _CloudSetupFailed:
+    """Stands in for a cloud processor that could not be built: the job fails
+    and, because ``fallback_reason`` is set, is re-queued on the local lane."""
+
+    def __init__(self, reason: str) -> None:
+        self.fallback_reason = reason
+
+    def process(self, post: Any, job_id: str, cancel_callback: Any = None) -> None:
+        raise CloudLaneFallback(self.fallback_reason)
+
+
 def _processor_for(lane: str, job_id: str, post_guid: str) -> tuple[Any, Any]:
     """Local: the shared processor. Cloud: a fresh one with the cloud transcriber."""
     if lane == LANE_CLOUD:
-        return build_cloud_processor(job_id, post_guid)
+        try:
+            return build_cloud_processor(job_id, post_guid)
+        except Exception as exc:  # noqa: BLE001 - never lose the job
+            failed = _CloudSetupFailed(f"cloud setup failed: {exc}"[:300])
+            return failed, failed
     return get_processor(), None
 
 

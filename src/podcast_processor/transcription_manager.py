@@ -2,6 +2,7 @@ import logging
 from typing import Any
 
 from app.extensions import db
+from app.lane_store import cloud_lane_model_names
 from app.models import ModelCall, Post, TranscriptSegment
 from app.writer.client import writer_client
 from shared.config import (
@@ -35,6 +36,7 @@ class TranscriptionManager:
     ):
         self.logger = logger
         self.config = config
+        self._transcriber_injected = transcriber is not None
         self.transcriber = transcriber or self._create_transcriber()
         self._model_call_query_provided = model_call_query is not None
         self.model_call_query = model_call_query or ModelCall.query
@@ -78,12 +80,13 @@ class TranscriptionManager:
             else self.db_session.query(TranscriptSegment)
         )
 
+        # A transcript from either lane is reusable: the configured (local)
+        # transcriber's model and the cloud fast lane's model. A transcript
+        # from a model that is no longer configured is still treated as stale,
+        # as before.
         existing_whisper_call = (
-            model_call_query.filter_by(
-                post_id=post.id,
-                model_name=self.transcriber.model_name,
-                status="success",
-            )
+            model_call_query.filter_by(post_id=post.id, status="success")
+            .filter(ModelCall.model_name.in_(sorted(self.reusable_model_names())))
             .order_by(ModelCall.timestamp.desc())
             .first()
         )
@@ -115,15 +118,27 @@ class TranscriptionManager:
                 )
         else:
             self.logger.info(
-                f"No existing successful Whisper ModelCall found for post {post.id} with model {self.transcriber.model_name}. Proceeding to transcribe."
+                f"No existing successful Whisper ModelCall found for post {post.id}. Proceeding to transcribe."
             )
         return None
+
+    def reusable_model_names(self) -> set[str]:
+        names = {self.transcriber.model_name}
+        if self._transcriber_injected:
+            # e.g. the cloud lane's manager: also accept the configured one.
+            try:
+                names.add(self._create_transcriber().model_name)
+            except Exception as exc:  # noqa: BLE001
+                self.logger.warning("Could not resolve configured transcriber: %s", exc)
+        names |= cloud_lane_model_names()
+        return names
 
     def get_reusable_transcription(self, post: Post) -> list[TranscriptSegment] | None:
         """Return existing transcript segments only when they are reusable as-is.
 
-        Reuse requires a successful Whisper model call for the active transcriber
-        model and a matching set of persisted transcript segments.
+        Reuse requires a successful Whisper model call from the configured
+        transcriber or the cloud fast lane, and a matching set of persisted
+        transcript segments.
         """
         return self._check_existing_transcription(post)
 
