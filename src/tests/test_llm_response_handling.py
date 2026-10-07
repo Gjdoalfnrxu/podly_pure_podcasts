@@ -277,3 +277,49 @@ def test_stored_corrupt_success_from_before_the_fix_is_reasked(
         assert _chunk(classifier, call, _segments()) == []
         assert len(stub.requests) == 1
         assert classifier.unclassified_ranges == []
+
+
+# ------------------------------------------------------------- review follow-ups
+
+
+def test_unparseable_attempt_bound_is_three():
+    assert UNPARSEABLE_RESPONSE_ATTEMPTS == 3
+
+
+def test_empty_answer_is_not_retried_even_if_counts_look_like_status_codes(
+    app, test_config, stub_llm
+):
+    """4290 chars of reasoning puts "429" in the message; that must not make
+    the retry loop treat it as a rate limit (5 x ~100 s on the live box)."""
+    stub = stub_llm([_answer(None, finish="length", reasoning="x" * 4290)])
+    test_config.llm_max_retry_attempts = 5
+    with app.app_context():
+        call = _model_call(app)
+        classifier = AdClassifier(config=test_config)
+        assert _chunk(classifier, call, _segments()) == []
+
+        # One request for the whole chunk: no in-call retries, no re-asks.
+        assert len(stub.requests) == 1
+        assert classifier.unclassified_ranges == [(0, 1)]
+        db.session.expire_all()
+        stored = db.session.get(ModelCall, call.id)
+        assert stored is not None
+        assert stored.status == "failed"
+        assert "reasoning_content=4290 chars" in (stored.error_message or "")
+
+
+def test_plain_value_error_while_parsing_is_reasked(app, test_config, stub_llm):
+    stub = stub_llm([_answer('{"ad_segments": []}')])
+    real_parse = clean_and_parse_model_output
+    with (
+        app.app_context(),
+        mock.patch(
+            "podcast_processor.ad_classifier.clean_and_parse_model_output",
+            side_effect=[ValueError("bad payload"), real_parse('{"ad_segments": []}')],
+        ),
+    ):
+        call = _model_call(app)
+        classifier = AdClassifier(config=test_config)
+        assert _chunk(classifier, call, _segments()) == []
+        assert len(stub.requests) == 2
+        assert classifier.unclassified_ranges == []
