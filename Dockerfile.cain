@@ -13,7 +13,9 @@ COPY frontend/ ./
 RUN npm run build && test -f dist/index.html
 
 FROM ${PODLY_BASE}
-COPY src/app/opml.py /app/src/app/opml.py
+# Must list every src/ file this branch changes:
+#   git diff --name-only cain/2.5.0 -- src ':!src/tests'
+COPY src/app/feeds.py src/app/opml.py /app/src/app/
 COPY src/app/routes/__init__.py \
      src/app/routes/feed_routes.py \
      src/app/routes/feed_subscribe.py \
