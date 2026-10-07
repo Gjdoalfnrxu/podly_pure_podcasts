@@ -41,6 +41,7 @@ from shared.config import (
 from shared.test_utils import create_standard_test_config
 
 FRAME = 0.05  # stub model resolution, seconds
+_WORDS = ["", "alpha", "kettle", "quorum", "zebra", "lantern", "orchid", "pumice"]
 TOL = 0.15
 
 
@@ -81,7 +82,9 @@ class StubWhisperModel:
                     {
                         "start": run_start * FRAME,
                         "end": idx * FRAME,
-                        "text": f" speech {len(self.calls)}.{len(segments)}",
+                        # "~" marks recovered text; distinct words per call so
+                        # the neighbour-repeat check never sees two as copies
+                        "text": f" ~ {_WORDS[len(self.calls)]} {_WORDS[-1 - len(segments)]}",
                     }
                 )
                 run_start = None
@@ -180,6 +183,23 @@ def test_merge_drops_duplicate_from_overlapping_chunks() -> None:
     assert len(merged) == 1
 
 
+def test_merge_drops_repeat_of_neighbour_edge_words() -> None:
+    """Real case (post 1025): whisper ends a segment early, the padded clip
+    re-reads its tail. Repeats are dropped; new words in the same gap are kept."""
+    existing = [
+        _seg(4809.6, 4815.6, " just to read a shitty review of my work."),
+        _seg(4818.7, 4824.8, " And then when I'm finished reading it"),
+        _seg(4906.1, 4910.4, " rob a dog. Dog bless."),
+    ]
+    recovered = [
+        _seg(4815.6, 4818.7, " review of my work."),
+        _seg(4910.4, 4911.4, " God bless."),
+        _seg(4911.4, 4915.0, " This episode is brought to you by Xero."),
+    ]
+    _, added = merge_recovered(existing, recovered)
+    assert [s.text for s in added] == [" This episode is brought to you by Xero."]
+
+
 # --- end to end through real audio ----------------------------------------
 
 
@@ -199,7 +219,7 @@ def test_fill_recovers_start_interior_and_end_speech(episode: str) -> None:
 
     merged = _filler(loader).fill(1025, episode, primary)
 
-    recovered = [s for s in merged if s.text.startswith(" speech")]
+    recovered = [s for s in merged if s.text.startswith(" ~")]
     spans = [(s.start, s.end) for s in recovered]
     assert len(spans) == 3, spans
     for (start, end), (want_start, want_end) in zip(
@@ -207,7 +227,7 @@ def test_fill_recovers_start_interior_and_end_speech(episode: str) -> None:
     ):
         assert start == pytest.approx(want_start, abs=TOL)
         assert end == pytest.approx(want_end, abs=TOL)
-    assert [s.text for s in merged if not s.text.startswith(" speech")] == ["a", "b"]
+    assert [s.text for s in merged if not s.text.startswith(" ~")] == ["a", "b"]
     assert [s.start for s in merged] == sorted(s.start for s in merged)
     # one model load for the whole pass, fresh-context decoding per window
     assert loader.names == ["base.en"]
@@ -257,7 +277,7 @@ def test_fill_long_gap_is_chunked_without_duplicates(tmp_path: Path) -> None:
 
     assert len(loader.model.calls) == 3
     assert max(c["seconds"] for c in loader.model.calls) <= 60.0 + 0.01
-    recovered = [s for s in merged if s.text.startswith(" speech")]
+    recovered = [s for s in merged if s.text.startswith(" ~")]
     assert recovered[0].start == pytest.approx(30.0, abs=TOL)
     assert recovered[-1].end == pytest.approx(130.0, abs=TOL)
     covered = sum(s.end - s.start for s in recovered)
