@@ -261,8 +261,9 @@ def test_fill_music_gap_yields_nothing_and_logs(
 
     assert merged == primary
     assert len(loader.model.calls) == 1
-    assert "Post 42: gap-fill window 9.0-21.0 (gap 10.0-20.0) yielded no speech" in (
-        caplog.text
+    assert (
+        "Post 42: gap-fill window 9.0-21.0 (gap 10.0-20.0) yielded no new speech"
+        in (caplog.text)
     )
     assert "found 1 gaps totalling 10.0s" in caplog.text
     assert "added 0 segments" in caplog.text

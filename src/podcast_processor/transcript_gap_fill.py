@@ -328,7 +328,7 @@ class WhisperGapFiller:
                 if not new:
                     self.logger.info(
                         "Post %s: gap-fill window %.1f-%.1f (gap %.1f-%.1f) "
-                        "yielded no speech; leaving it untranscribed",
+                        "yielded no new speech; leaving it untranscribed",
                         post_id,
                         window.start,
                         window.end,
