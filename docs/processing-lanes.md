@@ -82,7 +82,31 @@ and creates `cloud_lane_settings` and `cloud_lane_usage`. All changes are
 additive. Before going back to an image without this migration, run the
 downgrade inside the new image:
 
-    flask --app main db downgrade 3e5eebc6b3b1
+    docker exec -u appuser -w /app -e PYTHONPATH=/app/src \
+      -e PODLY_RUN_STARTUP=false -e PODLY_DISABLE_SCHEDULER=true \
+      podly /app/.venv/bin/flask --app "app:create_app" db downgrade 3e5eebc6b3b1
+
+(Smoke-tested: this removes the columns and tables and sets the revision back,
+and the previous image `podly-cain:2.5.0-opml-c294aa1` then starts healthy on
+that database. Without the downgrade, the previous image did not become healthy.)
 
 An older image's startup `upgrade()` stops with "Can't locate revision" if the
 database is still at `c1a0de1a9e5f`.
+
+## Known limits (honest list)
+
+- **Episode length often unknown.** Many feeds don't give Podly an episode
+  length, so the routing-time estimate is skipped ("length unknown") and the cap
+  is only enforced at upload. Those jobs still respect the cap; they are just
+  routed to cloud first and may then fall back.
+- **Brief "failed" on fallback.** When the cloud call fails, the job shows as
+  failed for a moment before it is re-queued locally.
+- **Retries before fallback.** The OpenAI SDK retries a failing request twice by
+  default, so an outage costs about 3 attempts per chunk before the job moves
+  to local. Failed requests are assumed to be unbilled.
+- **Restarts.** Podly clears pending and running jobs on startup and re-creates
+  pending work as automatic (local) jobs, so a manual cloud request that was
+  waiting during a restart ends up local. A cloud call cut off by a restart
+  stays `reserved` and keeps counting its estimate.
+- **Spend is an estimate.** It comes from audio length times your price per
+  hour. It is not read from the provider's invoice.
