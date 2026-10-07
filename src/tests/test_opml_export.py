@@ -3,6 +3,7 @@ from __future__ import annotations
 from collections.abc import Generator
 from unittest import mock
 from urllib.parse import parse_qs, urlparse
+from xml.etree import ElementTree as ET
 
 import pytest
 from flask import Flask
@@ -20,6 +21,8 @@ from app.writer.actions.feeds import create_feed_access_token_action
 
 EXPORT = "/api/feeds/export-opml"
 NASTY_TITLE = 'Tom & Jerry <Live> "Uncut"'
+# feedparser stores titles verbatim, including XML-illegal control characters.
+CONTROL_TITLE = "Bad\x0bTab\x00Show\x1f\ufffe"
 
 
 def _real_token_writer(name: str, params: dict, wait: bool = True):
@@ -69,6 +72,7 @@ def auth_app() -> Generator[Flask, None, None]:
             ),
             "shared": Feed(title="Shared Show", rss_url="https://src.example.com/s"),
             "bobs": Feed(title="Bob Only", rss_url="https://src.example.com/b"),
+            "control": Feed(title=CONTROL_TITLE, rss_url="https://src.example.com/c"),
         }
         db.session.add_all(feeds.values())
         db.session.commit()
@@ -77,6 +81,7 @@ def auth_app() -> Generator[Flask, None, None]:
             ("admin", "shared"),
             ("bob", "shared"),
             ("bob", "bobs"),
+            ("bob", "control"),
         ):
             db.session.add(UserFeed(user_id=users[user].id, feed_id=feeds[feed].id))
         db.session.commit()
@@ -133,9 +138,21 @@ def test_export_urls_match_copy_protected_feed_and_round_trip(auth_app, writer):
     assert exported == copied
 
 
+def test_export_strips_xml_illegal_characters(auth_app, writer):
+    resp = _login(auth_app, "bob").get(EXPORT)
+    assert resp.status_code == 200
+    assert resp.headers["Cache-Control"] == "no-store"
+    # The whole document must stay well-formed, for our parser and stdlib's.
+    titles = {f.title for f in parse_opml(resp.data)}
+    assert "BadTabShow" in titles
+    ET.fromstring(resp.data)
+
+
 def test_export_escapes_titles_and_urls(auth_app, writer):
     client = _login(auth_app, "admin")
-    raw = client.get(EXPORT).data
+    resp = client.get(EXPORT)
+    assert resp.headers["Cache-Control"] == "no-store"
+    raw = resp.data
 
     assert b"Tom &amp; Jerry &lt;Live&gt; &quot;Uncut&quot;" in raw
     assert b"<Live>" not in raw
@@ -160,6 +177,7 @@ def test_export_lists_only_own_subscriptions_with_own_tokens(auth_app, writer):
     assert feed_ids(bob_urls) == {
         _feed_id(auth_app, "Shared Show"),
         _feed_id(auth_app, "Bob Only"),
+        _feed_id(auth_app, CONTROL_TITLE),
     }
 
     with auth_app.app_context():
