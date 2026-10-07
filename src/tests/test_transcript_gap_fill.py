@@ -60,11 +60,19 @@ def _write_wav(path: Path, duration: float, speech: list[tuple[float, float]]) -
 
 
 class StubWhisperModel:
-    """Returns one segment per non-silent run, timed relative to the clip."""
+    """Returns one segment per non-silent run, timed relative to the clip.
 
-    def __init__(self, text: str = " ~ recovered ad speech") -> None:
+    Runs are numbered so distinct audio reads as distinct text, as it does in
+    whisper; the same text 3+ times in one decode is a decoder loop.
+    """
+
+    def __init__(
+        self, text: str = " ~ recovered ad speech", numbered: bool = True
+    ) -> None:
         self.calls: list[dict[str, Any]] = []
         self.text = text
+        self.numbered = numbered
+        self.runs = 0
 
     def transcribe(self, audio: np.ndarray, **kwargs: Any) -> dict[str, Any]:
         self.calls.append({"seconds": len(audio) / SAMPLE_RATE, **kwargs})
@@ -78,11 +86,13 @@ class StubWhisperModel:
             if flag and run_start is None:
                 run_start = idx
             elif not flag and run_start is not None:
+                self.runs += 1
+                text = f"{self.text} {self.runs}" if self.numbered else self.text
                 segments.append(
                     {
                         "start": run_start * FRAME,
                         "end": idx * FRAME,
-                        "text": self.text,  # "~" marks recovered text
+                        "text": text,  # "~" marks recovered text
                     }
                 )
                 run_start = None
@@ -284,6 +294,23 @@ def test_merge_repeat_check_is_limited_to_the_gap_edges() -> None:
     ]
 
 
+def test_merge_repeat_check_after_edge_is_limited_too() -> None:
+    """Mirror of the before-edge limit: a line far before the next primary
+    segment that repeats its opening words is ad copy, and is kept."""
+    primary = [_seg(0.0, 5.0, " Welcome back."), _seg(40.0, 45.0, " Search Xero")]
+    recovered = [
+        _seg(20.0, 22.0, " Search Xero"),  # 18s before the neighbour: ad
+        _seg(37.0, 39.5, " Search Xero"),  # 0.5s before it: re-read
+    ]
+
+    _, added, dropped = merge_recovered(primary, recovered, repeat_edge_seconds=2.5)
+
+    assert [(s.start, s.text) for s in added] == [(20.0, " Search Xero")]
+    assert [(d.segment.start, d.reason) for d in dropped] == [
+        (37.0, "repeats neighbour")
+    ]
+
+
 # --- end to end through real audio ----------------------------------------
 
 
@@ -446,34 +473,200 @@ def test_retry_walks_past_dropped_fragment(tmp_path: Path) -> None:
 
     merged = _filler(loader).fill(1025, path, primary)
 
-    assert [(round(s.start, 1), round(s.end, 1), s.text) for s in merged] == [
-        (0.0, 9.5, "show"),
-        (12.0, 38.0, " ~ recovered ad speech"),
-        (40.0, 50.0, "show again"),
+    assert [(round(s.start, 1), round(s.end, 1), s.text[:3]) for s in merged] == [
+        (0.0, 9.5, "sho"),
+        (12.0, 38.0, " ~ "),
+        (40.0, 50.0, "sho"),
     ]
     assert len(loader.model.calls) == 3
 
 
-def test_low_confidence_and_looping_segments_are_dropped(episode: str) -> None:
+def _decode(
+    lines: list[tuple[float, float, str]], **stats: float
+) -> list[dict[str, Any]]:
+    return [{"start": a, "end": b, "text": t, **stats} for a, b, t in lines]
+
+
+# Post 1025 decoder loop (base.en, real text and timings relative to the clip).
+LOOP_1025 = [
+    (30.0, 35.38, " I'm going to go ahead and get the"),
+    (35.38, 36.38, " phone."),
+    (36.38, 40.52, " I'm going to go ahead and get the"),
+    (40.52, 41.52, " phone."),
+    (41.52, 44.42, " I'm going to go ahead and get the"),
+    (44.42, 45.42, " phone."),
+]
+
+
+def test_low_confidence_and_looping_segments_are_dropped(tmp_path: Path) -> None:
+    """Loops are caught on their own text, even from an otherwise confident
+    decode: the same line 3+ times, or one line that compresses like a loop."""
+
     class ShakyModel:
+        calls = 0
+
         def transcribe(self, audio: Any, **kwargs: Any) -> dict[str, Any]:
+            self.calls += 1
+            if self.calls > 1:  # retries hear nothing
+                return {"segments": []}
             return {
                 "segments": [
                     {"start": 0.5, "end": 1.0, "text": " So", "avg_logprob": -1.9},
                     {
                         "start": 1.0,
-                        "end": 1.5,
-                        "text": " the the the the",
+                        "end": 5.0,
+                        "text": " the" * 40,
                         "avg_logprob": -0.2,
-                        "compression_ratio": 3.1,
+                        "compression_ratio": 1.0,
                     },
-                    {"start": 1.5, "end": 2.5, "text": " Hi", "avg_logprob": -0.4},
+                    {"start": 5.0, "end": 6.0, "text": " Hi", "avg_logprob": -0.4},
+                    *_decode(
+                        LOOP_1025,
+                        avg_logprob=-0.3,
+                        no_speech_prob=0.1,
+                        compression_ratio=5.47,
+                    ),
                 ]
             }
 
-    primary = [_seg(4.0, 30.0)]
-    merged = _filler(StubLoader(ShakyModel())).fill(1, episode, primary)
+    path = _write_wav(tmp_path / "loop.wav", 60.0, [])
+    primary = [_seg(50.0, 60.0)]
+    merged = _filler(StubLoader(ShakyModel())).fill(1, path, primary)
     assert [s.text for s in merged] == [" Hi", "primary"]
+
+
+# Real post 1025 decode of the opening Xero read (base.en, window 0-31s): one
+# clean decode whose per-decode compression ratio is 2.83 only because the ad
+# repeats its own copy.
+XERO_DECODE = [
+    (0.0, 1.6, " This is your business."),
+    (
+        1.6,
+        5.6,
+        " This is your business superchants with the help of zero accounting software!",
+    ),
+    (5.6, 7.8, " This is managing cash flow."),
+    (
+        7.8,
+        11.6,
+        " This is managing your cash flow with the help of zero accounting software!",
+    ),
+    (11.6, 13.6, " These are your customers paying you..."),
+    (
+        13.6,
+        18.4,
+        " These are your customers having more ways to pay you with the"
+        " help of zero accounting software!",
+    ),
+    (
+        18.4,
+        21.6,
+        " This is your business superchants with the help of zero helping"
+        " you solve your cash flow",
+    ),
+    (
+        21.6,
+        25.8,
+        " by giving your customers more ways to pay so now you can focus"
+        " on making your business move!",
+    ),
+    (25.8, 28.4, " Superchants, your business today with the help of zero."),
+]
+XERO_STATS = {"avg_logprob": -0.25, "no_speech_prob": 0.11, "compression_ratio": 2.83}
+
+
+def test_real_xero_read_is_kept_despite_decode_compression_ratio(
+    tmp_path: Path,
+) -> None:
+    """Whisper uses compression_ratio > 2.4 to trigger a re-decode, not to
+    discard. The real Xero read decodes cleanly at 2.83; every line is kept."""
+
+    class XeroModel:
+        def transcribe(self, audio: Any, **kwargs: Any) -> dict[str, Any]:
+            return {"segments": _decode(XERO_DECODE, **XERO_STATS)}
+
+    path = _write_wav(tmp_path / "xero.wav", 60.0, [])
+    primary = [_seg(29.9, 60.0, " Don't start with an X!")]
+
+    merged = _filler(StubLoader(XeroModel())).fill(1025, path, primary)
+
+    assert [s.text for s in merged] == [
+        *(t for _, _, t in XERO_DECODE),
+        " Don't start with an X!",
+    ]
+
+
+def test_rejection_reason_keeps_xero_and_drops_loop() -> None:
+    for _, _, text in XERO_DECODE:
+        assert gap_fill.rejection_reason({"text": text, **XERO_STATS}) is None
+    # the real read repeats a line twice in one decode; that is not a loop
+    assert gap_fill.rejection_reason({"text": XERO_DECODE[0][2], **XERO_STATS}, 2) is (
+        None
+    )
+    loop = {"text": LOOP_1025[0][2], "avg_logprob": -0.3, "no_speech_prob": 0.1}
+    assert gap_fill.rejection_reason(loop, 3) == "repetitive"
+
+
+def test_rejected_decode_leaves_its_stretch_open_for_retry(tmp_path: Path) -> None:
+    """A whole decode rejected as junk is not speech heard: the unpadded retry
+    must still run over that stretch (old: it counted as covered, no retry)."""
+
+    class FailThenHearModel(StubWhisperModel):
+        def transcribe(self, audio: np.ndarray, **kwargs: Any) -> dict[str, Any]:
+            result = super().transcribe(audio, **kwargs)
+            if len(self.calls) == 1:
+                for seg in result["segments"]:
+                    seg.update(avg_logprob=-1.3)  # low confidence
+            return result
+
+    path = _write_wav(tmp_path / "retry.wav", 50.0, [(0.0, 10.0), (12.0, 38.0)])
+    primary = [_seg(0.0, 10.0, "show"), _seg(40.0, 50.0, "show again")]
+    loader = StubLoader(FailThenHearModel())
+
+    merged = _filler(loader).fill(1, path, primary)
+
+    recovered = [(round(s.start, 1), round(s.end, 1)) for s in merged if "~" in s.text]
+    assert recovered == [(12.0, 38.0)]
+    assert len(loader.model.calls) == 2
+
+
+def test_fragment_points_past_the_clip_do_not_split_retry_gaps(
+    tmp_path: Path,
+) -> None:
+    """A fragment whisper times past the end of its clip is clamped to a
+    zero-length point. Such points must not count as heard: a train of them
+    would cut a later retry gap into pieces too short to retry."""
+
+    class PhantomModel(StubWhisperModel):
+        def transcribe(self, audio: np.ndarray, **kwargs: Any) -> dict[str, Any]:
+            result = super().transcribe(audio, **kwargs)
+            seconds = len(audio) / SAMPLE_RATE
+            if len(self.calls) == 1:  # window 9-15: points at 17, 19.5, ... 37
+                return {
+                    "segments": [
+                        {
+                            "start": seconds + 2.0 + 2.5 * i,
+                            "end": seconds + 3.0 + 2.5 * i,
+                            "text": " Yes.",
+                            "avg_logprob": -0.95,
+                        }
+                        for i in range(9)
+                    ]
+                }
+            if len(self.calls) == 2:  # padded window 14-41: whisper jumps
+                return {"segments": []}
+            return result
+
+    path = _write_wav(
+        tmp_path / "ph.wav", 60.0, [(0, 10), (14, 15), (18, 36), (40, 60)]
+    )
+    primary = [_seg(0.0, 10.0, "a"), _seg(14.0, 15.0, "b"), _seg(40.0, 60.0, "c")]
+    loader = StubLoader(PhantomModel())
+
+    merged = _filler(loader).fill(1, path, primary)
+
+    recovered = [(round(s.start, 1), round(s.end, 1)) for s in merged if "~" in s.text]
+    assert recovered == [(18.0, 36.0)]
 
 
 def test_fill_keeps_repeated_ad_lines(tmp_path: Path) -> None:
@@ -504,7 +697,7 @@ def test_fill_keeps_ad_line_that_repeats_primary_neighbour(tmp_path: Path) -> No
     tagline = " Search Xero with an X."
     path = _write_wav(tmp_path / "tag.wav", 50.0, [(0, 10), (25, 28), (40, 50)])
     primary = [_seg(0.0, 10.0, tagline), _seg(40.0, 50.0, " Welcome back.")]
-    loader = StubLoader(StubWhisperModel(text=tagline))
+    loader = StubLoader(StubWhisperModel(text=tagline, numbered=False))
 
     merged = _filler(loader).fill(1, path, primary)
 
@@ -640,14 +833,16 @@ def test_hallucinated_symbols_are_dropped(episode: str) -> None:
 def test_settings_follow_effective_config() -> None:
     cfg = create_standard_test_config()
     cfg.whisper = LocalWhisperConfig(model="small.en")
-    assert gap_fill_settings_from_config(cfg).model_name == "small.en"  # type: ignore[union-attr]
+    s = gap_fill_settings_from_config(cfg)
+    assert s is not None and s.model_name == "small.en"
 
     cfg.whisper = GroqWhisperConfig(api_key="x")
     s = gap_fill_settings_from_config(cfg)
     assert s is not None and s.model_name == "base.en" and s.language == "en"
 
     cfg.whisper_gap_fill_model = "tiny.en"
-    assert gap_fill_settings_from_config(cfg).model_name == "tiny.en"  # type: ignore[union-attr]
+    s = gap_fill_settings_from_config(cfg)
+    assert s is not None and s.model_name == "tiny.en"
 
     cfg.whisper_gap_fill_enabled = False
     assert gap_fill_settings_from_config(cfg) is None

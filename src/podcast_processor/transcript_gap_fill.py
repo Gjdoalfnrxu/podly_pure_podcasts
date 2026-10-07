@@ -14,8 +14,9 @@ transcriber was the same local model. Recovered segments are offset back to
 episode time, filtered for decoder junk (short low-confidence fragments
 would otherwise shrink an untranscribed stretch below the ad-cut backstop in
 ``untranscribed_gaps``), trimmed so they never overlap what is already
-transcribed, and merged in time order. Every dropped segment is logged. Whatever is still uncovered is retried unpadded from
-where recovered speech stops, because a clip opening mid-sentence can make
+transcribed, and merged in time order. Every dropped segment is logged.
+Whatever is still uncovered is retried unpadded from where recovered speech
+(or a dropped fragment of it) stops, because a clip opening mid-sentence can make
 whisper skip the rest of its 30s window the same way the primary pass did.
 """
 
@@ -27,6 +28,7 @@ import logging
 import math
 import re
 import time
+import zlib
 from collections import Counter
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
@@ -55,10 +57,16 @@ _DUPLICATE_RATIO = 0.75
 # (beyond the padding) are checked as re-reads of it; further in, a repeat of
 # the neighbour's words is the ad repeating its own copy.
 _REPEAT_SLACK_SECONDS = 1.5
-# Whisper's own failed-decode thresholds (logprob_threshold,
-# compression_ratio_threshold), applied per segment since there is no fallback.
+# Whisper's default logprob_threshold. In whisper it triggers a re-decode at a
+# higher temperature; with no fallback here a decode below it is discarded.
 _MIN_AVG_LOGPROB = -1.0
-_MAX_COMPRESSION_RATIO = 2.4
+# Decoder loops. whisper's compression_ratio is per 30s decode and so is high
+# for clean ad copy that repeats its own lines (a real Xero read decoded at
+# 2.83, lp -0.25), so it is not used. A loop is the same text 3+ times in one
+# decode ("I'm going to go ahead and get the" / "phone." x6 on post 1025), or
+# one segment whose own text compresses like a loop.
+_LOOP_REPEATS = 3
+_MAX_COMPRESSION_RATIO = 2.4  # whisper's compression_ratio_threshold
 # Junk filters, tuned on real base.en output for post 1025 (stats are per 30s
 # decode, shared by every segment in it). Every 1-2 word fragment there was a
 # mis-heard tail of a primary segment ("Yes." lp -0.95, "Good." -0.67, "F***"
@@ -69,6 +77,10 @@ _NO_SPEECH_PROB = 0.6  # whisper's no_speech_threshold
 _CONFIDENT_LOGPROB = -0.6
 _FRAGMENT_MAX_WORDS = 2
 _RETRY_PASSES = 2
+# Drops judged on the segment itself, not on a failed decode: whisper did hear
+# speech there (typically the tail of a sentence the clip opened on), so the
+# retry starts after it. A rejected decode leaves its stretch open for retry.
+_FRAGMENT_REASONS = frozenset({"weak fragment", "repeats neighbour"})
 
 
 @runtime_checkable
@@ -304,8 +316,17 @@ def merge_recovered(
     return MergeResult(merged, added, dropped)
 
 
-def rejection_reason(raw: Mapping[str, Any]) -> str | None:
-    """Why a raw whisper segment from a gap window is junk, or None if not."""
+def _text_compression_ratio(text: str) -> float:
+    """whisper's compression ratio, computed on one segment's own text."""
+    data = text.encode("utf-8")
+    return len(data) / len(zlib.compress(data))
+
+
+def rejection_reason(raw: Mapping[str, Any], times_in_decode: int = 1) -> str | None:
+    """Why a raw whisper segment from a gap window is junk, or None if not.
+
+    ``times_in_decode`` is how often the segment's text occurs in its decode.
+    """
     text = str(raw.get("text", ""))
     if not _HAS_WORD.search(text):
         return "no words"
@@ -313,7 +334,10 @@ def rejection_reason(raw: Mapping[str, Any]) -> str | None:
     no_speech = float(raw.get("no_speech_prob", 0.0))
     if logprob < _MIN_AVG_LOGPROB:
         return "low confidence"
-    if float(raw.get("compression_ratio", 0.0)) > _MAX_COMPRESSION_RATIO:
+    if (
+        times_in_decode >= _LOOP_REPEATS
+        or _text_compression_ratio(text) > _MAX_COMPRESSION_RATIO
+    ):
         return "repetitive"
     if no_speech > _NO_SPEECH_PROB and logprob < _CONFIDENT_LOGPROB:
         return "likely no speech"
@@ -322,6 +346,45 @@ def rejection_reason(raw: Mapping[str, Any]) -> str | None:
     ):
         return "weak fragment"
     return None
+
+
+def split_decode(
+    window: Window, raw_segments: Sequence[Mapping[str, Any]]
+) -> tuple[list[Segment], list[Dropped]]:
+    """Offset one window's raw whisper segments to episode time and split them
+    into recovered speech and junk."""
+    counts = Counter(" ".join(_words(str(r.get("text", "")))) for r in raw_segments)
+    out: list[Segment] = []
+    rejected: list[Dropped] = []
+    for raw in raw_segments:
+        text = str(raw.get("text", ""))
+        start = window.start + float(raw["start"])
+        # Whisper pads a short clip to 30s and can time speech past its end.
+        end = min(window.start + float(raw["end"]), window.end)
+        seg = Segment(start=start, end=max(start, end), text=text)
+        reason = rejection_reason(raw, counts[" ".join(_words(text))])
+        if reason is None and end <= start:
+            reason = "past window end"
+        if reason is None:
+            out.append(seg)
+        else:
+            rejected.append(Dropped(seg, reason))
+    return out, rejected
+
+
+def heard_span(dropped: Dropped, window: Window) -> Segment | None:
+    """The time a dropped segment should count as heard for retry planning.
+
+    Only fragments count; a zero-length point (e.g. timed past the clip end)
+    would split a later retry gap into pieces too short to retry.
+    """
+    if dropped.reason not in _FRAGMENT_REASONS:
+        return None
+    seg = dropped.segment
+    start, end = max(seg.start, window.start), min(seg.end, window.end)
+    if end - start < _MIN_SEGMENT_SECONDS:
+        return None
+    return Segment(start=start, end=end, text=seg.text)
 
 
 def load_audio_window(path: str, start: float, duration: float) -> np.ndarray:
@@ -398,8 +461,8 @@ class WhisperGapFiller:
         primary = sorted(segments, key=lambda seg: (seg.start, seg.end))
         merged = primary
         added: list[Segment] = []
-        # Speech whisper emitted but that was dropped as junk or a re-read.
-        # Not stored, but retries start after it like after kept speech.
+        # Fragments whisper emitted but that were dropped as junk or a re-read.
+        # Not stored, but retries start after them like after kept speech.
         heard: list[Segment] = []
         drops: Counter[str] = Counter()
         attempted: set[tuple[float, float]] = set()
@@ -409,10 +472,11 @@ class WhisperGapFiller:
         model = self.model_loader(s.model_name)
         try:
             # Later passes retry what is still uncovered, unpadded and starting
-            # where the last emitted speech ended, kept or dropped: a clip that
+            # where the last emitted speech or fragment ended: a clip that
             # opens on the tail of a sentence can make whisper emit that
-            # fragment and then jump the rest of its 30s window. Windows are never re-run with
-            # the same bounds, so a silent stretch costs at most two attempts.
+            # fragment and then jump the rest of its 30s window. Windows are
+            # never re-run with the same bounds, so a silent stretch costs at
+            # most two attempts.
             paddings = (s.padding_seconds, *([0.0] * _RETRY_PASSES))
             for pass_no, padding in enumerate(paddings, start=1):
                 remaining = find_gaps([*merged, *heard], duration, s.min_gap_seconds)
@@ -454,8 +518,9 @@ class WhisperGapFiller:
                     merged = result.merged
                     added.extend(result.added)
                     for dropped in (*rejected, *result.dropped):
-                        if dropped.reason != "already transcribed":
-                            heard.append(dropped.segment)
+                        span = heard_span(dropped, window)
+                        if span is not None:
+                            heard.append(span)
                         drops[dropped.reason] += 1
                         self.logger.info(
                             "Post %s: gap-fill dropped %.2f-%.2f (%s): %r",
@@ -513,23 +578,9 @@ class WhisperGapFiller:
             language=self.settings.language,
             condition_on_previous_text=False,
             # No temperature fallback: sampled re-decodes of a short clip of
-            # silence or music are where hallucinated words come from.
+            # silence or music are where hallucinated words come from, and
+            # repetitive ad copy trips the compression trigger on every
+            # temperature, so whisper would return its noisiest sample.
             temperature=0.0,
         )
-        out: list[Segment] = []
-        rejected: list[Dropped] = []
-        for raw in result.get("segments") or []:
-            start = window.start + float(raw["start"])
-            # Whisper pads a short clip to 30s and can time speech past its end.
-            end = min(window.start + float(raw["end"]), window.end)
-            seg = Segment(
-                start=start, end=max(start, end), text=str(raw.get("text", ""))
-            )
-            reason = rejection_reason(raw)
-            if reason is None and end <= start:
-                reason = "past window end"
-            if reason is None:
-                out.append(seg)
-            else:
-                rejected.append(Dropped(seg, reason))
-        return out, rejected
+        return split_decode(window, result.get("segments") or [])
