@@ -116,3 +116,7 @@ run the downgrade inside this image first:
     docker exec -u appuser -w /app -e PYTHONPATH=/app/src \
       -e PODLY_RUN_STARTUP=false -e PODLY_DISABLE_SCHEDULER=true \
       podly /app/.venv/bin/flask --app "app:create_app" db downgrade c1a0de1a9e5f
+
+(Smoke-tested in a throwaway `podly-cain:parallel` container: the downgrade
+removes both columns and sets the revision to `c1a0de1a9e5f`; `db upgrade` adds
+them back.)
