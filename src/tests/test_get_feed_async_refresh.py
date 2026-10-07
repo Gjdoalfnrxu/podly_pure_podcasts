@@ -56,14 +56,14 @@ def test_get_feed_does_not_call_refresh_feed_synchronously(app):
 
     client = app.test_client()
     with (
-        mock.patch("app.routes.feed_routes.refresh_feed") as mock_refresh,
+        mock.patch("app.routes.feed_routes.fetch_feed") as mock_fetch,
         mock.patch("app.routes.feed_routes.generate_feed_xml", return_value=b"<rss/>"),
         mock.patch("app.routes.feed_routes._spawn_async_refresh"),
     ):
         resp = client.get(f"/feed/{feed_id}")
 
     assert resp.status_code == 200
-    mock_refresh.assert_not_called()
+    mock_fetch.assert_not_called()
 
 
 def test_get_feed_kicks_off_async_refresh(app):

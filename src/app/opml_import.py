@@ -15,6 +15,7 @@ from typing import Any, cast
 from flask import Flask, current_app
 
 from app.extensions import db
+from app.feed_fetch import FEED_FETCH_TIMEOUT_SECONDS
 from app.models import User
 from app.routes.feed_subscribe import (
     _enqueue_pending_jobs_async,
@@ -24,7 +25,6 @@ from app.routes.feed_subscribe import (
 
 logger = logging.getLogger("global_logger")
 
-FEED_FETCH_TIMEOUT_SECONDS = 30.0
 MAX_KEPT_JOBS = 20
 # One feed is at most two bounded fetches (add/refresh) plus writer calls, so a
 # job with no progress for this long is wedged; don't let it block new imports.
