@@ -13,7 +13,12 @@ import pytest
 import requests
 
 from app.extensions import db
-from app.feed_fetch import FeedFetchTimeout, FetchedFeed, fetch_feed_bytes
+from app.feed_fetch import (
+    MAX_REDIRECTS,
+    FeedFetchTimeout,
+    FetchedFeed,
+    fetch_feed_bytes,
+)
 from app.feeds import add_or_refresh_feed, fetch_and_store_feed, fetch_feed
 from app.models import Feed
 
@@ -118,48 +123,115 @@ def test_fetch_feed_with_timeout_uses_final_url_as_href(app, store_env):
 # ------------------------------------------------------------ bounded fetch
 
 
-def _serve_once(handler) -> tuple[str, threading.Event]:
-    srv = socket.socket()
-    srv.bind(("127.0.0.1", 0))
-    srv.listen(1)
-    done = threading.Event()
+class _Server:
+    """Tiny raw-socket HTTP server; ``handler(conn, base_url, stop)`` per connection.
 
-    def run() -> None:
-        conn, _ = srv.accept()
-        try:
-            conn.recv(4096)
-            handler(conn, done)
-        finally:
-            conn.close()
-            srv.close()
+    Handlers stop by themselves after a few seconds so a regression fails the
+    test instead of hanging it."""
 
-    threading.Thread(target=run, daemon=True).start()
-    return f"http://127.0.0.1:{srv.getsockname()[1]}/feed.xml", done
+    def __init__(self, handler) -> None:
+        self.stop = threading.Event()
+        self.hits = 0
+        self._srv = socket.socket()
+        self._srv.bind(("127.0.0.1", 0))
+        self._srv.listen(32)
+        self.base = f"http://127.0.0.1:{self._srv.getsockname()[1]}"
+        self._handler = handler
+        threading.Thread(target=self._accept, daemon=True).start()
 
-
-def test_fetch_feed_bytes_times_out_on_silent_server():
-    url, done = _serve_once(lambda conn, done: done.wait(10))
-    start = time.monotonic()
-    with pytest.raises((requests.exceptions.Timeout, FeedFetchTimeout)):
-        fetch_feed_bytes(url, timeout=1)
-    done.set()
-    assert time.monotonic() - start < 4
-
-
-def test_fetch_feed_bytes_deadline_beats_slow_drip():
-    def drip(conn, done):
-        conn.sendall(b"HTTP/1.1 200 OK\r\nContent-Type: application/rss+xml\r\n\r\n")
-        stop_at = time.monotonic() + 6  # bounded so a regression fails, not hangs
-        while not done.is_set() and time.monotonic() < stop_at:
+    def _accept(self) -> None:
+        while True:
             try:
-                conn.sendall(b"<")
+                conn, _ = self._srv.accept()
             except OSError:
                 return
-            time.sleep(0.2)  # always under the 1 s socket read timeout
+            self.hits += 1
+            threading.Thread(target=self._one, args=(conn,), daemon=True).start()
 
-    url, done = _serve_once(drip)
+    def _one(self, conn: socket.socket) -> None:
+        try:
+            conn.recv(4096)
+            self._handler(conn, self.base, self.stop)
+        except OSError:
+            pass
+        finally:
+            conn.close()
+
+    def close(self) -> None:
+        self.stop.set()
+        self._srv.close()
+
+
+def _drip(conn, prefix: bytes, unit: bytes, stop, every: float = 0.2) -> None:
+    conn.sendall(prefix)
+    stop_at = time.monotonic() + 6
+    while not stop.is_set() and time.monotonic() < stop_at:
+        conn.sendall(unit)
+        time.sleep(every)  # always under the 1 s socket read timeout
+
+
+def _assert_times_out_fast(url: str) -> None:
     start = time.monotonic()
     with pytest.raises(FeedFetchTimeout):
         fetch_feed_bytes(url, timeout=1)
-    done.set()
-    assert time.monotonic() - start < 4
+    assert time.monotonic() - start < 1.5
+    # The watchdog shut the sockets, so the worker thread unwinds (no leak).
+    deadline = time.monotonic() + 2
+    while any(t.name == "feed-fetch" for t in threading.enumerate()):
+        assert time.monotonic() < deadline, "fetch worker thread leaked"
+        time.sleep(0.05)
+
+
+@pytest.mark.parametrize(
+    "prefix,unit",
+    [
+        (b"HTTP/1.1 200 OK\r\nContent-Type: application/rss+xml\r\n\r\n", b"<"),
+        (b"HTTP/1.1 200 OK\r\nX-Tarpit: ", b"a"),  # never finishes the headers
+    ],
+    ids=["body-drip", "header-drip"],
+)
+def test_fetch_feed_bytes_wall_clock_beats_drip(prefix, unit):
+    server = _Server(lambda conn, base, stop: _drip(conn, prefix, unit, stop))
+    try:
+        _assert_times_out_fast(f"{server.base}/feed.xml")
+    finally:
+        server.close()
+
+
+def test_fetch_feed_bytes_wall_clock_beats_slow_redirect_chain():
+    def slow_redirect(conn, base, stop):
+        stop.wait(0.4)
+        conn.sendall(
+            f"HTTP/1.1 302 Found\r\nLocation: {base}/next\r\n"
+            "Content-Length: 0\r\nConnection: close\r\n\r\n".encode()
+        )
+
+    server = _Server(slow_redirect)
+    try:
+        _assert_times_out_fast(f"{server.base}/feed.xml")
+    finally:
+        server.close()
+
+
+def test_fetch_feed_bytes_caps_redirects():
+    def redirect(conn, base, stop):
+        conn.sendall(
+            f"HTTP/1.1 302 Found\r\nLocation: {base}/next\r\n"
+            "Content-Length: 0\r\nConnection: close\r\n\r\n".encode()
+        )
+
+    server = _Server(redirect)
+    try:
+        with pytest.raises(requests.exceptions.TooManyRedirects):
+            fetch_feed_bytes(f"{server.base}/feed.xml", timeout=5)
+        assert server.hits == MAX_REDIRECTS + 1
+    finally:
+        server.close()
+
+
+def test_fetch_feed_bytes_times_out_on_silent_server():
+    server = _Server(lambda conn, base, stop: stop.wait(6))
+    try:
+        _assert_times_out_fast(f"{server.base}/feed.xml")
+    finally:
+        server.close()

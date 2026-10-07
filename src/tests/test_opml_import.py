@@ -433,6 +433,8 @@ def test_authenticated_import_skips_only_own_subscriptions(auth_app, patched):
         db.session.commit()
         admin_id = admin.id
 
+    whitelisted: list[str] = []
+    patched.whitelist.side_effect = lambda feed, _uid: whitelisted.append(feed.rss_url)
     _login(client)
     body = _import(
         client,
@@ -457,6 +459,21 @@ def test_authenticated_import_skips_only_own_subscriptions(auth_app, patched):
         "https://theirs.example.com/f",
         "https://fresh.example.com/f",
     }
+    # Only the feed with no previous members gets its latest episode queued.
+    assert whitelisted == ["https://fresh.example.com/f"]
+
+
+def test_authenticated_import_process_latest_false_queues_nothing(auth_app, patched):
+    client = _client(auth_app)
+    _login(client)
+    body = _import(client, _opml("https://fresh.example.com/f"), process_latest="false")
+
+    assert body["added"] == ["https://fresh.example.com/f"]
+    assert [c.kwargs["whitelist_archive"] for c in patched.add.call_args_list] == [
+        False
+    ]
+    patched.whitelist.assert_not_called()
+    patched.enqueue.assert_not_called()
 
 
 def test_authenticated_import_reports_allowance_per_feed(auth_app, patched):
@@ -525,17 +542,66 @@ def test_post_returns_202_before_import_finishes(tmp_path):
             assert Feed.query.filter_by(rss_url="https://t1.example.com/f").count() == 1
 
 
-def test_second_import_while_running_returns_409(app, patched):
+def test_second_import_while_running_returns_409_with_running_job(app, patched):
     from app.opml_import import _JOBS, ImportJob
 
-    _JOBS["stuck"] = ImportJob(id="stuck", user_id=None, urls=[], process_latest=True)
+    _JOBS["busy"] = ImportJob(id="busy", user_id=None, urls=["u"], process_latest=True)
     try:
         with app.app_context():
             resp = _upload(_client(app), _opml("https://a.example.com/f"))
             assert resp.status_code == 409
+            assert resp.get_json()["running"]["import_id"] == "busy"
+            assert resp.get_json()["running"]["status"] == "running"
             patched.add.assert_not_called()
     finally:
+        _JOBS.pop("busy", None)
+
+
+def test_stalled_running_import_does_not_block_new_one(app, patched):
+    from app.opml_import import _JOBS, STALLED_AFTER_SECONDS, ImportJob
+
+    stuck = ImportJob(id="stuck", user_id=None, urls=["u"], process_latest=True)
+    stuck.last_progress -= STALLED_AFTER_SECONDS + 1
+    _JOBS["stuck"] = stuck
+    try:
+        with app.app_context():
+            body = _import(_client(app), _opml("https://a.example.com/f"))
+        assert body["added"] == ["https://a.example.com/f"]
+        assert stuck.status == "error"
+        assert "stalled" in (stuck.error or "")
+    finally:
         _JOBS.pop("stuck", None)
+
+
+def test_import_stops_if_user_deleted_midway(auth_app, patched):
+    client = _client(auth_app)
+    _login(client, "bob")
+    real_fake = _fake_fetch_and_store()
+
+    def delete_bob_after_first(url, **kwargs):
+        result = real_fake(url, **kwargs)
+        bob = User.query.filter_by(username="bob").one()
+        UserFeed.query.filter_by(user_id=bob.id).delete()
+        db.session.delete(bob)
+        db.session.commit()
+        return result
+
+    patched.add.side_effect = delete_bob_after_first
+    resp = _upload(
+        client, _opml("https://one.example.com/f", "https://two.example.com/f")
+    )
+    import_id = resp.get_json()["import_id"]
+
+    from app.opml_import import get_import
+
+    job = get_import(import_id)
+    assert job is not None
+    assert job.status == "error"
+    assert "no longer exists" in (job.error or "")
+    # The second feed was never attempted, anonymously or otherwise.
+    assert [c.args[0] for c in patched.add.call_args_list] == [
+        "https://one.example.com/f"
+    ]
 
 
 def test_unknown_import_id_returns_404(app, patched):

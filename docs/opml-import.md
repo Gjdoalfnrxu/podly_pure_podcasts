@@ -8,12 +8,17 @@ max 500 unique feeds. DOCTYPE/entity declarations are rejected (no XXE, no
 entity expansion). The file is validated synchronously (400/413 on bad input);
 the import itself runs in a background thread and the POST returns `202` with
 the job state. Poll `GET /api/feeds/import-opml/<import_id>` until `status` is
-`done` or `error`. One import per user at a time (`409` otherwise). Job status
+`done` or `error`. One import per user at a time: a second POST gets `409`
+with the running job under `running`, and the UI resumes polling it. Job status
 is in memory: a restart loses it, not the subscriptions already made.
 
-Each feed fetch is bounded (30 s overall per fetch, 64 MB cap), unlike the
-plain `feedparser.parse(url)` used elsewhere, so one dead host cannot stall
-the import.
+Each feed fetch on the import path has a hard wall-clock limit of 30 s that
+covers DNS, connect, TLS, redirects (at most 5), headers and body, plus a
+64 MB cap. The fetch runs in a worker thread; on expiry the import moves on
+and the sockets the fetch opened are shut down so the worker exits. The plain
+`feedparser.parse(url)` used elsewhere is unchanged. A running import that
+makes no progress for 5 minutes is treated as dead and no longer blocks a new
+one. If the importing user is deleted mid-import, the job stops with an error.
 
 Every `<outline>` with an `xmlUrl` is used, including ones nested in
 categories. URLs are normalised the same way as the single add, then deduped.

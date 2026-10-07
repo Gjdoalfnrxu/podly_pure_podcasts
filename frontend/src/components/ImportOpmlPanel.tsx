@@ -4,6 +4,9 @@ import type { OpmlImportResult } from '../types';
 import { diagnostics, emitDiagnosticError } from '../utils/diagnostics';
 import { getHttpErrorInfo } from '../utils/httpError';
 
+const ACTIVE_IMPORT_KEY = 'podly.opmlImportId';
+const MAX_POLL_FAILURES = 5;
+
 interface ImportOpmlPanelProps {
   onImported: () => void;
   onDone: () => void;
@@ -44,25 +47,33 @@ export default function ImportOpmlPanel({ onImported, onDone, disabled }: Import
 
   const pollUntilDone = async (initial: OpmlImportResult): Promise<OpmlImportResult> => {
     let current = initial;
+    let consecutiveFailures = 0;
     while (current.status === 'running' && mounted.current) {
       await new Promise((resolve) => setTimeout(resolve, 1500));
-      current = await feedsApi.getOpmlImport(current.import_id);
+      try {
+        current = await feedsApi.getOpmlImport(current.import_id);
+        consecutiveFailures = 0;
+      } catch (err) {
+        const { status } = getHttpErrorInfo(err);
+        // 404: the server restarted and lost the job (subscriptions made so far stay).
+        if (status === 404 || ++consecutiveFailures >= MAX_POLL_FAILURES) throw err;
+        continue;
+      }
       if (mounted.current) setResult(current);
     }
     return current;
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!file) return;
+  // Follow a job to completion; used for new imports and resumed ones.
+  const followImport = async (started: OpmlImportResult) => {
+    sessionStorage.setItem(ACTIVE_IMPORT_KEY, started.import_id);
     setIsImporting(true);
-    setError('');
-    setResult(null);
+    setResult(started);
     try {
-      diagnostics.add('info', 'OPML import request', { size: file.size, processLatest });
-      const started = await feedsApi.importOpml(file, processLatest);
-      setResult(started);
       const summary = await pollUntilDone(started);
+      if (!mounted.current) return;
+      if (summary.status === 'running') return;
+      sessionStorage.removeItem(ACTIVE_IMPORT_KEY);
       if (summary.status === 'error') {
         setError(summary.error || 'Import stopped with an error.');
       }
@@ -75,17 +86,73 @@ export default function ImportOpmlPanel({ onImported, onDone, disabled }: Import
         onImported();
       }
     } catch (err) {
-      const { status, data, message } = getHttpErrorInfo(err);
-      emitDiagnosticError({
-        title: 'OPML import failed',
-        message,
-        kind: status ? 'http' : 'network',
-        details: { status, response: data },
-      });
-      setError(message || 'Failed to import OPML file.');
+      sessionStorage.removeItem(ACTIVE_IMPORT_KEY);
+      reportError(err);
     } finally {
-      setIsImporting(false);
+      if (mounted.current) setIsImporting(false);
     }
+  };
+
+  const reportError = (err: unknown) => {
+    const { status, data, message } = getHttpErrorInfo(err);
+    emitDiagnosticError({
+      title: 'OPML import failed',
+      message,
+      kind: status ? 'http' : 'network',
+      details: { status, response: data },
+    });
+    if (mounted.current) {
+      setError(
+        status === 404
+          ? 'Lost track of the import (the server may have restarted). Check your feed list.'
+          : message || 'Failed to import OPML file.'
+      );
+    }
+  };
+
+  // Reopening the modal mid-import picks the running job back up.
+  useEffect(() => {
+    const activeId = sessionStorage.getItem(ACTIVE_IMPORT_KEY);
+    if (!activeId) return;
+    feedsApi
+      .getOpmlImport(activeId)
+      .then((job) => {
+        if (job.status === 'running') {
+          void followImport(job);
+        } else {
+          sessionStorage.removeItem(ACTIVE_IMPORT_KEY);
+        }
+      })
+      .catch(() => sessionStorage.removeItem(ACTIVE_IMPORT_KEY));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!file) return;
+    setError('');
+    setResult(null);
+    let started: OpmlImportResult;
+    try {
+      diagnostics.add('info', 'OPML import request', { size: file.size, processLatest });
+      setIsImporting(true);
+      started = await feedsApi.importOpml(file, processLatest);
+    } catch (err) {
+      const { status, data } = getHttpErrorInfo(err);
+      const running =
+        status === 409 && data && typeof data === 'object'
+          ? (data as { running?: OpmlImportResult }).running
+          : undefined;
+      if (running) {
+        setError('An import is already running; showing its progress.');
+        await followImport(running);
+      } else {
+        setIsImporting(false);
+        reportError(err);
+      }
+      return;
+    }
+    await followImport(started);
   };
 
   return (

@@ -126,7 +126,8 @@ def import_opml() -> ResponseReturnValue:
     try:
         job = start_import(urls, getattr(user, "id", None), process_latest)
     except ImportAlreadyRunningError as exc:
-        return jsonify({"error": str(exc)}), 409
+        # Include the running job so the UI can resume polling it.
+        return jsonify({"error": str(exc), "running": exc.job.to_dict()}), 409
     return jsonify(job.to_dict()), 202
 
 

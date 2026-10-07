@@ -6,6 +6,7 @@ Job state is in-memory: a restart drops status, not subscriptions.
 """
 
 import logging
+import time
 import uuid
 from dataclasses import dataclass, field
 from threading import Lock, Thread
@@ -25,10 +26,15 @@ logger = logging.getLogger("global_logger")
 
 FEED_FETCH_TIMEOUT_SECONDS = 30.0
 MAX_KEPT_JOBS = 20
+# One feed is at most two bounded fetches (add/refresh) plus writer calls, so a
+# job with no progress for this long is wedged; don't let it block new imports.
+STALLED_AFTER_SECONDS = 300.0
 
 
 class ImportAlreadyRunningError(RuntimeError):
-    pass
+    def __init__(self, job: "ImportJob") -> None:
+        super().__init__("An OPML import is already running.")
+        self.job = job
 
 
 @dataclass
@@ -42,6 +48,7 @@ class ImportJob:
     skipped_existing: list[str] = field(default_factory=list)
     failed: list[dict[str, str]] = field(default_factory=list)
     error: str | None = None
+    last_progress: float = field(default_factory=time.monotonic)
 
     def to_dict(self) -> dict[str, Any]:
         with _LOCK:
@@ -79,8 +86,14 @@ def start_import(
         process_latest=process_latest,
     )
     with _LOCK:
-        if any(j.status == "running" and j.user_id == user_id for j in _JOBS.values()):
-            raise ImportAlreadyRunningError("An OPML import is already running.")
+        now = time.monotonic()
+        for other in _JOBS.values():
+            if other.status != "running" or other.user_id != user_id:
+                continue
+            if now - other.last_progress < STALLED_AFTER_SECONDS:
+                raise ImportAlreadyRunningError(other)
+            other.status = "error"
+            other.error = "Import stalled and was abandoned."
         _JOBS[job.id] = job
         finished = [j.id for j in _JOBS.values() if j.status != "running"]
         for old_id in finished[: max(0, len(_JOBS) - MAX_KEPT_JOBS)]:
@@ -99,10 +112,20 @@ def start_import(
 def _record(job: ImportJob, bucket: str, value: Any) -> None:
     with _LOCK:
         getattr(job, bucket).append(value)
+        job.last_progress = time.monotonic()
+
+
+class ImportUserGoneError(RuntimeError):
+    pass
 
 
 def import_urls(job: ImportJob, user: User | None) -> None:
     for url in job.urls:
+        # Never fall back to anonymous: stop if the importing user was deleted.
+        if job.user_id is not None and (
+            User.query.filter_by(id=job.user_id).first() is None
+        ):
+            raise ImportUserGoneError("The importing user no longer exists.")
         if is_subscribed(url, user):
             _record(job, "skipped_existing", url)
             continue
@@ -129,18 +152,24 @@ def _run_import(app: Flask, job: ImportJob) -> None:
     with app.app_context():
         try:
             user = db.session.get(User, job.user_id) if job.user_id else None
+            if job.user_id is not None and user is None:
+                raise ImportUserGoneError("The importing user no longer exists.")
             import_urls(job, user)
             if job.added and job.process_latest:
                 _enqueue_pending_jobs_async(app)
             status = "done"
         except Exception as exc:
             logger.exception("OPML import %s crashed", job.id)
-            job.error = str(exc) or exc.__class__.__name__
+            error = str(exc) or exc.__class__.__name__
             status = "error"
+        else:
+            error = None
         finally:
             db.session.remove()
         with _LOCK:
-            job.status = status
+            if job.status == "running":  # not abandoned as stalled meanwhile
+                job.status = status
+                job.error = error
         logger.info(
             "OPML import %s: %d added, %d already subscribed, %d failed",
             job.id,
