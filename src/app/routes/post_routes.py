@@ -682,6 +682,7 @@ def api_toggle_whitelist(p_guid: str) -> ResponseReturnValue:
             priority="interactive",
             requested_by_user_id=billing_user_id,
             billing_user_id=billing_user_id,
+            manual=True,
         )
         response_body["processing_job"] = job_response
 
@@ -811,6 +812,7 @@ def api_process_post(p_guid: str) -> ResponseReturnValue:
             priority="interactive",
             requested_by_user_id=billing_user_id,
             billing_user_id=billing_user_id,
+            manual=True,
         )
         status_code = 200 if result.get("status") in ("started", "completed") else 400
         return flask.jsonify(result), status_code
@@ -927,6 +929,7 @@ def api_reprocess_post(p_guid: str) -> ResponseReturnValue:
             priority="interactive",
             requested_by_user_id=billing_user_id,
             billing_user_id=billing_user_id,
+            manual=True,
         )
         status_code = 200 if result.get("status") in ("started", "completed") else 400
         if result.get("status") == "started":
@@ -1085,6 +1088,7 @@ def api_reprocess_post_keep_transcript(p_guid: str) -> ResponseReturnValue:
             priority="interactive",
             requested_by_user_id=billing_user_id,
             billing_user_id=billing_user_id,
+            manual=True,
         )
         status_code = 200 if result.get("status") in ("started", "completed") else 400
         if result.get("status") == "started":

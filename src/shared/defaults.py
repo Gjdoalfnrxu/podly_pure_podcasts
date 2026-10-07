@@ -57,3 +57,14 @@ AD_DETECTION_DEFAULT_STRATEGY = "llm"
 CHAPTER_FILTER_DEFAULT_STRINGS = (
     "sponsor,advertisement,ad break,promo,brought to you by"
 )
+
+# Cloud fast lane (OpenAI-compatible transcription API). Groq whisper-large-v3-turbo:
+# $0.04 per audio hour, 10 s minimum billed per request
+# (https://console.groq.com/docs/speech-to-text, checked 2026-10-07).
+CLOUD_LANE_BASE_URL = "https://api.groq.com/openai/v1"
+CLOUD_LANE_MODEL = "whisper-large-v3-turbo"
+CLOUD_LANE_USD_PER_HOUR = 0.04
+CLOUD_LANE_MIN_BILLED_SECONDS = 10.0
+CLOUD_LANE_CHUNKSIZE_MB = 24
+CLOUD_LANE_TIMEOUT_SEC = 600
+CLOUD_LANE_CONCURRENCY = 2

@@ -25,6 +25,14 @@ class CommandExecutor:
             "ensure_active_run", writer_actions.ensure_active_run_action
         )
         self.register_action("dequeue_job", writer_actions.dequeue_job_action)
+        for name in (
+            "reserve_cloud_usage",
+            "settle_cloud_usage",
+            "set_job_lane",
+            "requeue_job_local",
+            "update_cloud_lane_settings",
+        ):
+            self.register_action(name, getattr(writer_actions, f"{name}_action"))
         self.register_action(
             "cleanup_stale_jobs", writer_actions.cleanup_stale_jobs_action
         )
