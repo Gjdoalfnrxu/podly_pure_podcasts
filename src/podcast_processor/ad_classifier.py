@@ -1021,6 +1021,10 @@ class AdClassifier:
 
     def _is_retryable_error(self, error: Exception) -> bool:
         """Determine if an error should be retried."""
+        # Checked before the string match below: its message contains counts
+        # (e.g. "reasoning_content=4290 chars") that can look like "429"/"503".
+        if isinstance(error, LLMEmptyResponseError):
+            return False
         if isinstance(error, InternalServerError):
             return True
 

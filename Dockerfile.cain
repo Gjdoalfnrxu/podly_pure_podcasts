@@ -18,6 +18,7 @@ FROM ${PODLY_BASE}
 COPY src/app/feeds.py src/app/feed_fetch.py src/app/opml.py src/app/opml_import.py \
      /app/src/app/
 COPY src/app/routes/__init__.py \
+     src/app/routes/config_routes.py \
      src/app/routes/feed_routes.py \
      src/app/routes/feed_links.py \
      src/app/routes/feed_subscribe.py \
